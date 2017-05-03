@@ -89,4 +89,10 @@ theta  |tree2  |err2
 * Work on O(N) method
 * Write O(N^2) method in double-precision to allow more fair error comparisons
   but only run it on the first 100 or 1000 target particles
+* Get clang or g++ to vectorize the innermost loops
+* Enable OpenMP parallelization - or - try std::thread
+* Turn Particles and Tree into classes
+* Specialize or Templatize the Particle class to allow it to be used efficiently for sources or targets
+* Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection
+* Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 
