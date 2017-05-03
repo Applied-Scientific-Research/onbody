@@ -55,11 +55,17 @@ struct Tree {
     std::vector<float> z;
     // node size
     std::vector<float> s;
+    // node particle radius
+    std::vector<float> r;
     // node masses
     std::vector<float> m;
-    // point offset and count
-    std::vector<int> ioffset;
+
+    // real point offset and count
+    std::vector<int> ioffset;		// is this redundant?
     std::vector<int> num;
+    // equivalent point offset and count
+    std::vector<int> epoffset;		// is this redundant?
+    std::vector<int> epnum;
 };
 
 //
@@ -206,6 +212,20 @@ std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, s
 }
 
 //
+// Helper function to reorder a segment of a vector
+//
+void reorder(std::vector<float> &x, std::vector<float> &t,
+             const std::vector<size_t> &idx,
+             const size_t pfirst, const size_t plast) {
+
+    // copy the original input float vector x into a temporary vector
+    std::copy(x.begin()+pfirst, x.begin()+plast, t.begin()+pfirst);
+
+    // scatter values from the temp vector back into the original vector
+    for (int i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
+}
+
+//
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
@@ -275,21 +295,25 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     //printf("reorder\n");
     //reset_and_start_timer();
     // copy this segment into the temp array
-    std::copy(p.x.begin()+pfirst, p.x.begin()+plast, p.ftemp.begin()+pfirst);
+    //std::copy(p.x.begin()+pfirst, p.x.begin()+plast, p.ftemp.begin()+pfirst);
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  temp %d %g\n", i, p.t[i]);
     // now write back to the original array using the indexes from the sort
-    for (int i=pfirst; i<plast; ++i) p.x[i] = p.ftemp[p.itemp[i]];
+    //for (int i=pfirst; i<plast; ++i) p.x[i] = p.ftemp[p.itemp[i]];
     // redo for the other axes
-    std::copy(p.y.begin()+pfirst, p.y.begin()+plast, p.ftemp.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.y[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.z.begin()+pfirst, p.z.begin()+plast, p.ftemp.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.z[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.m.begin()+pfirst, p.m.begin()+plast, p.ftemp.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.m[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.r.begin()+pfirst, p.r.begin()+plast, p.ftemp.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
+    //std::copy(p.y.begin()+pfirst, p.y.begin()+plast, p.ftemp.begin()+pfirst);
+    //for (int i=pfirst; i<plast; ++i) p.y[i] = p.ftemp[p.itemp[i]];
+    //std::copy(p.z.begin()+pfirst, p.z.begin()+plast, p.ftemp.begin()+pfirst);
+    //for (int i=pfirst; i<plast; ++i) p.z[i] = p.ftemp[p.itemp[i]];
+    //std::copy(p.m.begin()+pfirst, p.m.begin()+plast, p.ftemp.begin()+pfirst);
+    //for (int i=pfirst; i<plast; ++i) p.m[i] = p.ftemp[p.itemp[i]];
+    //std::copy(p.r.begin()+pfirst, p.r.begin()+plast, p.ftemp.begin()+pfirst);
+    //for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
     // clean this up with an inline function
-    // reorder(p.x, p.t, idx, pfirst, plast);
+    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.z, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
@@ -308,19 +332,62 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
 //
 void refineLeaf(Parts& p, Tree& t, size_t pfirst, size_t plast) {
 
+    // if there are 1 or 2 particles, then they are already in "order"
+    if (plast-pfirst < 3) return;
+
+    // perform very much the same action as tree-build
+    printf("    refining particles %ld to %ld\n", pfirst, plast);
+
+    // find the min/max of the three axes
+    std::vector<float> boxsizes(3);
+    auto minmax = minMaxValue(p.x, pfirst, plast);
+    boxsizes[0] = minmax.second - minmax.first;
+    minmax = minMaxValue(p.y, pfirst, plast);
+    boxsizes[1] = minmax.second - minmax.first;
+    minmax = minMaxValue(p.z, pfirst, plast);
+    boxsizes[2] = minmax.second - minmax.first;
+
+    // find longest box edge
+    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+
+    // sort this portion of the array along the big axis
+    if (maxaxis == 0) {
+        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+    } else if (maxaxis == 1) {
+        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+    } else if (maxaxis == 2) {
+        (void) sortIndexesSection(p.z, p.itemp, pfirst, plast);
+    }
+
+    // rearrange the elements
+    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.z, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
+
+    // determine where the split should be
+    size_t pmiddle = pfirst + (1 << log_2(plast-pfirst-1));
+
+    // recursively call this routine for this node's new children
+    (void) refineLeaf(p, t, pfirst,  pmiddle);
+    (void) refineLeaf(p, t, pmiddle, plast);
 }
 
 //
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
-void refineTree(Parts& p, Tree& t) {
-    int numAndOffset = 1 << (t.levels-1);
-    for (auto inode=numAndOffset; inode<2*numAndOffset; ++inode) {
-        const int numParts = t.num[inode];
-        if (numParts > 0) {
-            printf("  node %d has %d particles\n", inode, numParts);
-            //refineLeaf(p, t, t.ioffset[inode], t.ioffset[inode] + t.num[inode]);
-        }
+void refineTree(Parts& p, Tree& t, int tnode) {
+    printf("  node %d has %d particles\n", tnode, t.num[tnode]);
+    if (t.num[tnode] <= blockSize) {
+        // make the equivalent particles for this node
+        (void) refineLeaf(p, t, t.ioffset[tnode], t.ioffset[tnode]+t.num[tnode]);
+        for (int i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
+            printf("  %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    } else {
+        // recurse and check child nodes
+        (void) refineTree(p, t, 2*tnode);
+        (void) refineTree(p, t, 2*tnode+1);
     }
 }
 
@@ -350,7 +417,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("allocate and initialize\n");
+    printf("Allocate and initialize\n");
     reset_and_start_timer();
 
     // allocate space for sources and targets
@@ -429,8 +496,10 @@ int main(int argc, char *argv[]) {
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
-    //(void) refineTree(srcs, stree);
+    (void) refineTree(srcs, stree, 1);
     printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    exit(0);
 
     // then, march through arrays merging pairs as you go up
     reset_and_start_timer();
