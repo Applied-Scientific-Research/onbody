@@ -77,4 +77,15 @@ theta   tree2   err2
 0.8     14197.8 4.03e-3
 0.7     9628.09 1.09e-1
 
+## To do
+
+* Start comparing accuracy of treecode and report it  - DONE
+* Find out why tree-build is O(N^2) - DONE
+* Why is error not zero for n=129 ? - DONE
+* Write recursive equivalent-particle-finding routine - DONE
+* Run with equivalent particles and compare performance and error - DONE
+* Begin building target trees - DONE
+* Work on O(N) method
+* Write O(N^2) method in double-precision to allow more fair error comparisons
+  but only run it on the first 100 or 1000 target particles
 
