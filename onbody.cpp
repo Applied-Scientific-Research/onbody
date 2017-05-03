@@ -83,7 +83,7 @@ static inline uint32_t log_2(const uint32_t x) {
 static inline void nbody_kernel(const float sx, const float sy, const float sz,
                                 const float sr, const float sm,
                                 const float tx, const float ty, const float tz,
-                                float& tax, float& tay, float& taz) {
+                                float& __restrict__ tax, float& __restrict__ tay, float& __restrict__ taz) {
     // 19 flops
     const float dx = sx - tx;
     const float dy = sy - ty;
@@ -103,12 +103,13 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // Caller for the O(N^2) kernel
 //
-void nbody_naive(const Parts& srcs, Parts& targs, const int tskip) {
+void nbody_naive(const Parts& __restrict__ srcs, Parts& __restrict__ targs, const int tskip) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0f;
         targs.v[i] = 0.0f;
         targs.w[i] = 0.0f;
+        //#pragma clang loop vectorize(enable) interleave(enable)
         for (int j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
                          targs.x[i], targs.y[i], targs.z[i],
@@ -609,7 +610,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 0, 0, 1};
+    static std::vector<int> test_iterations = {1, 2, 2, 0};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -804,7 +805,7 @@ int main(int argc, char *argv[]) {
     double minTreecode = 1e30;
     for (unsigned int i = 0; i < test_iterations[1]; ++i) {
         reset_and_start_timer();
-        nbody_treecode1(srcs, stree, targs, 3.0f);
+        nbody_treecode1(srcs, stree, targs, 2.9f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode = std::min(minTreecode, dt);
@@ -835,7 +836,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.9f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.95f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
