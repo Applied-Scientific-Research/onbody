@@ -97,7 +97,7 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // Caller for the O(N^2) kernel
 //
-void nbody_naive(Parts& srcs, Parts& targs) {
+void nbody_naive(const Parts& srcs, Parts& targs) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -114,35 +114,38 @@ void nbody_naive(Parts& srcs, Parts& targs) {
 //
 // Recursive kernel for the treecode
 //
-void nbody_by_targ(Parts& srcs, Tree& stree, int tnode, float theta,
+void nbody_by_targ(const Parts& sp, const Tree& st, const int tnode, const float theta,
                    const float tx, const float ty, const float tz,
                    float& tax, float& tay, float& taz) {
 
     // distance from box center of mass to target point
-    const float dx = stree.x[tnode] - tx;
-    const float dy = stree.y[tnode] - ty;
-    const float dz = stree.z[tnode] - tz;
+    const float dx = st.x[tnode] - tx;
+    const float dy = st.y[tnode] - ty;
+    const float dz = st.z[tnode] - tz;
     const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
-    if (dist / stree.s[tnode] > theta) {
+    if (dist / st.s[tnode] > theta) {
         // box is far enough removed, approximate its influence
-        nbody_kernel(stree.x[tnode], stree.y[tnode], stree.z[tnode], 0.0f, stree.m[tnode],
+        nbody_kernel(st.x[tnode], st.y[tnode], st.z[tnode], 0.0f, st.m[tnode],
                      tx, ty, tz, tax, tay, taz);
-    } else if (stree.num[tnode] < blockSize) {
+    } else if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
-        //nbody_src_block()
+        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
+            nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
+                         tx, ty, tz, tax, tay, taz);
+        }
     } else {
         // box is too close, open up its children
-        (void) nbody_by_targ(srcs, stree, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
-        (void) nbody_by_targ(srcs, stree, 2*tnode+1, theta, tx, ty, tz, tax, tay, taz);
+        (void) nbody_by_targ(sp, st, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
+        (void) nbody_by_targ(sp, st, 2*tnode+1, theta, tx, ty, tz, tax, tay, taz);
     }
 }
 
 //
 // Caller for the O(NlogN) kernel
 //
-void nbody_treecode(Parts& srcs, Tree& stree, Parts& targs, float theta) {
+void nbody_treecode(const Parts& srcs, const Tree& stree, Parts& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -211,7 +214,7 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
 
     // debug print - starting condition
-    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
 
     // find the min/max of the three axes
     printf("find min/max\n");
@@ -258,13 +261,13 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     //idx = sortIndexes(p.x);
     if (maxaxis == 0) {
         (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
-        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
+        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
     } else if (maxaxis == 1) {
         (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
-        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
+        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
     } else if (maxaxis == 2) {
         (void) sortIndexesSection(p.z, p.itemp, pfirst, plast);
-        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
+        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
     }
     //if (maxaxis == 0) idx = sortIndexes(p.x, pfirst, plast);
     //if (maxaxis == 1) idx = sortIndexes(p.y, pfirst, plast);
@@ -291,7 +294,7 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
     // clean this up with an inline function
     // reorder(p.x, p.t, idx, pfirst, plast);
-    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // determine where the split should be
@@ -416,18 +419,18 @@ int main(int argc, char *argv[]) {
     //
     // Run a simple O(NlogN) treecode
     //
-    //printf("\nRun the treecode O(NlogN)\n");
-    //double minTreecode = 1e30;
-    //for (unsigned int i = 0; i < test_iterations[1]; ++i) {
-    //    reset_and_start_timer();
-    //    nbody_treecode(srcs, targs);
-    //    double dt = get_elapsed_mcycles();
-    //    printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
-    //    minTreecode = std::min(minTreecode, dt);
-    //}
-    //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
+    printf("\nRun the treecode O(NlogN)\n");
+    double minTreecode = 1e30;
+    for (unsigned int i = 0; i < test_iterations[1]; ++i) {
+        reset_and_start_timer();
+        nbody_treecode(srcs, stree, targs, 3.0f);
+        double dt = get_elapsed_mcycles();
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        minTreecode = std::min(minTreecode, dt);
+    }
+    printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
     // write sample results
-    //for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
 
     //
