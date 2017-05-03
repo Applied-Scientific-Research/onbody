@@ -103,9 +103,9 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // Caller for the O(N^2) kernel
 //
-void nbody_naive(const Parts& srcs, Parts& targs) {
+void nbody_naive(const Parts& srcs, Parts& targs, const int tskip) {
     #pragma omp parallel for
-    for (int i = 0; i < targs.n; i++) {
+    for (int i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0f;
         targs.v[i] = 0.0f;
         targs.w[i] = 0.0f;
@@ -556,6 +556,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // if problem is too big, skip some number of target particles
+    int ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+
     printf("Allocate and initialize\n");
     reset_and_start_timer();
 
@@ -673,18 +676,18 @@ int main(int argc, char *argv[]) {
     //
     // Run the O(N^2) implementation
     //
-    printf("\nRun the naive O(N^2) method\n");
+    printf("\nRun the naive O(N^2) method (every %d particle)\n", ntskip);
     double minNaive = 1e30;
     for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
-        nbody_naive(srcs, targs);
-        double dt = get_elapsed_mcycles();
+        nbody_naive(srcs, targs, ntskip);
+        double dt = get_elapsed_mcycles() * (float)ntskip;
         printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
         minNaive = std::min(minNaive, dt);
     }
     printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
     // write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     std::vector<float> naiveu = targs.u;
 
     //
@@ -701,7 +704,7 @@ int main(int argc, char *argv[]) {
     //}
     //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
     // write sample results
-    //for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    //for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
 
     //
@@ -718,13 +721,13 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
     // write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
     std::vector<float> treecodeu = targs.u;
 
     // compare accuracy
     float errsum = 0.0;
-    for (auto i=0; i< targs.u.size(); ++i) {
+    for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
     }
@@ -744,13 +747,13 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode2]:\t\t[%.3f] million cycles\n", minTreecode2);
     // write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
     std::vector<float> treecodeu2 = targs.u;
 
     // compare accuracy
     errsum = 0.0;
-    for (auto i=0; i< targs.u.size(); ++i) {
+    for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
     }
