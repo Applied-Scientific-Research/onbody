@@ -82,7 +82,6 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 // Caller for the scalar kernel
 //
 void nbody(Parts& srcs, Parts& targs) {
-
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0;
@@ -126,6 +125,7 @@ std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, s
 }
 
 //
+// Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
 void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
@@ -154,6 +154,11 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     printf("  longest axis is %ld\n", maxaxis);
     printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
+    // write all this data to the tree node
+    //t.s[tnode] = 1.0;
+
+    // now decide how to split this node
+
     // sort it
     printf("sort\n");
     reset_and_start_timer();
@@ -166,28 +171,14 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     reset_and_start_timer();
     // make a temporary vector
     std::vector<float> temp(end-begin);
+    // copy 
 
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // recursively call this routine for this node's new children
+    //if () { }
 }
 
-//
-// make a VAMsplit k-d tree from this set of particles
-//
-Tree makeTree(Parts& p) {
-
-    printf("Building the tree\n");
-
-    // initialize the tree
-    Tree tree;
-
-    // set up the root of the tree (node number 1, not 0!)
-    int inode = 1;
-
-    // split this node
-    (void) splitNode(p, 0, 256, tree, inode);
-
-    return tree;
-}
 
 //
 // basic usage
@@ -250,26 +241,42 @@ int main(int argc, char *argv[]) {
     for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
 
+
     // make a tree
-    Tree stree = makeTree(srcs);
+    printf("Building the tree\n");
+    Tree stree;
+    // split this node and recurse
+    (void) splitNode(srcs, 0, srcs.n, stree, 1);
+
 
     //
-    // Run the implementation a few times, again reporting the
-    // minimum time.
+    // Run the O(N^2) implementation
     //
+    printf("\nRun the naive method\n");
     double minSerial = 1e30;
     for (unsigned int i = 0; i < test_iterations; ++i) {
         reset_and_start_timer();
         nbody(srcs, targs);
         double dt = get_elapsed_mcycles();
-        printf("time of base run:\t\t\t[%.3f] million cycles\n", dt);
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
         minSerial = std::min(minSerial, dt);
     }
-
-    printf("[onbody]:\t\t[%.3f] million cycles\n", minSerial);
-
+    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minSerial);
     // Write sample results
     for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+
+    //
+    // Run a simple O(NlogN) treecode
+    //
+    //printf("\nRun the treecode\n");
+    //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minSerial);
+
+    //
+    // Run the new O(N) equivalent particle method
+    //
+    //printf("\nRun the fast method\n");
+    //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minSerial);
+
 
     return 0;
 }
