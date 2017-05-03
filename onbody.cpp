@@ -206,15 +206,31 @@ void treecode2_block(const Parts& sp, const Parts& ep,
 }
 
 //
-// Caller for the simple O(NlogN) kernel
+// Caller for the better (equivalent particle) O(NlogN) kernel
 //
-void nbody_treecode2(const Parts& srcs, const Parts& eqpts, const Tree& stree, Parts& targs, const float theta) {
+void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, Parts& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
         targs.v[i] = 0.0f;
         targs.w[i] = 0.0f;
-        treecode2_block(srcs, eqpts, stree, 1, theta,
+        treecode2_block(srcs, eqsrcs, stree, 1, theta,
+                        targs.x[i], targs.y[i], targs.z[i],
+                        targs.u[i], targs.v[i], targs.w[i]);
+    }
+}
+
+//
+// Caller for the fast summation O(N) method
+//
+void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
+                    Parts& targs, const Tree& ttree, const float theta) {
+    #pragma omp parallel for
+    for (int i = 0; i < targs.n; i++) {
+        targs.u[i] = 0.0f;
+        targs.v[i] = 0.0f;
+        targs.w[i] = 0.0f;
+        treecode2_block(srcs, eqsrcs, stree, 1, theta,
                         targs.x[i], targs.y[i], targs.z[i],
                         targs.u[i], targs.v[i], targs.w[i]);
     }
@@ -543,7 +559,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {10, 4, 1};
+    static std::vector<int> test_iterations = {1, 0, 4, 0};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -578,6 +594,8 @@ int main(int argc, char *argv[]) {
     targs.x.resize(targs.n);
     targs.y.resize(targs.n);
     targs.z.resize(targs.n);
+    targs.r.resize(targs.n);
+    targs.m.resize(targs.n);
     targs.u.resize(targs.n);
     targs.v.resize(targs.n);
     targs.w.resize(targs.n);
@@ -594,6 +612,8 @@ int main(int argc, char *argv[]) {
     for (auto&& x : targs.x) { x = (float)rand()/(float)RAND_MAX; }
     for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
+    for (auto&& r : targs.r) { r = 1.0f / cbrt((float)srcs.n); }
+    for (auto&& m : targs.m) { m = 1.0f; }
     printf("  init parts time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
 
@@ -626,17 +646,17 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     reset_and_start_timer();
-    Parts eqpts;
-    eqpts.n = (stree.numnodes/2) * blockSize;
-    printf("  need %d particles\n", eqpts.n);
-    eqpts.x.resize(eqpts.n);
-    eqpts.y.resize(eqpts.n);
-    eqpts.z.resize(eqpts.n);
-    eqpts.r.resize(eqpts.n);
-    eqpts.m.resize(eqpts.n);
+    Parts eqsrcs;
+    eqsrcs.n = (stree.numnodes/2) * blockSize;
+    printf("  need %d particles\n", eqsrcs.n);
+    eqsrcs.x.resize(eqsrcs.n);
+    eqsrcs.y.resize(eqsrcs.n);
+    eqsrcs.z.resize(eqsrcs.n);
+    eqsrcs.r.resize(eqsrcs.n);
+    eqsrcs.m.resize(eqsrcs.n);
     stree.epoffset.resize(stree.numnodes);
     stree.epnum.resize(stree.numnodes);
-    printf("  allocate eqpts structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    printf("  allocate eqsrcs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
@@ -647,38 +667,69 @@ int main(int argc, char *argv[]) {
 
     // then, march through arrays merging pairs as you go up
     reset_and_start_timer();
-    (void) calcEquivalents(srcs, eqpts, stree, 1);
+    (void) calcEquivalents(srcs, eqsrcs, stree, 1);
     printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-    //printf("\n\n");
-    //for (int ib=4; ib<8; ib++) {
-    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
-    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
-    //    }
-    //}
-    //printf("\n\n");
-    //for (int ib=2; ib<4; ib++) {
-    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
-    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
-    //    }
-    //}
-    //printf("\n\n");
-    //for (int ib=1; ib<2; ib++) {
-    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
-    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
-    //    }
-    //}
 
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
+    reset_and_start_timer();
     Tree ttree;
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
+    numLeaf = 1 + ((numTargs-1)/blockSize);
+    printf("  %d nodes at leaf level\n", numLeaf);
+    ttree.levels = 1 + log_2(2*numLeaf-1);
+    printf("  makes %d levels in tree\n", ttree.levels);
+    ttree.numnodes = 1 << ttree.levels;
+    printf("  and %d total nodes in tree\n", ttree.numnodes);
+    ttree.x.resize(ttree.numnodes);
+    ttree.y.resize(ttree.numnodes);
+    ttree.z.resize(ttree.numnodes);
+    ttree.s.resize(ttree.numnodes);
+    ttree.m.resize(ttree.numnodes);
+    ttree.ioffset.resize(ttree.numnodes);
+    ttree.num.resize(ttree.numnodes);
+    std::fill(ttree.num.begin(), ttree.num.end(), 0);
+    printf("  with %d particles and block size of %d\n", numTargs, blockSize);
+    printf("  allocate and init tree:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // split this node and recurse
+    reset_and_start_timer();
+    (void) splitNode(targs, 0, targs.n, ttree, 1);
+    printf("  build tree time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // find equivalent points
+    printf("\nCalculating equivalent targ points\n");
+    reset_and_start_timer();
+    Parts eqtargs;
+    eqtargs.n = (stree.numnodes/2) * blockSize;
+    printf("  need %d particles\n", eqtargs.n);
+    eqtargs.x.resize(eqtargs.n);
+    eqtargs.y.resize(eqtargs.n);
+    eqtargs.z.resize(eqtargs.n);
+    eqtargs.u.resize(eqtargs.n);
+    eqtargs.v.resize(eqtargs.n);
+    eqtargs.w.resize(eqtargs.n);
+    stree.epoffset.resize(stree.numnodes);
+    stree.epnum.resize(stree.numnodes);
+    printf("  allocate eqtargs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // first, reorder tree until all parts are adjacent in space-filling curve
+    reset_and_start_timer();
+    //(void) refineTree(targs, ttree, 1);
+    printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // then, march through arrays merging pairs as you go up
+    reset_and_start_timer();
+    //(void) calcEquivalents(targs, eqtargs, ttree, 1);
+    printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
 
     //
     // Run the O(N^2) implementation
     //
     printf("\nRun the naive O(N^2) method (every %d particle)\n", ntskip);
     double minNaive = 1e30;
-    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
+    for (unsigned int i = 0; i < test_iterations[0]; ++i) {
         reset_and_start_timer();
         nbody_naive(srcs, targs, ntskip);
         double dt = get_elapsed_mcycles() * (float)ntskip;
@@ -690,26 +741,13 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     std::vector<float> naiveu = targs.u;
 
-    //
-    // Run the new O(N) equivalent particle method
-    //
-    //printf("\nRun the fast O(N) method\n");
-    //double minFast = 1e30;
-    //for (unsigned int i = 0; i < test_iterations[0]; ++i) {
-    //    reset_and_start_timer();
-    //    nbody_fastsumm(srcs, targs);
-    //    double dt = get_elapsed_mcycles();
-    //    printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
-    //    minFast = std::min(minFast, dt);
-    //}
-    //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
-    // write sample results
-    //for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-    // save the results for comparison
+    float errsum = 0.0;
+    int errcnt = 0;
 
     //
     // Run a simple O(NlogN) treecode - boxes approximate as particles
     //
+    if (test_iterations[1] > 0) {
     printf("\nRun the treecode O(NlogN)\n");
     double minTreecode = 1e30;
     for (unsigned int i = 0; i < test_iterations[1]; ++i) {
@@ -726,21 +764,26 @@ int main(int argc, char *argv[]) {
     std::vector<float> treecodeu = targs.u;
 
     // compare accuracy
-    float errsum = 0.0;
+    errsum = 0.0;
+    errcnt = 0;
     for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        errcnt++;
     }
-    printf("RMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
+    printf("RMS error in treecode is %g\n", sqrtf(errsum/errcnt));
+    }
+
 
     //
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
+    if (test_iterations[2] > 0) {
     printf("\nRun the treecode O(NlogN) with equivalent particles\n");
     double minTreecode2 = 1e30;
-    for (unsigned int i = 0; i < test_iterations[1]; ++i) {
+    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
-        nbody_treecode2(srcs, eqpts, stree, targs, 1.0f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.9f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
@@ -753,11 +796,45 @@ int main(int argc, char *argv[]) {
 
     // compare accuracy
     errsum = 0.0;
+    errcnt = 0;
     for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        errcnt++;
     }
-    printf("RMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
+    printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
+    }
+
+
+    //
+    // Run the new O(N) equivalent particle method
+    //
+    if (test_iterations[3] > 0) {
+    printf("\nRun the fast O(N) method\n");
+    double minFast = 1e30;
+    for (unsigned int i = 0; i < test_iterations[3]; ++i) {
+        reset_and_start_timer();
+        nbody_fastsumm(srcs, eqsrcs, stree, targs, ttree, 1.0f);
+        double dt = get_elapsed_mcycles();
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        minFast = std::min(minFast, dt);
+    }
+    printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
+    // write sample results
+    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    // save the results for comparison
+    std::vector<float> fastu = targs.u;
+
+    // compare accuracy
+    errsum = 0.0;
+    errcnt = 0;
+    for (auto i=0; i< targs.u.size(); i+=ntskip) {
+        float thiserr = fastu[i]-naiveu[i];
+        errsum += thiserr*thiserr;
+        errcnt++;
+    }
+    printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
+    }
 
     return 0;
 }
