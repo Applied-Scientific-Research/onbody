@@ -65,3 +65,16 @@ N       naive   tree1   err1    tree2   err2    tree+refine
 262144  3193703 195733. 1.17e-3 24416.4 5.97e-4 711.77+161.47
 2097152 1.99e+8 1.94e+6 8.99e-4 263423. 5.34e-4 8567.3+1310.7
 
+#### Test accuracy vs. theta for equivalent particle treecode
+
+All use N=262144 and itskip=34
+
+theta   tree2   err2
+1.5     76899.9 1.10e-4
+1.2     43780.8 2.65e-4
+1.0     29469.4 5.90e-4
+0.9     22837.6 1.08e-3
+0.8     14197.8 4.03e-3
+0.7     9628.09 1.09e-1
+
+
