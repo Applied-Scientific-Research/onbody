@@ -1,5 +1,7 @@
 # onbody
+
 Test C++ code for equivalent particle approximation technique and O(NlogN) and O(N) summation methods
+
 
 ## Summary
 
@@ -9,6 +11,9 @@ of a set of particles on a system of target points. Key goals are to learn:
 * How C++ data structures and algorithms will work for this problem
 * Whether a system that uses equivalent particles at all levels of a tree can generate solutions of sufficient accuracy
 * Whether using a hierarchical system of equivalent target points allows creation of an O(N) fast summation method of sufficient accuracy and low programmer effort
+
+The "equivalent particle" technique is where, given a `blockSize` representing the number of particles in all but one leaf node, every other node in the tree contains `blockSize` "equivalent particles" which are used to compute the influence of that box on target points. A simple treecode requires only the source points to have equivalent particles; and in this sense, they act like the multipole approximation of that tree node. For an O(N) method, the target tree also uses this system, so that all but one node in every level of the tree contains exactly `blockSize` equivalent target points, onto which the sources' influences are calculated, and from which those influences are passed down to its child boxes' equivalent target points.
+
 
 ## Build and run
 
@@ -77,6 +82,7 @@ theta  |tree2  |err2
 0.9    |22837.6|1.08e-3
 0.8    |14197.8|4.03e-3
 0.7    |9628.09|1.09e-1
+
 
 ## To do
 
