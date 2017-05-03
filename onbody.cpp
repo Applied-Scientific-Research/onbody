@@ -9,7 +9,8 @@
 #include <string.h>
 #include <math.h>
 #include <vector>
-#include <algorithm>
+#include <algorithm>	// for sort and minmax
+#include <numeric>		// for iota
 #include "timing.h"
 
 const int blockSize = 64;
@@ -19,13 +20,23 @@ const int blockSize = 64;
 //
 struct Parts {
     int n;
+    // state
     std::vector<float> x;
     std::vector<float> y;
     std::vector<float> z;
     std::vector<float> r;
+    // actuator
     std::vector<float> m;
+    // results
+    std::vector<float> u;
+    std::vector<float> v;
+    std::vector<float> w;
 };
 
+//
+// A tree, made of a structure of arrays
+// root node is 1, children are 2,3, their children 4,5 and 6,7
+//
 struct Tree {
     // number of levels in the tree
     int levels;
@@ -51,16 +62,16 @@ struct Tree {
 static inline void nbody_kernel(const float sx, const float sy, const float sz,
                                 const float sr, const float sm,
                                 const float tx, const float ty, const float tz,
-                                float* tax, float* tay, float* taz) {
+                                float& tax, float& tay, float& taz) {
     // 19 flops
     const float dx = sx - tx;
     const float dy = sy - ty;
     const float dz = sz - tz;
     float r2 = dx*dx + dy*dy + dz*dz + sr*sr;
     r2 = sm/(r2*sqrt(r2));
-    (*tax) += r2 * dx;
-    (*tay) += r2 * dy;
-    (*taz) += r2 * dz;
+    tax += r2 * dx;
+    tay += r2 * dy;
+    taz += r2 * dz;
 }
 
 //
@@ -70,41 +81,99 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // Caller for the scalar kernel
 //
-void nbody(int numSrcs, float sx[], float sy[], float sz[], float sr[], float sm[],
-           int numTarg, float tx[], float ty[], float tz[],
-                        float tax[], float tay[], float taz[])
-{
+void nbody(Parts& srcs, Parts& targs) {
+
     #pragma omp parallel for
-    for (int i = 0; i < numTarg; i++) {
-        tax[i] = 0.0;
-        tay[i] = 0.0;
-        taz[i] = 0.0;
-        for (int j = 0; j < numSrcs; j++) {
-            nbody_kernel(sx[j], sy[j], sz[j], sr[j], sm[j],
-                         tx[i], ty[i], tz[i],
-                         &tax[i], &tay[i], &taz[i]);
+    for (int i = 0; i < targs.n; i++) {
+        targs.u[i] = 0.0;
+        targs.v[i] = 0.0;
+        targs.w[i] = 0.0;
+        for (int j = 0; j < srcs.n; j++) {
+            nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
+                         targs.x[i], targs.y[i], targs.z[i],
+                         targs.u[i], targs.v[i], targs.w[i]);
         }
     }
 }
 
 //
+// Sort but retain only sorted index! Uses C++11 lambdas
+//
+std::vector<size_t> sortIndexes(const std::vector<float> &v) {
+
+  // initialize original index locations
+  std::vector<size_t> idx(v.size());
+  std::iota(idx.begin(), idx.end(), 0);
+
+  // sort indexes based on comparing values in v
+  std::sort(idx.begin(), idx.end(),
+       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  return idx;
+}
+
+//
+// Find min and max values along an axis
+//
+std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, size_t iend) {
+
+    auto itbeg = x.begin() + istart;
+    auto itend = x.begin() + iend;
+
+    auto range = std::minmax_element(itbeg, itend);
+
+    return std::pair<float,float>(x[range.first+istart-itbeg], x[range.second+istart-itbeg]);
+}
+
+//
 // Split this segment of the particles on its longest axis
 //
-void splitNode(std::vector<float> x) {
+void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
+
+    printf("splitNode %d  %ld %ld\n", tnode, begin, end);
+
+    // debug print - starting condition
+    for (int i=begin; i<begin+10 and i<end; ++i)
+        printf("  node %i %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
 
     // find the min/max of the three axes
-    //float xmin = std::min_element(std::begin(x), std::end(x));
-    //std::pair<float,float> xrange = std::minmax_element(x.begin(), x.end());
-    auto xrange = std::minmax_element(x.begin(), x.end());
+    printf("find min/max\n");
+    reset_and_start_timer();
+    std::vector<float> boxsizes(3);
+    auto minmax = minMaxValue(p.x, begin, end);
+    boxsizes[0] = minmax.second - minmax.first;
+    printf("  node x min/max %g %g\n", minmax.first, minmax.second);
+    minmax = minMaxValue(p.y, begin, end);
+    boxsizes[1] = minmax.second - minmax.first;
+    printf("       y min/max %g %g\n", minmax.first, minmax.second);
+    minmax = minMaxValue(p.z, begin, end);
+    boxsizes[2] = minmax.second - minmax.first;
+    printf("       z min/max %g %g\n", minmax.first, minmax.second);
+    // and find longest box edge
+    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+    printf("  longest axis is %ld\n", maxaxis);
+    printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
-    for (int i=0; i<10; ++i) printf("  node %i %g\n", i, x[i]);
-    printf("  node x min/max %g %g\n", x[xrange.first-x.begin()], x[xrange.second-x.begin()]);
+    // sort it
+    printf("sort\n");
+    reset_and_start_timer();
+    auto idx = sortIndexes(p.x);
+    for (int i=begin; i<begin+10 and i<end; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    printf("  sort time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // rearrange the elements
+    printf("reorder\n");
+    reset_and_start_timer();
+    // make a temporary vector
+    std::vector<float> temp(end-begin);
+
+    printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 }
 
 //
 // make a VAMsplit k-d tree from this set of particles
 //
-Tree makeTree(Parts p) {
+Tree makeTree(Parts& p) {
 
     printf("Building the tree\n");
 
@@ -115,7 +184,7 @@ Tree makeTree(Parts p) {
     int inode = 1;
 
     // split this node
-    (void) splitNode(p.x);
+    (void) splitNode(p, 0, 256, tree, inode);
 
     return tree;
 }
@@ -152,6 +221,7 @@ int main(int argc, char *argv[]) {
     numSrcs = blockSize*(numSrcs/blockSize);
     numTargs = blockSize*(numTargs/blockSize);
 
+    // allocate space for sources and targets
     Parts srcs;
     srcs.n = numSrcs;
     srcs.x.resize(srcs.n);
@@ -165,20 +235,9 @@ int main(int argc, char *argv[]) {
     targs.x.resize(targs.n);
     targs.y.resize(targs.n);
     targs.z.resize(targs.n);
-
-    // allocate particle data
-    float *sx = new float[numSrcs];
-    float *sy = new float[numSrcs];
-    float *sz = new float[numSrcs];
-    float *sr = new float[numSrcs];
-    float *sm = new float[numSrcs];
-
-    float *tx = new float[numTargs];
-    float *ty = new float[numTargs];
-    float *tz = new float[numTargs];
-    float *tax = new float[numTargs];
-    float *tay = new float[numTargs];
-    float *taz = new float[numTargs];
+    targs.u.resize(targs.n);
+    targs.v.resize(targs.n);
+    targs.w.resize(targs.n);
 
     // initialize particle data
     for (auto&& x : srcs.x) { x = (float)rand()/(float)RAND_MAX; }
@@ -191,20 +250,6 @@ int main(int argc, char *argv[]) {
     for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
 
-    for (int i = 0; i < numSrcs; i++) {
-        sx[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-        sy[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-        sz[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-        // really should be cube root
-        sr[i] = 1.0 / sqrt((float)numSrcs);
-        sm[i] = 2.0 * ((float)rand()/(float)RAND_MAX) / (float)numSrcs;
-    }
-    for (int i = 0; i < numTargs; i++) {
-        tx[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-        ty[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-        tz[i] = 2.*(float)rand()/(float)RAND_MAX - 1.0;
-    }
-
     // make a tree
     Tree stree = makeTree(srcs);
 
@@ -215,17 +260,16 @@ int main(int argc, char *argv[]) {
     double minSerial = 1e30;
     for (unsigned int i = 0; i < test_iterations; ++i) {
         reset_and_start_timer();
-        nbody(numSrcs, sx, sy, sz, sr, sm,
-              numTargs, tx, ty, tz, tax, tay, taz);
+        nbody(srcs, targs);
         double dt = get_elapsed_mcycles();
-        printf("@time of base run:\t\t\t[%.3f] million cycles\n", dt);
+        printf("time of base run:\t\t\t[%.3f] million cycles\n", dt);
         minSerial = std::min(minSerial, dt);
     }
 
     printf("[onbody]:\t\t[%.3f] million cycles\n", minSerial);
 
     // Write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,tax[i],tay[i],taz[i]);
+    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
 
     return 0;
 }
