@@ -91,6 +91,7 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // A blocked kernel
 //
+//static inline void nbody_src_block(const float sx, const float sy, const float sz,
 
 //
 // Caller for the O(N^2) kernel
@@ -112,26 +113,41 @@ void nbody_naive(Parts& srcs, Parts& targs) {
 //
 // Recursive kernel for the treecode
 //
-void nbody_by_targ(Parts& srcs, Tree& stree, int tnode,
+void nbody_by_targ(Parts& srcs, Tree& stree, int tnode, float theta,
                    const float tx, const float ty, const float tz,
                    float& tax, float& tay, float& taz) {
 
+    // distance from box center of mass to target point
+    const float dx = stree.x[tnode] - tx;
+    const float dy = stree.y[tnode] - ty;
+    const float dz = stree.z[tnode] - tz;
+    const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+
     // is source tree node far enough away?
-
-
-    tax += 1.0f;
+    if (dist / stree.s[tnode] > theta) {
+        // box is far enough removed, approximate its influence
+        nbody_kernel(stree.x[tnode], stree.y[tnode], stree.z[tnode], 0.0f, stree.m[tnode],
+                     tx, ty, tz, tax, tay, taz);
+    } else if (stree.num[tnode] < blockSize) {
+        // box is too close and is a leaf node, look at individual particles
+        //nbody_src_block()
+    } else {
+        // box is too close, open up its children
+        (void) nbody_by_targ(srcs, stree, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
+        (void) nbody_by_targ(srcs, stree, 2*tnode+1, theta, tx, ty, tz, tax, tay, taz);
+    }
 }
 
 //
 // Caller for the O(NlogN) kernel
 //
-void nbody_treecode(Parts& srcs, Tree& stree, Parts& targs) {
+void nbody_treecode(Parts& srcs, Tree& stree, Parts& targs, float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
         targs.v[i] = 0.0f;
         targs.w[i] = 0.0f;
-        nbody_by_targ(srcs, stree, 1,
+        nbody_by_targ(srcs, stree, 1, theta,
                       targs.x[i], targs.y[i], targs.z[i],
                       targs.u[i], targs.v[i], targs.w[i]);
     }
