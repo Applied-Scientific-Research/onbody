@@ -223,16 +223,39 @@ void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, 
 //
 // Caller for the fast summation O(N) method
 //
+// ittn is the target tree node that this routine will work on
+// itsv is the source tree node vector that will affect ittn
+//
+// We will change u,v,w for the targs points and the eqtargs equivalent points
+//
 void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
-                    Parts& targs, const Tree& ttree, const float theta) {
-    #pragma omp parallel for
-    for (int i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0f;
-        targs.v[i] = 0.0f;
-        targs.w[i] = 0.0f;
-        treecode2_block(srcs, eqsrcs, stree, 1, theta,
-                        targs.x[i], targs.y[i], targs.z[i],
-                        targs.u[i], targs.v[i], targs.w[i]);
+                    Parts& targs, Parts& eqtargs, const Tree& ttree,
+                    const int ittn, const std::vector<int> istv,
+                    const float theta) {
+
+    // initialize a new vector of source boxes to pass to this target box's children
+    std::vector<int> cstv;
+
+    // for target box ittn, are any source boxes at the same level well-separated?
+    printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
+    for (auto&& sn : istv) {
+
+        // if source box is a leaf node, just compute the influence and return?
+
+        // distance from box center of mass to target point
+        const float dx = stree.x[sn] - ttree.x[ittn];
+        const float dy = stree.y[sn] - ttree.y[ittn];
+        const float dz = stree.z[sn] - ttree.z[ittn];
+        const float halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
+        const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+        printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
+
+        // is source tree node far enough away?
+        if ((dist-halfsize) / halfsize > theta) {
+            // it is far enough - we can approximate
+        } else {
+            // it is not far enough - add source box children to list
+        }
     }
 }
 
@@ -559,7 +582,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 0, 4, 0};
+    static std::vector<int> test_iterations = {1, 0, 0, 1};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -706,21 +729,23 @@ int main(int argc, char *argv[]) {
     eqtargs.x.resize(eqtargs.n);
     eqtargs.y.resize(eqtargs.n);
     eqtargs.z.resize(eqtargs.n);
+    eqtargs.r.resize(eqtargs.n);
+    eqtargs.m.resize(eqtargs.n);
     eqtargs.u.resize(eqtargs.n);
     eqtargs.v.resize(eqtargs.n);
     eqtargs.w.resize(eqtargs.n);
-    stree.epoffset.resize(stree.numnodes);
-    stree.epnum.resize(stree.numnodes);
+    ttree.epoffset.resize(ttree.numnodes);
+    ttree.epnum.resize(ttree.numnodes);
     printf("  allocate eqtargs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
-    //(void) refineTree(targs, ttree, 1);
+    (void) refineTree(targs, ttree, 1);
     printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // then, march through arrays merging pairs as you go up
     reset_and_start_timer();
-    //(void) calcEquivalents(targs, eqtargs, ttree, 1);
+    (void) calcEquivalents(targs, eqtargs, ttree, 1);
     printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
 
@@ -814,7 +839,9 @@ int main(int argc, char *argv[]) {
     double minFast = 1e30;
     for (unsigned int i = 0; i < test_iterations[3]; ++i) {
         reset_and_start_timer();
-        nbody_fastsumm(srcs, eqsrcs, stree, targs, ttree, 1.0f);
+        std::vector<int> source_boxes = {1};
+        nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
+                       1, source_boxes, 1.0f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
