@@ -275,18 +275,18 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     //printf("reorder\n");
     //reset_and_start_timer();
     // copy this segment into the temp array
-    std::copy(p.x.begin()+pfirst, p.x.end()+plast, p.ftemp.begin()+pfirst);
+    std::copy(p.x.begin()+pfirst, p.x.begin()+plast, p.ftemp.begin()+pfirst);
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  temp %d %g\n", i, p.t[i]);
     // now write back to the original array using the indexes from the sort
     for (int i=pfirst; i<plast; ++i) p.x[i] = p.ftemp[p.itemp[i]];
     // redo for the other axes
-    std::copy(p.y.begin()+pfirst, p.y.end()+plast, p.ftemp.begin()+pfirst);
+    std::copy(p.y.begin()+pfirst, p.y.begin()+plast, p.ftemp.begin()+pfirst);
     for (int i=pfirst; i<plast; ++i) p.y[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.z.begin()+pfirst, p.z.end()+plast, p.ftemp.begin()+pfirst);
+    std::copy(p.z.begin()+pfirst, p.z.begin()+plast, p.ftemp.begin()+pfirst);
     for (int i=pfirst; i<plast; ++i) p.z[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.m.begin()+pfirst, p.m.end()+plast, p.ftemp.begin()+pfirst);
+    std::copy(p.m.begin()+pfirst, p.m.begin()+plast, p.ftemp.begin()+pfirst);
     for (int i=pfirst; i<plast; ++i) p.m[i] = p.ftemp[p.itemp[i]];
-    std::copy(p.r.begin()+pfirst, p.r.end()+plast, p.ftemp.begin()+pfirst);
+    std::copy(p.r.begin()+pfirst, p.r.begin()+plast, p.ftemp.begin()+pfirst);
     for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
     // clean this up with an inline function
     // reorder(p.x, p.t, idx, pfirst, plast);
@@ -413,7 +413,6 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
     printf("  build tree time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-
 
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
