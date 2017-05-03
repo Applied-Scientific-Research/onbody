@@ -337,7 +337,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {10, 10, 4};
+    static std::vector<int> test_iterations = {10, 5, 2};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -476,6 +476,7 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
+    std::vector<float> treecodeu = targs.u;
 
     //
     // Run the O(N^2) implementation
@@ -492,6 +493,14 @@ int main(int argc, char *argv[]) {
     printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
     // write sample results
     for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+
+    // compare accuracy
+    float errsum = 0.0;
+    for (auto i=0; i< targs.u.size(); ++i) {
+        float thiserr = treecodeu[i]-targs.u[i];
+        errsum += thiserr*thiserr;
+    }
+    printf("\nRMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
 
     return 0;
 }
