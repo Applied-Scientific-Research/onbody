@@ -118,7 +118,7 @@ void nbody_naive(const Parts& srcs, Parts& targs) {
 }
 
 //
-// Recursive kernel for the treecode
+// Recursive kernel for the treecode using 1st order box approximations
 //
 void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const float theta,
                      const float tx, const float ty, const float tz,
@@ -294,21 +294,6 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     // rearrange the elements
     //printf("reorder\n");
     //reset_and_start_timer();
-    // copy this segment into the temp array
-    //std::copy(p.x.begin()+pfirst, p.x.begin()+plast, p.ftemp.begin()+pfirst);
-    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  temp %d %g\n", i, p.t[i]);
-    // now write back to the original array using the indexes from the sort
-    //for (int i=pfirst; i<plast; ++i) p.x[i] = p.ftemp[p.itemp[i]];
-    // redo for the other axes
-    //std::copy(p.y.begin()+pfirst, p.y.begin()+plast, p.ftemp.begin()+pfirst);
-    //for (int i=pfirst; i<plast; ++i) p.y[i] = p.ftemp[p.itemp[i]];
-    //std::copy(p.z.begin()+pfirst, p.z.begin()+plast, p.ftemp.begin()+pfirst);
-    //for (int i=pfirst; i<plast; ++i) p.z[i] = p.ftemp[p.itemp[i]];
-    //std::copy(p.m.begin()+pfirst, p.m.begin()+plast, p.ftemp.begin()+pfirst);
-    //for (int i=pfirst; i<plast; ++i) p.m[i] = p.ftemp[p.itemp[i]];
-    //std::copy(p.r.begin()+pfirst, p.r.begin()+plast, p.ftemp.begin()+pfirst);
-    //for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
-    // clean this up with an inline function
     reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.z, p.ftemp, p.itemp, pfirst, plast);
@@ -336,7 +321,7 @@ void refineLeaf(Parts& p, Tree& t, size_t pfirst, size_t plast) {
     if (plast-pfirst < 3) return;
 
     // perform very much the same action as tree-build
-    printf("    refining particles %ld to %ld\n", pfirst, plast);
+    //printf("    refining particles %ld to %ld\n", pfirst, plast);
 
     // find the min/max of the three axes
     std::vector<float> boxsizes(3);
@@ -378,17 +363,114 @@ void refineLeaf(Parts& p, Tree& t, size_t pfirst, size_t plast) {
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
 void refineTree(Parts& p, Tree& t, int tnode) {
-    printf("  node %d has %d particles\n", tnode, t.num[tnode]);
+    //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
         (void) refineLeaf(p, t, t.ioffset[tnode], t.ioffset[tnode]+t.num[tnode]);
-        for (int i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
-            printf("  %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+        //for (int i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
+        //    printf("  %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     } else {
         // recurse and check child nodes
         (void) refineTree(p, t, 2*tnode);
         (void) refineTree(p, t, 2*tnode+1);
     }
+}
+
+//
+// Loop over all nodes in the tree and merge adjacent pairs of particles
+//
+// one situation: we are a leaf node
+//       another: we are a non-leaf node taking eq parts from two leaf nodes
+//       another: we are a non-leaf node taking eq parts from two non-leaf nodes
+//       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
+//
+void calcEquivalents(Parts& p, Parts& ep, Tree& t, int tnode) {
+    //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
+
+    t.epoffset[tnode] = tnode * blockSize;
+    t.epnum[tnode] = 0;
+    //printf("    equivalent particles start at %d\n", t.epoffset[tnode]);
+
+    // loop over children, adding equivalent particles to our list
+    for (auto ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
+        //printf("  child %d has %d particles\n", ichild, t.num[ichild]);
+
+        // split on whether this child is a leaf node or not
+        if (t.num[ichild] > blockSize) {
+            // this child is a non-leaf node and needs to make equivalent particles
+            (void) calcEquivalents(p, ep, t, ichild);
+
+            //printf("  back in node %d...\n", tnode);
+
+            // now we read those equivalent particles and make higher-level equivalents
+            //printf("    child %d made equiv parts %d to %d\n", ichild, t.epoffset[ichild], t.epoffset[ichild]+t.epnum[ichild]);
+
+            // merge pairs of child's equivalent particles until we have half
+            int numEqps = (t.epnum[ichild]+1) / 2;
+            int istart = (blockSize/2) * ichild;
+            int istop = istart + numEqps;
+            //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
+
+            // loop over new equivalent particles and real particles together
+            int iep = istart;
+            int ip = t.epoffset[ichild] + 1;
+            for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
+                   iep++,     ip+=2) {
+                //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
+                float pairm = ep.m[ip-1] + ep.m[ip];
+                ep.x[iep] = (ep.x[ip-1]*ep.m[ip-1] + ep.x[ip]*ep.m[ip]) / pairm;
+                ep.y[iep] = (ep.y[ip-1]*ep.m[ip-1] + ep.y[ip]*ep.m[ip]) / pairm;
+                ep.z[iep] = (ep.z[ip-1]*ep.m[ip-1] + ep.z[ip]*ep.m[ip]) / pairm;
+                ep.r[iep] = (ep.r[ip-1]*ep.m[ip-1] + ep.r[ip]*ep.m[ip]) / pairm;
+                ep.m[iep] = pairm;
+            }
+            // don't merge the last odd one, just pass it up unmodified
+            if (ip == t.epoffset[ichild]+t.epnum[ichild]) {
+                //printf("    passing %d up into %d\n", ip-1,iep);
+                ep.x[iep] = ep.x[ip-1];
+                ep.y[iep] = ep.y[ip-1];
+                ep.z[iep] = ep.z[ip-1];
+                ep.r[iep] = ep.r[ip-1];
+                ep.m[iep] = ep.m[ip-1];
+            }
+            t.epnum[tnode] += numEqps;
+        } else {
+            // this child is a leaf node
+            //printf("    child leaf node has particles %d to %d\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
+
+            // if we're a leaf node, merge pairs of particles until we have half
+            int numEqps = (t.num[ichild]+1) / 2;
+            int istart = (blockSize/2) * ichild;
+            int istop = istart + numEqps;
+            //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
+
+            // loop over new equivalent particles and real particles together
+            int iep = istart;
+            int ip = t.ioffset[ichild] + 1;
+            for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
+                   iep++,     ip+=2) {
+                //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
+                float pairm = p.m[ip-1] + p.m[ip];
+                ep.x[iep] = (p.x[ip-1]*p.m[ip-1] + p.x[ip]*p.m[ip]) / pairm;
+                ep.y[iep] = (p.y[ip-1]*p.m[ip-1] + p.y[ip]*p.m[ip]) / pairm;
+                ep.z[iep] = (p.z[ip-1]*p.m[ip-1] + p.z[ip]*p.m[ip]) / pairm;
+                ep.r[iep] = (p.r[ip-1]*p.m[ip-1] + p.r[ip]*p.m[ip]) / pairm;
+                ep.m[iep] = pairm;
+            }
+            // don't merge the last odd one, just pass it up unmodified
+            if (ip == t.ioffset[ichild]+t.num[ichild]) {
+                //printf("    passing %d up into %d\n", ip-1,iep);
+                ep.x[iep] = p.x[ip-1];
+                ep.y[iep] = p.y[ip-1];
+                ep.z[iep] = p.z[ip-1];
+                ep.r[iep] = p.r[ip-1];
+                ep.m[iep] = p.m[ip-1];
+            }
+            t.epnum[tnode] += numEqps;
+        }
+    }
+
+    //printf("  node %d finally has %d equivalent particles\n", tnode, t.epnum[tnode]);
 }
 
 //
@@ -492,20 +574,41 @@ int main(int argc, char *argv[]) {
     eqpts.z.resize(eqpts.n);
     eqpts.r.resize(eqpts.n);
     eqpts.m.resize(eqpts.n);
+    stree.epoffset.resize(stree.numnodes);
+    stree.epnum.resize(stree.numnodes);
     printf("  allocate eqpts structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
     (void) refineTree(srcs, stree, 1);
     printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-
-    exit(0);
+    //for (int i=0; i<stree.num[1]; ++i)
+    //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
 
     // then, march through arrays merging pairs as you go up
     reset_and_start_timer();
-    //(void) calcEquivalents(srcs, 0, srcs.n, stree, 1);
+    (void) calcEquivalents(srcs, eqpts, stree, 1);
     printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    //printf("\n\n");
+    //for (int ib=4; ib<8; ib++) {
+    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
+    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
+    //    }
+    //}
+    //printf("\n\n");
+    //for (int ib=2; ib<4; ib++) {
+    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
+    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
+    //    }
+    //}
+    //printf("\n\n");
+    //for (int ib=1; ib<2; ib++) {
+    //    for (int i=stree.epoffset[ib]; i<stree.epoffset[ib]+stree.epnum[ib]; ++i) {
+    //        printf("%d %g %g %g\n", i, eqpts.x[i], eqpts.y[i], eqpts.z[i]);
+    //    }
+    //}
 
+    exit(0);
 
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");

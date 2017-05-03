@@ -21,6 +21,9 @@ of a set of particles on a system of target points. Key goals are to learn:
 Block size 64
 Single threaded
 MacOS 10.11
+MBP 12,1
+Intel i7 at 3.1 GHz
+All times in mcycles
 
 #### 1st order treecode (boxes are singular particles)
 
@@ -43,4 +46,13 @@ N       tbuild  tbmult
 32768   55.177  13.59x
 262144  673.98  12.22x
 2097152 8601.5  12.76x
+
+#### Creating equivalent particles
+
+N       tree    refine  equiv
+512     0.425   0.531   0.011
+4096    4.832   2.578   0.057
+32768   57.732  20.550  0.513
+262144  698.71  158.22  4.673
+
 
