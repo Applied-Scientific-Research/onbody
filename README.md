@@ -87,12 +87,12 @@ theta  |tree2  |err2
 
 Treecode1 (1st order) uses theta=2.9, treecode2 (equivalent particles) uses theta=0.95.
 
-      N | naive   |   tree1 |    err1 | tree2   | err2    | scaling | speedup
+N       | naive   |   tree1 |    err1 | tree2   | err2    | scaling | speedup
 --------|---------|---------|---------|---------|---------|---------|--------
-    1000| 39.73   | 18.47   | 0.0     | 11.97   | 2.02e-3 | na      | 3.32x
-   10000| 1934.   | 1255.   | 1.12e-3 | 351.7   | 1.62e-3 | 29.4x   | 5.50x
-  100000| 3.89e+5 | 2.75e+4 | 2.04e-3 | 6340.   | 2.19e-3 | 18.0x   | 61.4x
- 1000000| 4.07e+7 | 4.16e+5 | 1.34e-3 | 8.65e+4 | 2.04e-3 | 13.6x   | 471x
+1000    | 39.73   | 18.47   | 0.0     | 11.97   | 2.02e-3 | na      | 3.32x
+10000   | 1934.   | 1255.   | 1.12e-3 | 351.7   | 1.62e-3 | 29.4x   | 5.50x
+100000  | 3.89e+5 | 2.75e+4 | 2.04e-3 | 6340.   | 2.19e-3 | 18.0x   | 61.4x
+1000000 | 4.07e+7 | 4.16e+5 | 1.34e-3 | 8.65e+4 | 2.04e-3 | 13.6x   | 471x
 10000000| 4.02e+9 | 5.75e+6 | 1.41e-2 | 1.23e+6 | 1.46e-2 | 14.2x   | 3270x
 
 Performance asymptotes at 1.45 GFlop/s for direct summation, indicitave of non-SSE, single-threaded operation.
