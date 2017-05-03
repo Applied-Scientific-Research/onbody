@@ -19,16 +19,21 @@ const int blockSize = 64;
 //
 // A set of particles, can be sources or targets
 //
-struct Parts {
+class Parts {
+public:
+    Parts(int);
+    void resize(int);
+    void random_in_cube();
+
     int n;
     // state
     alignas(32) std::vector<float> x;
     alignas(32) std::vector<float> y;
     alignas(32) std::vector<float> z;
     alignas(32) std::vector<float> r;
-    // actuator
+    // actuator (needed by sources)
     alignas(32) std::vector<float> m;
-    // results
+    // results (needed by targets)
     alignas(32) std::vector<float> u;
     alignas(32) std::vector<float> v;
     alignas(32) std::vector<float> w;
@@ -36,6 +41,32 @@ struct Parts {
     alignas(32) std::vector<size_t> itemp;
     alignas(32) std::vector<float> ftemp;
 };
+
+Parts::Parts(int _num) {
+    resize(_num);
+}
+
+void Parts::resize(int _num) {
+    n = _num;
+    x.resize(n);
+    y.resize(n);
+    z.resize(n);
+    r.resize(n);
+    m.resize(n);
+    u.resize(n);
+    v.resize(n);
+    w.resize(n);
+    itemp.resize(n);
+    ftemp.resize(n);
+}
+
+void Parts::random_in_cube() {
+    for (auto&& _x : x) { _x = (float)rand()/(float)RAND_MAX; }
+    for (auto&& _y : y) { _y = (float)rand()/(float)RAND_MAX; }
+    for (auto&& _z : z) { _z = (float)rand()/(float)RAND_MAX; }
+    for (auto&& _r : r) { _r = 1.0f / cbrt((float)n); }
+    for (auto&& _m : m) { _m = 2.0f*(float)rand()/(float)RAND_MAX / (float)n; }
+}
 
 //
 // A tree, made of a structure of arrays
@@ -630,40 +661,12 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
 
     // allocate space for sources and targets
-    Parts srcs;
-    srcs.n = numSrcs;
-    srcs.x.resize(srcs.n);
-    srcs.y.resize(srcs.n);
-    srcs.z.resize(srcs.n);
-    srcs.r.resize(srcs.n);
-    srcs.m.resize(srcs.n);
-    srcs.itemp.resize(srcs.n);
-    srcs.ftemp.resize(srcs.n);
-
-    Parts targs;
-    targs.n = numTargs;
-    targs.x.resize(targs.n);
-    targs.y.resize(targs.n);
-    targs.z.resize(targs.n);
-    targs.r.resize(targs.n);
-    targs.m.resize(targs.n);
-    targs.u.resize(targs.n);
-    targs.v.resize(targs.n);
-    targs.w.resize(targs.n);
-    targs.itemp.resize(targs.n);
-    targs.ftemp.resize(targs.n);
-
+    Parts srcs(numSrcs);
     // initialize particle data
-    for (auto&& x : srcs.x) { x = (float)rand()/(float)RAND_MAX; }
-    for (auto&& y : srcs.y) { y = (float)rand()/(float)RAND_MAX; }
-    for (auto&& z : srcs.z) { z = (float)rand()/(float)RAND_MAX; }
-    for (auto&& r : srcs.r) { r = 1.0f / cbrt((float)srcs.n); }
-    for (auto&& m : srcs.m) { m = 2.0f*(float)rand()/(float)RAND_MAX / (float)srcs.n; }
+    srcs.random_in_cube();
 
-    for (auto&& x : targs.x) { x = (float)rand()/(float)RAND_MAX; }
-    for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
-    for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
-    for (auto&& r : targs.r) { r = 1.0f / cbrt((float)srcs.n); }
+    Parts targs(numTargs);
+    targs.random_in_cube();
     for (auto&& m : targs.m) { m = 1.0f; }
     printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
@@ -697,14 +700,8 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     reset_and_start_timer();
-    Parts eqsrcs;
-    eqsrcs.n = (stree.numnodes/2) * blockSize;
+    Parts eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqsrcs.n);
-    eqsrcs.x.resize(eqsrcs.n);
-    eqsrcs.y.resize(eqsrcs.n);
-    eqsrcs.z.resize(eqsrcs.n);
-    eqsrcs.r.resize(eqsrcs.n);
-    eqsrcs.m.resize(eqsrcs.n);
     stree.epoffset.resize(stree.numnodes);
     stree.epnum.resize(stree.numnodes);
     printf("  allocate eqsrcs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
@@ -751,17 +748,8 @@ int main(int argc, char *argv[]) {
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     reset_and_start_timer();
-    Parts eqtargs;
-    eqtargs.n = (stree.numnodes/2) * blockSize;
+    Parts eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqtargs.n);
-    eqtargs.x.resize(eqtargs.n);
-    eqtargs.y.resize(eqtargs.n);
-    eqtargs.z.resize(eqtargs.n);
-    eqtargs.r.resize(eqtargs.n);
-    eqtargs.m.resize(eqtargs.n);
-    eqtargs.u.resize(eqtargs.n);
-    eqtargs.v.resize(eqtargs.n);
-    eqtargs.w.resize(eqtargs.n);
     ttree.epoffset.resize(ttree.numnodes);
     ttree.epnum.resize(ttree.numnodes);
     printf("  allocate eqtargs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
