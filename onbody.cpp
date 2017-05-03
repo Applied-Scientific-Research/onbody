@@ -32,6 +32,8 @@ struct Parts {
     std::vector<float> u;
     std::vector<float> v;
     std::vector<float> w;
+    // temporary
+    std::vector<float> t;
 };
 
 //
@@ -59,6 +61,10 @@ struct Tree {
     std::vector<int> num;
 };
 
+//
+// Find index of msb of uint32
+// from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
+//
 static inline uint32_t log_2(const uint32_t x) {
     if (x == 0) return 0;
     return (31 - __builtin_clz (x));
@@ -87,19 +93,47 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 
 //
-// Caller for the scalar kernel
+// Caller for the O(N^2) kernel
 //
-void nbody(Parts& srcs, Parts& targs) {
+void nbody_naive(Parts& srcs, Parts& targs) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0;
-        targs.v[i] = 0.0;
-        targs.w[i] = 0.0;
+        targs.u[i] = 0.0f;
+        targs.v[i] = 0.0f;
+        targs.w[i] = 0.0f;
         for (int j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
                          targs.x[i], targs.y[i], targs.z[i],
                          targs.u[i], targs.v[i], targs.w[i]);
         }
+    }
+}
+
+//
+// Recursive kernel for the treecode
+//
+void nbody_by_targ(Parts& srcs, Tree& stree, int tnode,
+                   const float tx, const float ty, const float tz,
+                   float& tax, float& tay, float& taz) {
+
+    // is source tree node far enough away?
+
+
+    tax += 1.0f;
+}
+
+//
+// Caller for the O(NlogN) kernel
+//
+void nbody_treecode(Parts& srcs, Tree& stree, Parts& targs) {
+    #pragma omp parallel for
+    for (int i = 0; i < targs.n; i++) {
+        targs.u[i] = 0.0f;
+        targs.v[i] = 0.0f;
+        targs.w[i] = 0.0f;
+        nbody_by_targ(srcs, stree, 1,
+                      targs.x[i], targs.y[i], targs.z[i],
+                      targs.u[i], targs.v[i], targs.w[i]);
     }
 }
 
@@ -139,40 +173,43 @@ std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, s
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
-void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
+void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
 
-    printf("splitNode %d  %ld %ld\n", tnode, begin, end);
+    printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
 
     // debug print - starting condition
-    for (int i=begin; i<begin+10 and i<end; ++i)
-        printf("  node %i %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
 
     // find the min/max of the three axes
     printf("find min/max\n");
     reset_and_start_timer();
     std::vector<float> boxsizes(3);
-    auto minmax = minMaxValue(p.x, begin, end);
+    auto minmax = minMaxValue(p.x, pfirst, plast);
     boxsizes[0] = minmax.second - minmax.first;
     printf("  node x min/max %g %g\n", minmax.first, minmax.second);
-    minmax = minMaxValue(p.y, begin, end);
+    minmax = minMaxValue(p.y, pfirst, plast);
     boxsizes[1] = minmax.second - minmax.first;
     printf("       y min/max %g %g\n", minmax.first, minmax.second);
-    minmax = minMaxValue(p.z, begin, end);
+    minmax = minMaxValue(p.z, pfirst, plast);
     boxsizes[2] = minmax.second - minmax.first;
     printf("       z min/max %g %g\n", minmax.first, minmax.second);
     // and find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
-    printf("  longest axis is %ld\n", maxaxis);
+    printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
     printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
+    // find total mass and center of mass
+    t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
+    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
+    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
+    t.z[tnode] = std::inner_product(p.z.begin()+pfirst, p.z.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
+    printf("  total mass %g and cm %g %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode], t.z[tnode]);
+
     // write all this data to the tree node
-    //t.x[tnode] = 1.0;
-    //t.y[tnode] = 1.0;
-    //t.z[tnode] = 1.0;
-    //t.s[tnode] = 1.0;
-    //t.m[tnode] = 1.0;
-    //t.ioffset[tnode] = begin;
-    //t.num[tnode] = end - begin;
+    t.s[tnode] = boxsizes[maxaxis];
+    t.ioffset[tnode] = pfirst;
+    t.num[tnode] = plast - pfirst;
+    printf("  tree node has offset %d and num %d\n", t.ioffset[tnode], t.num[tnode]);
 
     // now decide how to split this node
 
@@ -180,29 +217,43 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     printf("sort\n");
     reset_and_start_timer();
     auto idx = sortIndexes(p.x);
-    for (int i=begin; i<begin+10 and i<end; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
     printf("  sort time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // rearrange the elements
     printf("reorder\n");
     reset_and_start_timer();
-    // make a temporary vector
-    std::vector<float> temp;//(end-begin);
-    temp.reserve(end-begin);
     // copy this segment into the temp array
-    std::copy(p.x.begin(), p.x.end(), std::back_inserter(temp));
-    for (int i=0; i<10 and i<temp.size(); ++i) printf("  temp %d %g\n", i, temp[i]);
+    std::copy(p.x.begin()+pfirst, p.x.end()+plast, p.t.begin()+pfirst);
+    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  temp %d %g\n", i, p.t[i]);
     // now write back to the original array using the indexes from the sort
-    for (int i=0; i<temp.size(); ++i) p.x[i] = temp[idx[i]];
-    for (int i=begin; i<begin+10 and i<end; ++i) printf("  node %d %g\n", i, p.x[i]);
+    for (int i=pfirst; i<plast; ++i) p.x[i] = p.t[idx[i]];
+    // redo for the other axes
+    std::copy(p.y.begin()+pfirst, p.y.end()+plast, p.t.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.y[i] = p.t[idx[i]];
+    std::copy(p.z.begin()+pfirst, p.z.end()+plast, p.t.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.z[i] = p.t[idx[i]];
+    std::copy(p.m.begin()+pfirst, p.m.end()+plast, p.t.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.m[i] = p.t[idx[i]];
+    std::copy(p.r.begin()+pfirst, p.r.end()+plast, p.t.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.r[i] = p.t[idx[i]];
+    // clean this up with an inline function
+    // reorder(p.x, p.t, idx, pfirst, plast);
+    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
 
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // recursively call this routine for this node's new children
-    //if () {
-        //(void) splitNode(srcs, 0,        srcs.n/2, stree, 2);
-        //(void) splitNode(srcs, srcs.n/2, srcs.n,   stree, 3);
-    //}
+    if (t.num[tnode] > blockSize) {
+
+        // determine where the split should be
+        size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
+        printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
+
+        // call on the two children
+        //(void) splitNode(srcs, pfirst,  pmiddle, stree, 2*tnode);
+        //(void) splitNode(srcs, pmiddle, plast,   stree, 2*tnode+1);
+    }
 }
 
 
@@ -246,6 +297,7 @@ int main(int argc, char *argv[]) {
     srcs.z.resize(srcs.n);
     srcs.r.resize(srcs.n);
     srcs.m.resize(srcs.n);
+    srcs.t.resize(srcs.n);
 
     Parts targs;
     targs.n = numTargs;
@@ -255,13 +307,14 @@ int main(int argc, char *argv[]) {
     targs.u.resize(targs.n);
     targs.v.resize(targs.n);
     targs.w.resize(targs.n);
+    targs.t.resize(targs.n);
 
     // initialize particle data
     for (auto&& x : srcs.x) { x = (float)rand()/(float)RAND_MAX; }
     for (auto&& y : srcs.y) { y = (float)rand()/(float)RAND_MAX; }
     for (auto&& z : srcs.z) { z = (float)rand()/(float)RAND_MAX; }
-    for (auto&& r : srcs.r) { r = 1.0 / cbrt((float)srcs.n); }
-    for (auto&& m : srcs.m) { m = 2.*(float)rand()/(float)RAND_MAX / (float)srcs.n; }
+    for (auto&& r : srcs.r) { r = 1.0f / cbrt((float)srcs.n); }
+    for (auto&& m : srcs.m) { m = 2.0f*(float)rand()/(float)RAND_MAX / (float)srcs.n; }
 
     for (auto&& x : targs.x) { x = (float)rand()/(float)RAND_MAX; }
     for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
@@ -269,7 +322,7 @@ int main(int argc, char *argv[]) {
 
 
     // allocate and initialize tree
-    printf("Building the tree\n");
+    printf("\nBuilding the source tree\n");
     Tree stree;
     printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
     uint32_t numLeaf = 1 + ((numSrcs-1)/blockSize);
@@ -279,40 +332,49 @@ int main(int argc, char *argv[]) {
     stree.numnodes = 1 << stree.levels;
     printf("  and %d total nodes in tree\n", stree.numnodes);
     stree.x.resize(stree.numnodes);
+    stree.y.resize(stree.numnodes);
+    stree.z.resize(stree.numnodes);
+    stree.s.resize(stree.numnodes);
+    stree.m.resize(stree.numnodes);
+    stree.ioffset.resize(stree.numnodes);
+    stree.num.resize(stree.numnodes);
 
     // split this node and recurse
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
 
     // don't need the target tree for treecode, but will for fast code
 
-
-    //
-    // Run the O(N^2) implementation
-    //
-    printf("\nRun the naive O(N^2) method\n");
-    double minSerial = 1e30;
-    for (unsigned int i = 0; i < test_iterations; ++i) {
-        reset_and_start_timer();
-        nbody(srcs, targs);
-        double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
-        minSerial = std::min(minSerial, dt);
-    }
-    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minSerial);
-    // Write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-
-    //
-    // Run a simple O(NlogN) treecode
-    //
-    //printf("\nRun the treecode O(NlogN)\n");
-    //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minSerial);
+    printf("\nBuilding the target tree\n");
+    Tree ttree;
+    printf("  with %d particles and block size of %d\n", numTargs, blockSize);
 
     //
     // Run the new O(N) equivalent particle method
     //
     //printf("\nRun the fast O(N) method\n");
-    //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minSerial);
+    //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
+
+    //
+    // Run a simple O(NlogN) treecode
+    //
+    //printf("\nRun the treecode O(NlogN)\n");
+    //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
+
+    //
+    // Run the O(N^2) implementation
+    //
+    printf("\nRun the naive O(N^2) method\n");
+    double minNaive = 1e30;
+    for (unsigned int i = 0; i < test_iterations; ++i) {
+        reset_and_start_timer();
+        nbody_naive(srcs, targs);
+        double dt = get_elapsed_mcycles();
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        minNaive = std::min(minNaive, dt);
+    }
+    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
+    // Write sample results
+    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
 
 
     return 0;
