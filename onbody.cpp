@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <math.h>
 #include <vector>
 #include <algorithm>	// for sort and minmax
@@ -35,7 +36,10 @@ struct Parts {
 
 //
 // A tree, made of a structure of arrays
-// root node is 1, children are 2,3, their children 4,5 and 6,7
+//
+// 0 is empty, root node is 1, children are 2,3, their children 4,5 and 6,7
+// arrays always have 2^levels boxes allocated, even if some are not used
+// this way, node i children are 2*i and 2*i+1
 //
 struct Tree {
     // number of levels in the tree
@@ -55,6 +59,10 @@ struct Tree {
     std::vector<int> num;
 };
 
+static inline uint32_t log_2(const uint32_t x) {
+    if (x == 0) return 0;
+    return (31 - __builtin_clz (x));
+}
 
 //
 // The inner, scalar kernel
@@ -121,8 +129,10 @@ std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, s
     auto itend = x.begin() + iend;
 
     auto range = std::minmax_element(itbeg, itend);
-
     return std::pair<float,float>(x[range.first+istart-itbeg], x[range.second+istart-itbeg]);
+
+    // what's an initializer list?
+    //return std::minmax(itbeg, itend);
 }
 
 //
@@ -156,7 +166,13 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // write all this data to the tree node
+    //t.x[tnode] = 1.0;
+    //t.y[tnode] = 1.0;
+    //t.z[tnode] = 1.0;
     //t.s[tnode] = 1.0;
+    //t.m[tnode] = 1.0;
+    //t.ioffset[tnode] = begin;
+    //t.num[tnode] = end - begin;
 
     // now decide how to split this node
 
@@ -183,7 +199,10 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // recursively call this routine for this node's new children
-    //if () { }
+    //if () {
+        //(void) splitNode(srcs, 0,        srcs.n/2, stree, 2);
+        //(void) splitNode(srcs, srcs.n/2, srcs.n,   stree, 3);
+    //}
 }
 
 
@@ -216,8 +235,8 @@ int main(int argc, char *argv[]) {
         test_iterations = atoi(argv[argc - 2]);
     }
 
-    numSrcs = blockSize*(numSrcs/blockSize);
-    numTargs = blockSize*(numTargs/blockSize);
+    //numSrcs = blockSize*(numSrcs/blockSize);
+    //numTargs = blockSize*(numTargs/blockSize);
 
     // allocate space for sources and targets
     Parts srcs;
@@ -249,17 +268,28 @@ int main(int argc, char *argv[]) {
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
 
 
-    // make a tree
+    // allocate and initialize tree
     printf("Building the tree\n");
     Tree stree;
+    printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
+    uint32_t numLeaf = 1 + ((numSrcs-1)/blockSize);
+    printf("  %d nodes at leaf level\n", numLeaf);
+    stree.levels = 1 + log_2(2*numLeaf-1);
+    printf("  makes %d levels in tree\n", stree.levels);
+    stree.numnodes = 1 << stree.levels;
+    printf("  and %d total nodes in tree\n", stree.numnodes);
+    stree.x.resize(stree.numnodes);
+
     // split this node and recurse
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
+
+    // don't need the target tree for treecode, but will for fast code
 
 
     //
     // Run the O(N^2) implementation
     //
-    printf("\nRun the naive method\n");
+    printf("\nRun the naive O(N^2) method\n");
     double minSerial = 1e30;
     for (unsigned int i = 0; i < test_iterations; ++i) {
         reset_and_start_timer();
@@ -275,13 +305,13 @@ int main(int argc, char *argv[]) {
     //
     // Run a simple O(NlogN) treecode
     //
-    //printf("\nRun the treecode\n");
+    //printf("\nRun the treecode O(NlogN)\n");
     //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minSerial);
 
     //
     // Run the new O(N) equivalent particle method
     //
-    //printf("\nRun the fast method\n");
+    //printf("\nRun the fast O(N) method\n");
     //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minSerial);
 
 
