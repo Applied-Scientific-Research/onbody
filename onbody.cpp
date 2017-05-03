@@ -22,19 +22,19 @@ const int blockSize = 64;
 struct Parts {
     int n;
     // state
-    std::vector<float> x;
-    std::vector<float> y;
-    std::vector<float> z;
-    std::vector<float> r;
+    alignas(32) std::vector<float> x;
+    alignas(32) std::vector<float> y;
+    alignas(32) std::vector<float> z;
+    alignas(32) std::vector<float> r;
     // actuator
-    std::vector<float> m;
+    alignas(32) std::vector<float> m;
     // results
-    std::vector<float> u;
-    std::vector<float> v;
-    std::vector<float> w;
+    alignas(32) std::vector<float> u;
+    alignas(32) std::vector<float> v;
+    alignas(32) std::vector<float> w;
     // temporary
-    std::vector<size_t> itemp;
-    std::vector<float> ftemp;
+    alignas(32) std::vector<size_t> itemp;
+    alignas(32) std::vector<float> ftemp;
 };
 
 //
@@ -50,22 +50,22 @@ struct Tree {
     // number of nodes in the tree (always 2^l)
     int numnodes;
     // tree node centers (of mass?)
-    std::vector<float> x;
-    std::vector<float> y;
-    std::vector<float> z;
+    alignas(32) std::vector<float> x;
+    alignas(32) std::vector<float> y;
+    alignas(32) std::vector<float> z;
     // node size
-    std::vector<float> s;
+    alignas(32) std::vector<float> s;
     // node particle radius
-    std::vector<float> r;
+    alignas(32) std::vector<float> r;
     // node masses
-    std::vector<float> m;
+    alignas(32) std::vector<float> m;
 
     // real point offset and count
-    std::vector<int> ioffset;		// is this redundant?
-    std::vector<int> num;
+    alignas(32) std::vector<int> ioffset;		// is this redundant?
+    alignas(32) std::vector<int> num;
     // equivalent point offset and count
-    std::vector<int> epoffset;		// is this redundant?
-    std::vector<int> epnum;
+    alignas(32) std::vector<int> epoffset;		// is this redundant?
+    alignas(32) std::vector<int> epnum;
 };
 
 //
@@ -294,7 +294,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
 std::vector<size_t> sortIndexes(const std::vector<float> &v) {
 
   // initialize original index locations
-  std::vector<size_t> idx(v.size());
+  alignas(32) std::vector<size_t> idx(v.size());
   std::iota(idx.begin(), idx.end(), 0);
 
   // sort indexes based on comparing values in v
