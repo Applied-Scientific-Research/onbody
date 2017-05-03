@@ -33,7 +33,8 @@ struct Parts {
     std::vector<float> v;
     std::vector<float> w;
     // temporary
-    std::vector<float> t;
+    std::vector<size_t> itemp;
+    std::vector<float> ftemp;
 };
 
 //
@@ -171,6 +172,22 @@ std::vector<size_t> sortIndexes(const std::vector<float> &v) {
 }
 
 //
+// Sort but retain only sorted index! Uses C++11 lambdas
+// from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
+//
+void sortIndexesSection(const std::vector<float> &v,
+                        std::vector<size_t> &idx,
+                        const size_t istart, const size_t istop) {
+
+  // initialize original index locations
+  std::iota(idx.begin()+istart, idx.begin()+istop, istart);
+
+  // sort indexes based on comparing values in v
+  std::sort(idx.begin()+istart, idx.begin()+istop,
+       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+}
+
+//
 // Find min and max values along an axis
 //
 std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, size_t iend) {
@@ -234,43 +251,54 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     // no need to split or compute further
     if (t.num[tnode] <= blockSize) return;
 
-    // sort it along the big axis
+    // sort this portion of the array along the big axis
     printf("sort\n");
     reset_and_start_timer();
-    auto idx = sortIndexes(p.x);
-    for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    //std::vector<size_t> idx;
+    //idx = sortIndexes(p.x);
+    if (maxaxis == 0) {
+        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
+    } else if (maxaxis == 1) {
+        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
+    } else if (maxaxis == 2) {
+        (void) sortIndexesSection(p.z, p.itemp, pfirst, plast);
+        for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
+    }
+    //if (maxaxis == 0) idx = sortIndexes(p.x, pfirst, plast);
+    //if (maxaxis == 1) idx = sortIndexes(p.y, pfirst, plast);
+    //if (maxaxis == 2) idx = sortIndexes(p.z, pfirst, plast);
+    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
     printf("  sort time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // rearrange the elements
     printf("reorder\n");
     reset_and_start_timer();
     // copy this segment into the temp array
-    std::copy(p.x.begin()+pfirst, p.x.end()+plast, p.t.begin()+pfirst);
+    std::copy(p.x.begin()+pfirst, p.x.end()+plast, p.ftemp.begin()+pfirst);
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  temp %d %g\n", i, p.t[i]);
     // now write back to the original array using the indexes from the sort
-    for (int i=pfirst; i<plast; ++i) p.x[i] = p.t[idx[i]];
+    for (int i=pfirst; i<plast; ++i) p.x[i] = p.ftemp[p.itemp[i]];
     // redo for the other axes
-    std::copy(p.y.begin()+pfirst, p.y.end()+plast, p.t.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.y[i] = p.t[idx[i]];
-    std::copy(p.z.begin()+pfirst, p.z.end()+plast, p.t.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.z[i] = p.t[idx[i]];
-    std::copy(p.m.begin()+pfirst, p.m.end()+plast, p.t.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.m[i] = p.t[idx[i]];
-    std::copy(p.r.begin()+pfirst, p.r.end()+plast, p.t.begin()+pfirst);
-    for (int i=pfirst; i<plast; ++i) p.r[i] = p.t[idx[i]];
+    std::copy(p.y.begin()+pfirst, p.y.end()+plast, p.ftemp.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.y[i] = p.ftemp[p.itemp[i]];
+    std::copy(p.z.begin()+pfirst, p.z.end()+plast, p.ftemp.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.z[i] = p.ftemp[p.itemp[i]];
+    std::copy(p.m.begin()+pfirst, p.m.end()+plast, p.ftemp.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.m[i] = p.ftemp[p.itemp[i]];
+    std::copy(p.r.begin()+pfirst, p.r.end()+plast, p.ftemp.begin()+pfirst);
+    for (int i=pfirst; i<plast; ++i) p.r[i] = p.ftemp[p.itemp[i]];
     // clean this up with an inline function
     // reorder(p.x, p.t, idx, pfirst, plast);
     for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
-
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-
-    // recursively call this routine for this node's new children
 
     // determine where the split should be
     size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
     printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
 
-    // call on the two children
+    // recursively call this routine for this node's new children
     (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
     (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
 }
@@ -302,8 +330,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    //numSrcs = blockSize*(numSrcs/blockSize);
-    //numTargs = blockSize*(numTargs/blockSize);
+    printf("allocate and initialize\n");
+    reset_and_start_timer();
 
     // allocate space for sources and targets
     Parts srcs;
@@ -313,7 +341,8 @@ int main(int argc, char *argv[]) {
     srcs.z.resize(srcs.n);
     srcs.r.resize(srcs.n);
     srcs.m.resize(srcs.n);
-    srcs.t.resize(srcs.n);
+    srcs.itemp.resize(srcs.n);
+    srcs.ftemp.resize(srcs.n);
 
     Parts targs;
     targs.n = numTargs;
@@ -323,7 +352,8 @@ int main(int argc, char *argv[]) {
     targs.u.resize(targs.n);
     targs.v.resize(targs.n);
     targs.w.resize(targs.n);
-    targs.t.resize(targs.n);
+    targs.itemp.resize(targs.n);
+    targs.ftemp.resize(targs.n);
 
     // initialize particle data
     for (auto&& x : srcs.x) { x = (float)rand()/(float)RAND_MAX; }
@@ -335,6 +365,7 @@ int main(int argc, char *argv[]) {
     for (auto&& x : targs.x) { x = (float)rand()/(float)RAND_MAX; }
     for (auto&& y : targs.y) { y = (float)rand()/(float)RAND_MAX; }
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
+    printf("  init parts time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
 
     // allocate and initialize tree
