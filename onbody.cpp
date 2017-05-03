@@ -124,6 +124,16 @@ void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const flo
                      const float tx, const float ty, const float tz,
                      float& tax, float& tay, float& taz) {
 
+    // if box is a leaf node, just compute the influence and return
+    if (st.num[tnode] <= blockSize) {
+        // box is too close and is a leaf node, look at individual particles
+        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
+            nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
+                         tx, ty, tz, tax, tay, taz);
+        }
+        return;
+    }
+
     // distance from box center of mass to target point
     const float dx = st.x[tnode] - tx;
     const float dy = st.y[tnode] - ty;
@@ -135,12 +145,6 @@ void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const flo
         // box is far enough removed, approximate its influence
         nbody_kernel(st.x[tnode], st.y[tnode], st.z[tnode], 0.0f, st.m[tnode],
                      tx, ty, tz, tax, tay, taz);
-    } else if (st.num[tnode] <= blockSize) {
-        // box is too close and is a leaf node, look at individual particles
-        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
-            nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
-                         tx, ty, tz, tax, tay, taz);
-        }
     } else {
         // box is too close, open up its children
         (void) treecode1_block(sp, st, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
@@ -149,7 +153,7 @@ void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const flo
 }
 
 //
-// Caller for the O(NlogN) kernel
+// Caller for the simple O(NlogN) kernel
 //
 void nbody_treecode1(const Parts& srcs, const Tree& stree, Parts& targs, const float theta) {
     #pragma omp parallel for
@@ -158,6 +162,59 @@ void nbody_treecode1(const Parts& srcs, const Tree& stree, Parts& targs, const f
         targs.v[i] = 0.0f;
         targs.w[i] = 0.0f;
         treecode1_block(srcs, stree, 1, theta,
+                        targs.x[i], targs.y[i], targs.z[i],
+                        targs.u[i], targs.v[i], targs.w[i]);
+    }
+}
+
+//
+// Recursive kernel for the treecode using equivalent particles
+//
+void treecode2_block(const Parts& sp, const Parts& ep,
+                     const Tree& st, const int tnode, const float theta,
+                     const float tx, const float ty, const float tz,
+                     float& tax, float& tay, float& taz) {
+
+    // if box is a leaf node, just compute the influence and return
+    if (st.num[tnode] <= blockSize) {
+        // box is too close and is a leaf node, look at individual particles
+        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
+            nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
+                         tx, ty, tz, tax, tay, taz);
+        }
+        return;
+    }
+
+    // distance from box center of mass to target point
+    const float dx = st.x[tnode] - tx;
+    const float dy = st.y[tnode] - ty;
+    const float dz = st.z[tnode] - tz;
+    const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+
+    // is source tree node far enough away?
+    if (dist / st.s[tnode] > theta) {
+        // this version uses equivalent points instead!
+        for (int j = st.epoffset[tnode]; j < st.epoffset[tnode] + st.epnum[tnode]; j++) {
+            nbody_kernel(ep.x[j], ep.y[j], ep.z[j], ep.r[j], ep.m[j],
+                         tx, ty, tz, tax, tay, taz);
+        }
+    } else {
+        // box is too close, open up its children
+        (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
+        (void) treecode2_block(sp, ep, st, 2*tnode+1, theta, tx, ty, tz, tax, tay, taz);
+    }
+}
+
+//
+// Caller for the simple O(NlogN) kernel
+//
+void nbody_treecode2(const Parts& srcs, const Parts& eqpts, const Tree& stree, Parts& targs, const float theta) {
+    #pragma omp parallel for
+    for (int i = 0; i < targs.n; i++) {
+        targs.u[i] = 0.0f;
+        targs.v[i] = 0.0f;
+        targs.w[i] = 0.0f;
+        treecode2_block(srcs, eqpts, stree, 1, theta,
                         targs.x[i], targs.y[i], targs.z[i],
                         targs.u[i], targs.v[i], targs.w[i]);
     }
@@ -470,7 +527,7 @@ void calcEquivalents(Parts& p, Parts& ep, Tree& t, int tnode) {
         }
     }
 
-    //printf("  node %d finally has %d equivalent particles\n", tnode, t.epnum[tnode]);
+    //printf("  node %d finally has %d equivalent particles, offset %d\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
 }
 
 //
@@ -486,7 +543,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {10, 5, 2};
+    static std::vector<int> test_iterations = {10, 4, 1};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -608,12 +665,27 @@ int main(int argc, char *argv[]) {
     //    }
     //}
 
-    exit(0);
-
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     Tree ttree;
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
+
+    //
+    // Run the O(N^2) implementation
+    //
+    printf("\nRun the naive O(N^2) method\n");
+    double minNaive = 1e30;
+    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
+        reset_and_start_timer();
+        nbody_naive(srcs, targs);
+        double dt = get_elapsed_mcycles();
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        minNaive = std::min(minNaive, dt);
+    }
+    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
+    // write sample results
+    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    std::vector<float> naiveu = targs.u;
 
     //
     // Run the new O(N) equivalent particle method
@@ -633,7 +705,7 @@ int main(int argc, char *argv[]) {
     // save the results for comparison
 
     //
-    // Run a simple O(NlogN) treecode
+    // Run a simple O(NlogN) treecode - boxes approximate as particles
     //
     printf("\nRun the treecode O(NlogN)\n");
     double minTreecode = 1e30;
@@ -650,29 +722,39 @@ int main(int argc, char *argv[]) {
     // save the results for comparison
     std::vector<float> treecodeu = targs.u;
 
-    //
-    // Run the O(N^2) implementation
-    //
-    printf("\nRun the naive O(N^2) method\n");
-    double minNaive = 1e30;
-    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
-        reset_and_start_timer();
-        nbody_naive(srcs, targs);
-        double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
-        minNaive = std::min(minNaive, dt);
-    }
-    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
-    // write sample results
-    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-
     // compare accuracy
     float errsum = 0.0;
     for (auto i=0; i< targs.u.size(); ++i) {
-        float thiserr = treecodeu[i]-targs.u[i];
+        float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
     }
-    printf("\nRMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
+    printf("RMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
+
+    //
+    // Run a better O(NlogN) treecode - boxes use equivalent particles
+    //
+    printf("\nRun the treecode O(NlogN) with equivalent particles\n");
+    double minTreecode2 = 1e30;
+    for (unsigned int i = 0; i < test_iterations[1]; ++i) {
+        reset_and_start_timer();
+        nbody_treecode2(srcs, eqpts, stree, targs, 1.0f);
+        double dt = get_elapsed_mcycles();
+        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        minTreecode2 = std::min(minTreecode2, dt);
+    }
+    printf("[onbody treecode2]:\t\t[%.3f] million cycles\n", minTreecode2);
+    // write sample results
+    for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    // save the results for comparison
+    std::vector<float> treecodeu2 = targs.u;
+
+    // compare accuracy
+    errsum = 0.0;
+    for (auto i=0; i< targs.u.size(); ++i) {
+        float thiserr = treecodeu2[i]-naiveu[i];
+        errsum += thiserr*thiserr;
+    }
+    printf("RMS error in treecode is %g\n", sqrtf(errsum/targs.u.size()));
 
     return 0;
 }
