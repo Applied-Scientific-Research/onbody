@@ -97,6 +97,7 @@ void nbody(Parts& srcs, Parts& targs) {
 
 //
 // Sort but retain only sorted index! Uses C++11 lambdas
+// from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
 std::vector<size_t> sortIndexes(const std::vector<float> &v) {
 
@@ -159,7 +160,7 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
 
     // now decide how to split this node
 
-    // sort it
+    // sort it along the big axis
     printf("sort\n");
     reset_and_start_timer();
     auto idx = sortIndexes(p.x);
@@ -170,8 +171,14 @@ void splitNode(Parts& p, size_t begin, size_t end, Tree& t, int tnode) {
     printf("reorder\n");
     reset_and_start_timer();
     // make a temporary vector
-    std::vector<float> temp(end-begin);
-    // copy 
+    std::vector<float> temp;//(end-begin);
+    temp.reserve(end-begin);
+    // copy this segment into the temp array
+    std::copy(p.x.begin(), p.x.end(), std::back_inserter(temp));
+    for (int i=0; i<10 and i<temp.size(); ++i) printf("  temp %d %g\n", i, temp[i]);
+    // now write back to the original array using the indexes from the sort
+    for (int i=0; i<temp.size(); ++i) p.x[i] = temp[idx[i]];
+    for (int i=begin; i<begin+10 and i<end; ++i) printf("  node %d %g\n", i, p.x[i]);
 
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
