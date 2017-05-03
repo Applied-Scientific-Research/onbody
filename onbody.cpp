@@ -233,6 +233,9 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                     const int ittn, const std::vector<int> istv,
                     const float theta) {
 
+    // quit out if we've gone too far
+    if (ttree.num[ittn] < 1) return;
+
     // initialize a new vector of source boxes to pass to this target box's children
     std::vector<int> cstv;
 
@@ -240,7 +243,25 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
     printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
     for (auto&& sn : istv) {
 
+        // skip this loop iteration
+        if (stree.num[sn] < 1) continue;
+
         // if source box is a leaf node, just compute the influence and return?
+        // this assumes target box is also a leaf node!
+        if (stree.num[sn] <= blockSize) {
+          if (ttree.num[ittn] <= blockSize) {
+            // box is too close and is a leaf node, compute all-on-all direct influence
+            for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
+            for (int j = stree.ioffset[sn]; j < stree.ioffset[sn] + stree.num[sn]; j++) {
+                nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
+                             targs.x[j], targs.y[j], targs.z[j],
+                             targs.u[j], targs.v[j], targs.w[j]);
+            }
+            }
+          } else {
+            // target box is not a leaf node, compute influence on 
+          }
+        }
 
         // distance from box center of mass to target point
         const float dx = stree.x[sn] - ttree.x[ittn];
@@ -255,8 +276,14 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
             // it is far enough - we can approximate
         } else {
             // it is not far enough - add source box children to list
+            cstv.push_back(2*sn);
+            cstv.push_back(2*sn+1);
         }
     }
+
+    // recurse onto the target box's children
+    (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+    (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
 }
 
 //
@@ -637,7 +664,7 @@ int main(int argc, char *argv[]) {
     for (auto&& z : targs.z) { z = (float)rand()/(float)RAND_MAX; }
     for (auto&& r : targs.r) { r = 1.0f / cbrt((float)srcs.n); }
     for (auto&& m : targs.m) { m = 1.0f; }
-    printf("  init parts time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
 
     // allocate and initialize tree
@@ -664,7 +691,7 @@ int main(int argc, char *argv[]) {
     // split this node and recurse
     reset_and_start_timer();
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
-    printf("  build tree time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
@@ -718,7 +745,7 @@ int main(int argc, char *argv[]) {
     // split this node and recurse
     reset_and_start_timer();
     (void) splitNode(targs, 0, targs.n, ttree, 1);
-    printf("  build tree time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
@@ -758,10 +785,10 @@ int main(int argc, char *argv[]) {
         reset_and_start_timer();
         nbody_naive(srcs, targs, ntskip);
         double dt = get_elapsed_mcycles() * (float)ntskip;
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minNaive = std::min(minNaive, dt);
     }
-    printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
+    printf("[onbody naive]:\t\t\t[%.3f] million cycles\n", minNaive);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     std::vector<float> naiveu = targs.u;
@@ -779,10 +806,10 @@ int main(int argc, char *argv[]) {
         reset_and_start_timer();
         nbody_treecode1(srcs, stree, targs, 3.0f);
         double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode = std::min(minTreecode, dt);
     }
-    printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
+    printf("[onbody treecode]:\t\t\t[%.3f] million cycles\n", minTreecode);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
@@ -810,7 +837,7 @@ int main(int argc, char *argv[]) {
         reset_and_start_timer();
         nbody_treecode2(srcs, eqsrcs, stree, targs, 0.9f);
         double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
     }
     printf("[onbody treecode2]:\t\t[%.3f] million cycles\n", minTreecode2);
@@ -843,10 +870,10 @@ int main(int argc, char *argv[]) {
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
                        1, source_boxes, 1.0f);
         double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
     }
-    printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
+    printf("[onbody fast]:\t\t\t[%.3f] million cycles\n", minFast);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
