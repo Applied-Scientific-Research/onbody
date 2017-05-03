@@ -209,12 +209,11 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     minmax = minMaxValue(p.z, pfirst, plast);
     boxsizes[2] = minmax.second - minmax.first;
     printf("       z min/max %g %g\n", minmax.first, minmax.second);
-    // and find longest box edge
-    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
-    printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
     printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find total mass and center of mass
+    printf("find mass/cm\n");
+    reset_and_start_timer();
     t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
     t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
     t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
@@ -222,12 +221,18 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     printf("  total mass %g and cm %g %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode], t.z[tnode]);
 
     // write all this data to the tree node
-    t.s[tnode] = boxsizes[maxaxis];
     t.ioffset[tnode] = pfirst;
     t.num[tnode] = plast - pfirst;
     printf("  tree node has offset %d and num %d\n", t.ioffset[tnode], t.num[tnode]);
 
-    // now decide how to split this node
+    // find longest box edge
+    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+    printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
+    t.s[tnode] = boxsizes[maxaxis];
+    printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+
+    // no need to split or compute further
+    if (t.num[tnode] <= blockSize) return;
 
     // sort it along the big axis
     printf("sort\n");
@@ -260,16 +265,14 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // recursively call this routine for this node's new children
-    if (t.num[tnode] > blockSize) {
 
-        // determine where the split should be
-        size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
-        printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
+    // determine where the split should be
+    size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
+    printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
 
-        // call on the two children
-        //(void) splitNode(srcs, pfirst,  pmiddle, stree, 2*tnode);
-        //(void) splitNode(srcs, pmiddle, plast,   stree, 2*tnode+1);
-    }
+    // call on the two children
+    (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
+    (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
 }
 
 
@@ -286,7 +289,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static unsigned int test_iterations = 4;
+    static std::vector<int> test_iterations = {10, 10, 4};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -297,9 +300,6 @@ int main(int argc, char *argv[]) {
             numSrcs = num;
             numTargs = num;
         }
-    }
-    if ((argc == 3) || (argc == 4)) {
-        test_iterations = atoi(argv[argc - 2]);
     }
 
     //numSrcs = blockSize*(numSrcs/blockSize);
@@ -358,8 +358,9 @@ int main(int argc, char *argv[]) {
     // split this node and recurse
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
 
-    // don't need the target tree for treecode, but will for fast code
+    // find equivalent particles
 
+    // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     Tree ttree;
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
@@ -368,20 +369,42 @@ int main(int argc, char *argv[]) {
     // Run the new O(N) equivalent particle method
     //
     //printf("\nRun the fast O(N) method\n");
+    //double minFast = 1e30;
+    //for (unsigned int i = 0; i < test_iterations[0]; ++i) {
+    //    reset_and_start_timer();
+    //    nbody_fastsumm(srcs, targs);
+    //    double dt = get_elapsed_mcycles();
+    //    printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+    //    minFast = std::min(minFast, dt);
+    //}
     //printf("[onbody fast]:\t\t[%.3f] million cycles\n", minFast);
+    // write sample results
+    //for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    // save the results for comparison
 
     //
     // Run a simple O(NlogN) treecode
     //
     //printf("\nRun the treecode O(NlogN)\n");
+    //double minTreecode = 1e30;
+    //for (unsigned int i = 0; i < test_iterations[1]; ++i) {
+    //    reset_and_start_timer();
+    //    nbody_treecode(srcs, targs);
+    //    double dt = get_elapsed_mcycles();
+    //    printf("  this run time:\t\t\t[%.3f] million cycles\n", dt);
+    //    minTreecode = std::min(minTreecode, dt);
+    //}
     //printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
+    // write sample results
+    //for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    // save the results for comparison
 
     //
     // Run the O(N^2) implementation
     //
     printf("\nRun the naive O(N^2) method\n");
     double minNaive = 1e30;
-    for (unsigned int i = 0; i < test_iterations; ++i) {
+    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
         nbody_naive(srcs, targs);
         double dt = get_elapsed_mcycles();
@@ -389,9 +412,8 @@ int main(int argc, char *argv[]) {
         minNaive = std::min(minNaive, dt);
     }
     printf("[onbody naive]:\t\t[%.3f] million cycles\n", minNaive);
-    // Write sample results
+    // write sample results
     for (int i = 0; i < 4; i++) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-
 
     return 0;
 }
