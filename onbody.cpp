@@ -269,7 +269,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
     // quit out if we've gone too far
     if (ttree.num[ittn] < 1) return;
 
-    printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
+    //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
     const bool targetIsLeaf = ttree.num[ittn] <= blockSize;
 
     // prepare the target arrays for accumulations
@@ -282,9 +282,23 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our real points
-            printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
-                   ttree.epoffset[ittn/2], ttree.epoffset[ittn/2] + ttree.epnum[ittn/2],
-                   ttree.ioffset[ittn],   ttree.ioffset[ittn]   + ttree.num[ittn]);
+            const int destStart = ttree.ioffset[ittn];
+            const int destNum = ttree.num[ittn];
+            const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
+            const int origNum = (destNum+1)/2;
+            //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
+            //       origStart, origStart+origNum, destStart, destStart+destNum);
+            for (int i=0; i<destNum; ++i) {
+                int idest = destStart + i;
+                int iorig = origStart + i/2;
+                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
+                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
+                //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
+                // as a first step, simply copy the result to the children
+                targs.u[idest] = eqtargs.u[iorig];
+                targs.v[idest] = eqtargs.v[iorig];
+                targs.w[idest] = eqtargs.w[iorig];
+            }
         }
 
     } else {
@@ -296,12 +310,28 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our equiv points
-            printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
-                   ttree.epoffset[ittn]/2, (ttree.epoffset[ittn] + ttree.epnum[ittn])/2,
-                   ttree.epoffset[ittn],   ttree.epoffset[ittn]   + ttree.epnum[ittn]);
-            for (int i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
-                int ipe = ttree.epoffset[ittn]/2 + i;
-                printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
+            const int destStart = ttree.epoffset[ittn];
+            const int destNum = ttree.epnum[ittn];
+            const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
+            const int origNum = (destNum+1)/2;
+            //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
+            //       origStart, origStart+origNum, destStart, destStart+destNum);
+
+            //for (int i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
+            //    int ipe = ttree.epoffset[ittn]/2 + i;
+            //    printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
+            //}
+
+            for (int i=0; i<destNum; ++i) {
+                int idest = destStart + i;
+                int iorig = origStart + i/2;
+                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
+                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
+                //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
+                // as a first step, simply copy the result to the children
+                eqtargs.u[idest] = eqtargs.u[iorig];
+                eqtargs.v[idest] = eqtargs.v[iorig];
+                eqtargs.w[idest] = eqtargs.w[iorig];
             }
         }
     }
@@ -319,12 +349,12 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         if (stree.num[sn] < 1) continue;
 
         const bool sourceIsLeaf = stree.num[sn] <= blockSize;
-        printf("  source %d affects target %d\n",sn,ittn);
+        //printf("  source %d affects target %d\n",sn,ittn);
 
         // if source box is a leaf node, just compute the influence and return?
         // this assumes target box is also a leaf node!
         if (sourceIsLeaf and targetIsLeaf) {
-            printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
+            //printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
 
             // compute all-on-all direct influence
             for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
@@ -343,12 +373,12 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         const float dz = stree.z[sn] - ttree.z[ittn];
         const float halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
         const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
-        printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
+        //printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
 
         // split on what to do with this pair
         if ((dist-halfsize) / halfsize > theta) {
             // it is far enough - we can approximate
-            printf("    well-separated\n");
+            //printf("    well-separated\n");
 
             if (sourceIsLeaf) {
                 // compute real source particles on equivalent target points
@@ -419,7 +449,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
     if (not targetIsLeaf) {
         // prolongation of equivalent particle velocities to children's equivalent particles
 
-        {
+        if (false) {
             std::queue<int> tq = cstv;
             std::cout << "    passing source boxes";
             while (!tq.empty()) {
@@ -976,7 +1006,7 @@ int main(int argc, char *argv[]) {
         std::queue<int> source_boxes;
         source_boxes.push(1);
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 2.0f);
+                       1, source_boxes, 1.5f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
