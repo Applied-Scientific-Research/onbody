@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <math.h>
 #include <vector>
+#include <queue>
+#include <iostream>
 #include <algorithm>	// for sort and minmax
 #include <numeric>		// for iota
 #include "timing.h"
@@ -262,37 +264,77 @@ void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, 
 //
 void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                     Parts& targs, Parts& eqtargs, const Tree& ttree,
-                    const int ittn, const std::vector<int> istv,
-                    const float theta) {
+                    const int ittn, std::queue<int> istv, const float theta) {
 
     // quit out if we've gone too far
     if (ttree.num[ittn] < 1) return;
 
-    // initialize a new vector of source boxes to pass to this target box's children
-    std::vector<int> cstv;
-
-    // for target box ittn, are any source boxes at the same level well-separated?
     printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
-    for (auto&& sn : istv) {
+    const bool targetIsLeaf = ttree.num[ittn] <= blockSize;
+
+    // prepare the target arrays for accumulations
+    if (targetIsLeaf) {
+        // zero the velocities
+        std::fill_n(&(targs.u[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        std::fill_n(&(targs.v[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        std::fill_n(&(targs.w[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+
+        if (ittn > 1) {
+            // prolongation operation: take the parent's equiv points and move any
+            // velocity from those to our real points
+            printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
+                   ttree.epoffset[ittn/2], ttree.epoffset[ittn/2] + ttree.epnum[ittn/2],
+                   ttree.ioffset[ittn],   ttree.ioffset[ittn]   + ttree.num[ittn]);
+        }
+
+    } else {
+        // zero the equivalent particle velocities
+        std::fill_n(&(eqtargs.u[ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        std::fill_n(&(eqtargs.v[ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        std::fill_n(&(eqtargs.w[ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+
+        if (ittn > 1) {
+            // prolongation operation: take the parent's equiv points and move any
+            // velocity from those to our equiv points
+            printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
+                   ttree.epoffset[ittn]/2, (ttree.epoffset[ittn] + ttree.epnum[ittn])/2,
+                   ttree.epoffset[ittn],   ttree.epoffset[ittn]   + ttree.epnum[ittn]);
+            for (int i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
+                int ipe = ttree.epoffset[ittn]/2 + i;
+                printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
+            }
+        }
+    }
+
+    // initialize a new vector of source boxes to pass to this target box's children
+    std::queue<int> cstv;
+
+    // for target box ittn, check all unaccounted-for source boxes
+    //for (auto&& sn : istv) {
+    while (not istv.empty()) {
+        int sn = istv.front();
+        istv.pop();
 
         // skip this loop iteration
         if (stree.num[sn] < 1) continue;
 
+        const bool sourceIsLeaf = stree.num[sn] <= blockSize;
+        printf("  source %d affects target %d\n",sn,ittn);
+
         // if source box is a leaf node, just compute the influence and return?
         // this assumes target box is also a leaf node!
-        if (stree.num[sn] <= blockSize) {
-          if (ttree.num[ittn] <= blockSize) {
-            // box is too close and is a leaf node, compute all-on-all direct influence
+        if (sourceIsLeaf and targetIsLeaf) {
+            printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
+
+            // compute all-on-all direct influence
             for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-            for (int j = stree.ioffset[sn]; j < stree.ioffset[sn] + stree.num[sn]; j++) {
-                nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
-                             targs.x[j], targs.y[j], targs.z[j],
-                             targs.u[j], targs.v[j], targs.w[j]);
+            for (int j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
+                nbody_kernel(srcs.x[j],  srcs.y[j],  srcs.z[j], srcs.r[j], srcs.m[j],
+                             targs.x[i], targs.y[i], targs.z[i],
+                             targs.u[i], targs.v[i], targs.w[i]);
             }
             }
-          } else {
-            // target box is not a leaf node, compute influence on 
-          }
+            continue;
         }
 
         // distance from box center of mass to target point
@@ -303,19 +345,95 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
         printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
 
-        // is source tree node far enough away?
+        // split on what to do with this pair
         if ((dist-halfsize) / halfsize > theta) {
             // it is far enough - we can approximate
+            printf("    well-separated\n");
+
+            if (sourceIsLeaf) {
+                // compute real source particles on equivalent target points
+                for (int i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
+                for (int j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
+                    nbody_kernel(srcs.x[j],    srcs.y[j],    srcs.z[j], srcs.r[j], srcs.m[j],
+                                 eqtargs.x[i], eqtargs.y[i], eqtargs.z[i],
+                                 eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
+                }
+                }
+
+            } else if (targetIsLeaf) {
+                // compute equivalent source particles on real target points
+                for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
+                for (int j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
+                    nbody_kernel(eqsrcs.x[j], eqsrcs.y[j], eqsrcs.z[j], eqsrcs.r[j], eqsrcs.m[j],
+                                 targs.x[i],  targs.y[i],  targs.z[i],
+                                 targs.u[i],  targs.v[i],  targs.w[i]);
+                }
+                }
+
+            } else {
+                // compute equivalent source particles on equivalent target points
+                for (int i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
+                for (int j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
+                    nbody_kernel(eqsrcs.x[j],  eqsrcs.y[j],  eqsrcs.z[j], eqsrcs.r[j], eqsrcs.m[j],
+                                 eqtargs.x[i], eqtargs.y[i], eqtargs.z[i],
+                                 eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
+                }
+                }
+            }
+
+        } else if (ttree.s[ittn] > stree.s[sn]) {
+            // target box is larger than source box; try to refine targets first
+            //printf("    not well-separated, target is larger\n");
+
+            if (targetIsLeaf) {
+                // this means source is NOT leaf
+                // put children of source box onto the end of the current list
+                istv.push(2*sn);
+                istv.push(2*sn+1);
+                //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
+            } else {
+                // put this source box on the new list for target's children
+                cstv.push(sn);
+                //printf("    pushing %d to the end of the new list\n", sn);
+            }
+
         } else {
-            // it is not far enough - add source box children to list
-            cstv.push_back(2*sn);
-            cstv.push_back(2*sn+1);
+            // source box is larger than target box; try to refine sources first
+            //printf("    not well-separated, source is larger\n");
+
+            if (sourceIsLeaf) {
+                // this means target is NOT leaf
+                // put this source box on the new list for target's children
+                cstv.push(sn);
+                //printf("    pushing %d to the end of the new list\n", sn);
+            } else {
+                // put children of source box onto the end of the current list
+                istv.push(2*sn);
+                istv.push(2*sn+1);
+                //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
+            }
         }
+        //printf("    istv now has %lu entries\n",istv.size());
     }
 
-    // recurse onto the target box's children
-    (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
-    (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+    if (not targetIsLeaf) {
+        // prolongation of equivalent particle velocities to children's equivalent particles
+
+        {
+            std::queue<int> tq = cstv;
+            std::cout << "    passing source boxes";
+            while (!tq.empty()) {
+                std::cout << " " << tq.front();
+                tq.pop();
+            }
+            std::cout << " to target boxes " << 2*ittn << " and " << 2*ittn+1;
+            std::cout << std::endl;
+        }
+
+        // recurse onto the target box's children
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+    }
 }
 
 //
@@ -641,7 +759,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 2, 2, 0};
+    static std::vector<int> test_iterations = {1, 2, 2, 1};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -855,9 +973,10 @@ int main(int argc, char *argv[]) {
     double minFast = 1e30;
     for (unsigned int i = 0; i < test_iterations[3]; ++i) {
         reset_and_start_timer();
-        std::vector<int> source_boxes = {1};
+        std::queue<int> source_boxes;
+        source_boxes.push(1);
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 1.0f);
+                       1, source_boxes, 2.0f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
@@ -876,7 +995,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt++;
     }
-    printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in fastsumm is %g\n", sqrtf(errsum/errcnt));
     }
 
     return 0;
