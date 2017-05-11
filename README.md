@@ -97,6 +97,18 @@ N       | naive   |   tree1 |    err1 | tree2   | err2    | scaling | speedup
 
 Performance asymptotes at 1.45 GFlop/s for direct summation, indicitave of non-SSE, single-threaded operation.
 
+#### Scaling of O(N) solver
+
+The O(N) solver logic is done, though the prolongation operation is inaccurate and the 
+overall scheme seems slow. But it does seem to scale properly. Here are some performance figures.
+
+N       | naive    | scale n  | tree2    | scale2   | error2   | fast     | scale    | error
+--------|----------|----------|----------|----------|----------|----------|----------|---------
+4096    | 6.500e+2 |          | 1.010e+2 |          | 1.497e-3 | 6.255e+2 |          | 1.104e-3
+32768   | 6.925e+4 | 106.5x   | 1.554e+3 | 15.39x   | 1.200e-3 | 2.035e+4 | 32.53x   | 1.475e-2
+262144  | 2.803e+6 | 40.48x   | 1.866e+4 | 12.01x   | 7.856e-4 | 1.704e+5 | 8.373x   | 1.780e-2
+2097152 | 1.753e+8 | 62.54x   | 2.033e+5 | 10.90x   | 9.175e-4 | 1.586e+6 | 9.307x   | 1.791e-2
+
 
 ## To do
 
@@ -106,7 +118,8 @@ Performance asymptotes at 1.45 GFlop/s for direct summation, indicitave of non-S
 * Write recursive equivalent-particle-finding routine - DONE
 * Run with equivalent particles and compare performance and error - DONE
 * Begin building target trees - DONE
-* Work on O(N) method
+* Work on O(N) method - DONE
+* Increase accuracy of the prolongation operator
 * Write O(N^2) method in double-precision to allow more fair error comparisons
   but only run it on the first 100 or 1000 target particles
 * Get clang or g++ to vectorize the innermost loops
