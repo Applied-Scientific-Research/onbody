@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <math.h>
 #include <vector>
-#include <queue>
 #include <iostream>
 #include <algorithm>	// for sort and minmax
 #include <numeric>		// for iota
@@ -264,7 +263,7 @@ void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, 
 //
 void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                     Parts& targs, Parts& eqtargs, const Tree& ttree,
-                    const int ittn, std::queue<int> istv, const float theta) {
+                    const int ittn, std::vector<int> istv, const float theta) {
 
     // quit out if we've gone too far
     if (ttree.num[ittn] < 1) return;
@@ -337,13 +336,12 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
     }
 
     // initialize a new vector of source boxes to pass to this target box's children
-    std::queue<int> cstv;
+    std::vector<int> cstv;
 
     // for target box ittn, check all unaccounted-for source boxes
-    //for (auto&& sn : istv) {
-    while (not istv.empty()) {
-        int sn = istv.front();
-        istv.pop();
+    int num_istv = istv.size();
+    for (int i=0; i<num_istv; i++) {
+        const int sn = istv[i];
 
         // skip this loop iteration
         if (stree.num[sn] < 1) continue;
@@ -418,12 +416,13 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
             if (targetIsLeaf) {
                 // this means source is NOT leaf
                 // put children of source box onto the end of the current list
-                istv.push(2*sn);
-                istv.push(2*sn+1);
+                istv.push_back(2*sn);
+                istv.push_back(2*sn+1);
+                num_istv += 2;
                 //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
             } else {
                 // put this source box on the new list for target's children
-                cstv.push(sn);
+                cstv.push_back(sn);
                 //printf("    pushing %d to the end of the new list\n", sn);
             }
 
@@ -434,12 +433,13 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
             if (sourceIsLeaf) {
                 // this means target is NOT leaf
                 // put this source box on the new list for target's children
-                cstv.push(sn);
+                cstv.push_back(sn);
                 //printf("    pushing %d to the end of the new list\n", sn);
             } else {
                 // put children of source box onto the end of the current list
-                istv.push(2*sn);
-                istv.push(2*sn+1);
+                istv.push_back(2*sn);
+                istv.push_back(2*sn+1);
+                num_istv += 2;
                 //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
             }
         }
@@ -450,11 +450,9 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         if (false) {
-            std::queue<int> tq = cstv;
             std::cout << "    passing source boxes";
-            while (!tq.empty()) {
-                std::cout << " " << tq.front();
-                tq.pop();
+            for (auto&& sn : cstv) {
+                std::cout << " " << sn;
             }
             std::cout << " to target boxes " << 2*ittn << " and " << 2*ittn+1;
             std::cout << std::endl;
@@ -1003,8 +1001,7 @@ int main(int argc, char *argv[]) {
     double minFast = 1e30;
     for (unsigned int i = 0; i < test_iterations[3]; ++i) {
         reset_and_start_timer();
-        std::queue<int> source_boxes;
-        source_boxes.push(1);
+        std::vector<int> source_boxes = {1};
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
                        1, source_boxes, 1.5f);
         double dt = get_elapsed_mcycles();
