@@ -131,6 +131,8 @@ N       | leafs | ll per l| bl per l| b per b
 * Begin building target trees - DONE
 * Work on O(N) method - DONE
 * Increase accuracy of the prolongation operator
+* Tweak box-opening criterion and see if it improves accuracy per time
+* Use smarter or faster data structures in the O(N) list-building system
 * Write O(N^2) method in double-precision to allow more fair error comparisons
   but only run it on the first 100 or 1000 target particles
 * Get clang or g++ to vectorize the innermost loops
