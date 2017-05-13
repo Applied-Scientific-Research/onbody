@@ -109,6 +109,17 @@ N       | naive    | scale n  | tree2    | scale2   | error2   | fast     | scal
 262144  | 2.803e+6 | 40.48x   | 1.866e+4 | 12.01x   | 7.856e-4 | 1.704e+5 | 8.373x   | 1.780e-2
 2097152 | 1.753e+8 | 62.54x   | 2.033e+5 | 10.90x   | 9.175e-4 | 1.586e+6 | 9.307x   | 1.791e-2
 
+#### Behavior of O(N) solver
+
+Setting box opening criterion to 1.0f and counting block-on-block operations, we have the following numbers. Leafs is the number of leaves in the tree (block size is 64). "ll per l" is the number of leaf-leaf interactions per leaf node. "bl per l" is the number of box-leaf interactions per leaf. And "b per b" is the number of source box or leaf interactions per non-leaf target box. One "interaction" here is 64 sources affecting 64 targets, whether equivalent or real.
+
+N       | leafs | ll per l| bl per l| b per b
+--------|-------|---------|---------|---------
+4096    | 64    | 40.75   | 6.14062 | 4.80952
+32768   | 512   | 67.5508 | 8.6543  | 18.4470
+262144  | 4096  | 84.9561 | 14.5999 | 26.9609
+2097152 | 32768 | 93.9102 | 16.6942 | 33.7703
+
 
 ## To do
 

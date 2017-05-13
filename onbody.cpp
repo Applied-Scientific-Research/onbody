@@ -265,6 +265,25 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                     Parts& targs, Parts& eqtargs, const Tree& ttree,
                     const int ittn, std::vector<int> istv, const float theta) {
 
+    static int sltl = 0;
+    static int sbtl = 0;
+    static int sltb = 0;
+    static int sbtb = 0;
+    static int tlc = 0;
+    static int lpc = 0;
+    static int bpc = 0;
+
+    // start counters
+    if (ittn == 1) {
+        sltl = 0;
+        sbtl = 0;
+        sltb = 0;
+        sbtb = 0;
+        tlc = 0;
+        lpc = 0;
+        bpc = 0;
+    }
+
     // quit out if we've gone too far
     if (ttree.num[ittn] < 1) return;
 
@@ -273,6 +292,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
 
     // prepare the target arrays for accumulations
     if (targetIsLeaf) {
+        tlc++;
         // zero the velocities
         std::fill_n(&(targs.u[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
         std::fill_n(&(targs.v[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
@@ -298,6 +318,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 targs.v[idest] = eqtargs.v[iorig];
                 targs.w[idest] = eqtargs.w[iorig];
             }
+            lpc++;
         }
 
     } else {
@@ -332,6 +353,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 eqtargs.v[idest] = eqtargs.v[iorig];
                 eqtargs.w[idest] = eqtargs.w[iorig];
             }
+            bpc++;
         }
     }
 
@@ -362,6 +384,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                              targs.u[i], targs.v[i], targs.w[i]);
             }
             }
+            sltl++;
             continue;
         }
 
@@ -387,6 +410,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
                 }
                 }
+                sltb++;
 
             } else if (targetIsLeaf) {
                 // compute equivalent source particles on real target points
@@ -397,6 +421,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                                  targs.u[i],  targs.v[i],  targs.w[i]);
                 }
                 }
+                sbtl++;
 
             } else {
                 // compute equivalent source particles on equivalent target points
@@ -407,6 +432,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
                 }
                 }
+                sbtb++;
             }
 
         } else if (ttree.s[ittn] > stree.s[sn]) {
@@ -462,6 +488,15 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
     }
+
+    // report counter results
+    if (ittn == 1) {
+        printf("%d target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+               tlc, sltl/(float)tlc, sbtl/(float)tlc);
+        printf("  sltl %d  sbtl %d  sltb %d  sbtb %d\n", sltl, sbtl, sltb, sbtb);
+        printf("  leaf prolongation count %d  box pc %d\n", lpc, bpc);
+    }
+
 }
 
 //
@@ -787,7 +822,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 2, 2, 1};
+    static std::vector<int> test_iterations = {1, 0, 1, 1};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -1003,7 +1038,7 @@ int main(int argc, char *argv[]) {
         reset_and_start_timer();
         std::vector<int> source_boxes = {1};
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 1.5f);
+                       1, source_boxes, 1.0f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
