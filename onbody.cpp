@@ -254,6 +254,37 @@ void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, 
 }
 
 //
+// Approximate a spatial derivative from a number of irregularly-spaced points
+//
+float approximate_deriv(const float xt, const float yt, const float zt,
+                        const std::vector<float>& x, const std::vector<float>& y,
+                        const std::vector<float>& z, const std::vector<float>& u,
+                        const int istart, const int iend) {
+
+    printf("  target point at %g %g %g\n", xt, yt, zt);
+    float nsum = 0.0f;
+    float dsum = 0.0f;
+    for (int i=istart; i<iend; ++i) {
+        const float dx = x[i] - xt;
+        const float dy = y[i] - yt;
+        const float dz = z[i] - zt;
+        const float dist = sqrt(dx*dx+dy*dy+dz*dz);
+        //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
+        printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
+        //const float oods = 1.0f / 
+        //nsum
+        // see https://en.wikipedia.org/wiki/Linear_least_squares_%28mathematics%29
+        // must solve a system of equations for ax + by + cz + d = 0
+        // while minimizing the square error, this is a 4x4 matrix solve
+        // ideally while also weighting the data points by their distance
+        // 
+    }
+
+    if (fabs(u[istart]) > 0.0) exit(0);
+    return 0.0;
+}
+
+//
 // Caller for the fast summation O(N) method
 //
 // ittn is the target tree node that this routine will work on
@@ -308,8 +339,8 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
             //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
             for (int i=0; i<destNum; ++i) {
-                int idest = destStart + i;
-                int iorig = origStart + i/2;
+                const int idest = destStart + i;
+                const int iorig = origStart + i/2;
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
@@ -317,6 +348,7 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 targs.u[idest] = eqtargs.u[iorig];
                 targs.v[idest] = eqtargs.v[iorig];
                 targs.w[idest] = eqtargs.w[iorig];
+                // second step, apply gradient of value to delta location
             }
             lpc++;
         }
@@ -343,8 +375,8 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
             //}
 
             for (int i=0; i<destNum; ++i) {
-                int idest = destStart + i;
-                int iorig = origStart + i/2;
+                const int idest = destStart + i;
+                const int iorig = origStart + i/2;
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
@@ -352,6 +384,13 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 eqtargs.u[idest] = eqtargs.u[iorig];
                 eqtargs.v[idest] = eqtargs.v[iorig];
                 eqtargs.w[idest] = eqtargs.w[iorig];
+                // second step, apply gradient of value to delta location
+                const int istart = 8*(iorig/8);
+                const int iend = istart+8;
+                printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
+                //eqtargs.u[idest] += (eqtargs.x[idest]-eqtargs.x[iorig]) * approximate_deriv(
+                //                     eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                //                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
             }
             bpc++;
         }
