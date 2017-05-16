@@ -131,6 +131,7 @@ N       | leafs | ll per l| bl per l| b per b
 * Begin building target trees - DONE
 * Work on O(N) method - DONE
 * Increase accuracy of the prolongation operator
+* This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Tweak box-opening criterion and see if it improves accuracy per time
 * Use smarter or faster data structures in the O(N) list-building system
 * Write O(N^2) method in double-precision to allow more fair error comparisons
