@@ -82,22 +82,22 @@ void Parts<S,A>::random_in_cube() {
 // arrays always have 2^levels boxes allocated, even if some are not used
 // this way, node i children are 2*i and 2*i+1
 //
-//template <class S>
+template <class S>
 struct Tree {
     // number of levels in the tree
     int levels;
     // number of nodes in the tree (always 2^l)
     int numnodes;
     // tree node centers (of mass?)
-    alignas(32) std::vector<float> x;
-    alignas(32) std::vector<float> y;
-    alignas(32) std::vector<float> z;
+    alignas(32) std::vector<S> x;
+    alignas(32) std::vector<S> y;
+    alignas(32) std::vector<S> z;
     // node size
-    alignas(32) std::vector<float> s;
+    alignas(32) std::vector<S> s;
     // node particle radius
-    alignas(32) std::vector<float> r;
+    alignas(32) std::vector<S> r;
     // node masses
-    alignas(32) std::vector<float> m;
+    alignas(32) std::vector<S> m;
 
     // real point offset and count
     alignas(32) std::vector<int> ioffset;		// is this redundant?
@@ -163,7 +163,7 @@ void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ t
 // Recursive kernel for the treecode using 1st order box approximations
 //
 template <class S, class A>
-void treecode1_block(const Parts<S,A>& sp, const Tree& st, const int tnode, const float theta,
+void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const int tnode, const float theta,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
@@ -199,7 +199,7 @@ void treecode1_block(const Parts<S,A>& sp, const Tree& st, const int tnode, cons
 // Caller for the simple O(NlogN) kernel
 //
 template <class S, class A>
-void nbody_treecode1(const Parts<S,A>& srcs, const Tree& stree, Parts<S,A>& targs, const float theta) {
+void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -216,7 +216,7 @@ void nbody_treecode1(const Parts<S,A>& srcs, const Tree& stree, Parts<S,A>& targ
 //
 template <class S, class A>
 void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
-                     const Tree& st, const int tnode, const float theta,
+                     const Tree<S>& st, const int tnode, const float theta,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
@@ -255,7 +255,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
 //
 template <class S, class A>
 void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
-                     const Tree& stree, Parts<S,A>& targs, const float theta) {
+                     const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -270,34 +270,35 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
 //
 // Approximate a spatial derivative from a number of irregularly-spaced points
 //
-float least_squares_val(const float xt, const float yt, const float zt,
-                        const std::vector<float>& x, const std::vector<float>& y,
-                        const std::vector<float>& z, const std::vector<float>& u,
+template <class S, class A>
+A least_squares_val(const S xt, const S yt, const S zt,
+                        const std::vector<S>& x, const std::vector<S>& y,
+                        const std::vector<S>& z, const std::vector<A>& u,
                         const int istart, const int iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
-    float sn = 0.0f;
-    float sx = 0.0f;
-    float sy = 0.0f;
-    float sz = 0.0f;
-    float sx2 = 0.0f;
-    float sy2 = 0.0f;
-    float sz2 = 0.0f;
-    float sv = 0.0f;
-    float sxv = 0.0f;
-    float syv = 0.0f;
-    float szv = 0.0f;
-    float sxy = 0.0f;
-    float sxz = 0.0f;
-    float syz = 0.0f;
+    S sn = 0.0f;
+    S sx = 0.0f;
+    S sy = 0.0f;
+    S sz = 0.0f;
+    S sx2 = 0.0f;
+    S sy2 = 0.0f;
+    S sz2 = 0.0f;
+    S sv = 0.0f;
+    S sxv = 0.0f;
+    S syv = 0.0f;
+    S szv = 0.0f;
+    S sxy = 0.0f;
+    S sxz = 0.0f;
+    S syz = 0.0f;
     for (int i=istart; i<iend; ++i) {
-        const float dx = x[i] - xt;
-        const float dy = y[i] - yt;
-        const float dz = z[i] - zt;
-        const float dist = sqrt(dx*dx+dy*dy+dz*dz);
+        const S dx = x[i] - xt;
+        const S dy = y[i] - yt;
+        const S dz = z[i] - zt;
+        const S dist = sqrt(dx*dx+dy*dy+dz*dz);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
-        const float weight = 1.f / (0.001f + dist);
+        const S weight = 1.f / (0.001f + dist);
         //const float oods = 1.0f / 
         //nsum
         // see https://en.wikipedia.org/wiki/Linear_least_squares_%28mathematics%29
@@ -325,26 +326,26 @@ float least_squares_val(const float xt, const float yt, const float zt,
     //printf("    sums are %g %g %g %g %g ...\n", sx, sy, sz, sv, sxy);
 
     // now begin to solve the equation
-    const float i1 = sx/sxz - sn/sz;
-    const float i2 = sx2/sxz - sx/sz;
-    const float i3 = sxy/sxz - sy/sz;
-    const float i4 = sxv/sxz - sv/sz;
-    const float j1 = sy/syz - sn/sz;
-    const float j2 = sxy/syz - sx/sz;
-    const float j3 = sy2/syz - sy/sz;
-    const float j4 = syv/syz - sv/sz;
-    const float k1 = sz/sz2 - sn/sz;
-    const float k2 = sxz/sz2 - sx/sz;
-    const float k3 = syz/sz2 - sy/sz;
-    const float k4 = szv/sz2 - sv/sz;
-    const float q1 = i3*j1 - i1*j3;
-    const float q2 = i3*j2 - i2*j3;
-    const float q3 = i3*j4 - i4*j3;
-    const float r1 = i3*k1 - i1*k3;
-    const float r2 = i3*k2 - i2*k3;
-    const float r3 = i3*k4 - i4*k3;
+    const S i1 = sx/sxz - sn/sz;
+    const S i2 = sx2/sxz - sx/sz;
+    const S i3 = sxy/sxz - sy/sz;
+    const S i4 = sxv/sxz - sv/sz;
+    const S j1 = sy/syz - sn/sz;
+    const S j2 = sxy/syz - sx/sz;
+    const S j3 = sy2/syz - sy/sz;
+    const S j4 = syv/syz - sv/sz;
+    const S k1 = sz/sz2 - sn/sz;
+    const S k2 = sxz/sz2 - sx/sz;
+    const S k3 = syz/sz2 - sy/sz;
+    const S k4 = szv/sz2 - sv/sz;
+    const S q1 = i3*j1 - i1*j3;
+    const S q2 = i3*j2 - i2*j3;
+    const S q3 = i3*j4 - i4*j3;
+    const S r1 = i3*k1 - i1*k3;
+    const S r2 = i3*k2 - i2*k3;
+    const S r3 = i3*k4 - i4*k3;
 
-    const float b1 = (r2*q3 - r3*q2) / (r2*q1 - r1*q2);
+    const A b1 = (r2*q3 - r3*q2) / (r2*q1 - r1*q2);
     //printf("    b1 is %g\n", b1);
     //const float b2 = r3/r2 - b1*r1/r2;
     //printf("    b2 is %g\n", b2);
@@ -366,8 +367,8 @@ float least_squares_val(const float xt, const float yt, const float zt,
 // We will change u,v,w for the targs points and the eqtargs equivalent points
 //
 template <class S, class A>
-void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree& stree,
-                    Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree& ttree,
+void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree<S>& stree,
+                    Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
                     const int ittn, std::vector<int> istv, const float theta) {
 
     static int sltl = 0;
@@ -634,7 +635,8 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
 // Sort but retain only sorted index! Uses C++11 lambdas
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
-std::vector<size_t> sortIndexes(const std::vector<float> &v) {
+template <class S>
+std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 
   // initialize original index locations
   alignas(32) std::vector<size_t> idx(v.size());
@@ -651,7 +653,8 @@ std::vector<size_t> sortIndexes(const std::vector<float> &v) {
 // Sort but retain only sorted index! Uses C++11 lambdas
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
-void sortIndexesSection(const std::vector<float> &v,
+template <class S>
+void sortIndexesSection(const std::vector<S> &v,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
@@ -666,13 +669,14 @@ void sortIndexesSection(const std::vector<float> &v,
 //
 // Find min and max values along an axis
 //
-std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, size_t iend) {
+template <class S>
+std::pair<S,S> minMaxValue(const std::vector<S> &x, size_t istart, size_t iend) {
 
     auto itbeg = x.begin() + istart;
     auto itend = x.begin() + iend;
 
     auto range = std::minmax_element(itbeg, itend);
-    return std::pair<float,float>(x[range.first+istart-itbeg], x[range.second+istart-itbeg]);
+    return std::pair<S,S>(x[range.first+istart-itbeg], x[range.second+istart-itbeg]);
 
     // what's an initializer list?
     //return std::minmax(itbeg, itend);
@@ -698,7 +702,7 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
 // Split this segment of the particles on its longest axis
 //
 template <class S, class A>
-void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
+void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode) {
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
@@ -709,7 +713,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
     // find the min/max of the three axes
     //printf("find min/max\n");
     //reset_and_start_timer();
-    std::vector<float> boxsizes(3);
+    std::vector<S> boxsizes(3);
     auto minmax = minMaxValue(p.x, pfirst, plast);
     boxsizes[0] = minmax.second - minmax.first;
     //printf("  node x min/max %g %g\n", minmax.first, minmax.second);
@@ -785,7 +789,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
 // Code is borrowed from splitNode above
 //
 template <class S, class A>
-void refineLeaf(Parts<S,A>& p, Tree& t, size_t pfirst, size_t plast) {
+void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
 
     // if there are 1 or 2 particles, then they are already in "order"
     if (plast-pfirst < 3) return;
@@ -794,7 +798,7 @@ void refineLeaf(Parts<S,A>& p, Tree& t, size_t pfirst, size_t plast) {
     //printf("    refining particles %ld to %ld\n", pfirst, plast);
 
     // find the min/max of the three axes
-    std::vector<float> boxsizes(3);
+    std::vector<S> boxsizes(3);
     auto minmax = minMaxValue(p.x, pfirst, plast);
     boxsizes[0] = minmax.second - minmax.first;
     minmax = minMaxValue(p.y, pfirst, plast);
@@ -833,7 +837,7 @@ void refineLeaf(Parts<S,A>& p, Tree& t, size_t pfirst, size_t plast) {
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
 template <class S, class A>
-void refineTree(Parts<S,A>& p, Tree& t, int tnode) {
+void refineTree(Parts<S,A>& p, Tree<S>& t, int tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
@@ -856,7 +860,7 @@ void refineTree(Parts<S,A>& p, Tree& t, int tnode) {
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
 template <class S, class A>
-void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree& t, int tnode) {
+void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
 
     t.epoffset[tnode] = tnode * blockSize;
@@ -889,7 +893,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree& t, int tnode) {
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                float pairm = ep.m[ip-1] + ep.m[ip];
+                S pairm = ep.m[ip-1] + ep.m[ip];
                 ep.x[iep] = (ep.x[ip-1]*ep.m[ip-1] + ep.x[ip]*ep.m[ip]) / pairm;
                 ep.y[iep] = (ep.y[ip-1]*ep.m[ip-1] + ep.y[ip]*ep.m[ip]) / pairm;
                 ep.z[iep] = (ep.z[ip-1]*ep.m[ip-1] + ep.z[ip]*ep.m[ip]) / pairm;
@@ -922,7 +926,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree& t, int tnode) {
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                float pairm = p.m[ip-1] + p.m[ip];
+                S pairm = p.m[ip-1] + p.m[ip];
                 ep.x[iep] = (p.x[ip-1]*p.m[ip-1] + p.x[ip]*p.m[ip]) / pairm;
                 ep.y[iep] = (p.y[ip-1]*p.m[ip-1] + p.y[ip]*p.m[ip]) / pairm;
                 ep.z[iep] = (p.z[ip-1]*p.m[ip-1] + p.z[ip]*p.m[ip]) / pairm;
@@ -991,7 +995,7 @@ int main(int argc, char *argv[]) {
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
     reset_and_start_timer();
-    Tree stree;
+    Tree<float> stree;
     printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
     uint32_t numLeaf = 1 + ((numSrcs-1)/blockSize);
     printf("  %d nodes at leaf level\n", numLeaf);
@@ -1038,7 +1042,7 @@ int main(int argc, char *argv[]) {
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     reset_and_start_timer();
-    Tree ttree;
+    Tree<float> ttree;
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
     numLeaf = 1 + ((numTargs-1)/blockSize);
     printf("  %d nodes at leaf level\n", numLeaf);
