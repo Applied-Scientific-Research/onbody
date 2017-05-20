@@ -408,6 +408,18 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 targs.v[idest] = eqtargs.v[iorig];
                 targs.w[idest] = eqtargs.w[iorig];
                 // second step, apply gradient of value to delta location
+                if (true) {
+                const int nearest = 16;
+                const int istart = nearest*(iorig/nearest);
+                const int iend = istart+nearest;
+                //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
+                targs.u[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
+                targs.v[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
+                targs.w[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                }
             }
             lpc++;
         }
@@ -1142,7 +1154,7 @@ int main(int argc, char *argv[]) {
         reset_and_start_timer();
         std::vector<int> source_boxes = {1};
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 1.0f);
+                       1, source_boxes, 1.6f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
