@@ -982,11 +982,11 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
 
     // allocate space for sources and targets
-    Parts<float,float> srcs(numSrcs);
+    Parts<float,double> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
 
-    Parts<float,float> targs(numTargs);
+    Parts<float,double> targs(numTargs);
     targs.random_in_cube();
     for (auto&& m : targs.m) { m = 1.0f; }
     printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
@@ -1021,7 +1021,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     reset_and_start_timer();
-    Parts<float,float> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqsrcs.n);
     stree.epoffset.resize(stree.numnodes);
     stree.epnum.resize(stree.numnodes);
@@ -1069,7 +1069,7 @@ int main(int argc, char *argv[]) {
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     reset_and_start_timer();
-    Parts<float,float> eqtargs((ttree.numnodes/2) * blockSize);
+    Parts<float,double> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqtargs.n);
     ttree.epoffset.resize(ttree.numnodes);
     ttree.epnum.resize(ttree.numnodes);
@@ -1101,7 +1101,7 @@ int main(int argc, char *argv[]) {
     printf("[onbody naive]:\t\t\t[%.3f] million cycles\n", minNaive);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-    std::vector<float> naiveu = targs.u;
+    std::vector<float> naiveu(targs.u.begin(), targs.u.end());
 
     float errsum = 0.0;
     int errcnt = 0;
@@ -1123,7 +1123,7 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> treecodeu = targs.u;
+    std::vector<float> treecodeu(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
@@ -1154,7 +1154,7 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> treecodeu2 = targs.u;
+    std::vector<float> treecodeu2(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
@@ -1187,7 +1187,7 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> fastu = targs.u;
+    std::vector<float> fastu(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
