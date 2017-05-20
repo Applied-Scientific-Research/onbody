@@ -256,32 +256,91 @@ void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, 
 //
 // Approximate a spatial derivative from a number of irregularly-spaced points
 //
-float approximate_deriv(const float xt, const float yt, const float zt,
+float least_squares_val(const float xt, const float yt, const float zt,
                         const std::vector<float>& x, const std::vector<float>& y,
                         const std::vector<float>& z, const std::vector<float>& u,
                         const int istart, const int iend) {
 
-    printf("  target point at %g %g %g\n", xt, yt, zt);
-    float nsum = 0.0f;
-    float dsum = 0.0f;
+    //printf("  target point at %g %g %g\n", xt, yt, zt);
+    float sn = 0.0f;
+    float sx = 0.0f;
+    float sy = 0.0f;
+    float sz = 0.0f;
+    float sx2 = 0.0f;
+    float sy2 = 0.0f;
+    float sz2 = 0.0f;
+    float sv = 0.0f;
+    float sxv = 0.0f;
+    float syv = 0.0f;
+    float szv = 0.0f;
+    float sxy = 0.0f;
+    float sxz = 0.0f;
+    float syz = 0.0f;
     for (int i=istart; i<iend; ++i) {
         const float dx = x[i] - xt;
         const float dy = y[i] - yt;
         const float dz = z[i] - zt;
         const float dist = sqrt(dx*dx+dy*dy+dz*dz);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
-        printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
+        //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
+        const float weight = 1.f / (0.001f + dist);
         //const float oods = 1.0f / 
         //nsum
         // see https://en.wikipedia.org/wiki/Linear_least_squares_%28mathematics%29
         // must solve a system of equations for ax + by + cz + d = 0
         // while minimizing the square error, this is a 4x4 matrix solve
         // ideally while also weighting the data points by their distance
-        // 
-    }
 
-    if (fabs(u[istart]) > 0.0) exit(0);
-    return 0.0;
+        // compute sums of moments
+        //const float weight = 1.f;
+        sn += weight;
+        sx += weight*dx;
+        sy += weight*dy;
+        sz += weight*dz;
+        sv += weight*u[i];
+        sxy += weight*dx*dy;
+        sxz += weight*dx*dz;
+        syz += weight*dy*dz;
+        sxv += weight*dx*u[i];
+        syv += weight*dy*u[i];
+        szv += weight*dz*u[i];
+        sx2 += weight*dx*dx;
+        sy2 += weight*dy*dy;
+        sz2 += weight*dz*dz;
+    }
+    //printf("    sums are %g %g %g %g %g ...\n", sx, sy, sz, sv, sxy);
+
+    // now begin to solve the equation
+    const float i1 = sx/sxz - sn/sz;
+    const float i2 = sx2/sxz - sx/sz;
+    const float i3 = sxy/sxz - sy/sz;
+    const float i4 = sxv/sxz - sv/sz;
+    const float j1 = sy/syz - sn/sz;
+    const float j2 = sxy/syz - sx/sz;
+    const float j3 = sy2/syz - sy/sz;
+    const float j4 = syv/syz - sv/sz;
+    const float k1 = sz/sz2 - sn/sz;
+    const float k2 = sxz/sz2 - sx/sz;
+    const float k3 = syz/sz2 - sy/sz;
+    const float k4 = szv/sz2 - sv/sz;
+    const float q1 = i3*j1 - i1*j3;
+    const float q2 = i3*j2 - i2*j3;
+    const float q3 = i3*j4 - i4*j3;
+    const float r1 = i3*k1 - i1*k3;
+    const float r2 = i3*k2 - i2*k3;
+    const float r3 = i3*k4 - i4*k3;
+
+    const float b1 = (r2*q3 - r3*q2) / (r2*q1 - r1*q2);
+    //printf("    b1 is %g\n", b1);
+    //const float b2 = r3/r2 - b1*r1/r2;
+    //printf("    b2 is %g\n", b2);
+    //const float b3 = j4/j3 - b1*j1/j3 - b2*j2/j3;
+    //printf("    b3 is %g\n", b3);
+    //const float b4 = sv/sz - b1/sz - b2*sx/sz - b3*sy/sz;
+    //printf("    b4 is %g\n", b4);
+
+    //if (fabs(u[istart]) > 0.0) exit(0);
+    return b1;
 }
 
 //
@@ -385,12 +444,18 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
                 eqtargs.v[idest] = eqtargs.v[iorig];
                 eqtargs.w[idest] = eqtargs.w[iorig];
                 // second step, apply gradient of value to delta location
-                const int istart = 8*(iorig/8);
-                const int iend = istart+8;
-                printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                //eqtargs.u[idest] += (eqtargs.x[idest]-eqtargs.x[iorig]) * approximate_deriv(
-                //                     eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
-                //                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
+                if (true) {
+                const int nearest = 16;
+                const int istart = nearest*(iorig/nearest);
+                const int iend = istart+nearest;
+                //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
+                eqtargs.u[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
+                eqtargs.v[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
+                eqtargs.w[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                }
             }
             bpc++;
         }
