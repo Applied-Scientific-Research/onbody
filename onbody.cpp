@@ -369,7 +369,7 @@ A least_squares_val(const S xt, const S yt, const S zt,
 template <class S, class A>
 void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree<S>& stree,
                     Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
-                    const int ittn, std::vector<int> istv, const float theta) {
+                    const int ittn, std::vector<int> istv_in, const float theta) {
 
     static int sltl = 0;
     static int sbtl = 0;
@@ -419,22 +419,23 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
-                // as a first step, simply copy the result to the children
-                targs.u[idest] = eqtargs.u[iorig];
-                targs.v[idest] = eqtargs.v[iorig];
-                targs.w[idest] = eqtargs.w[iorig];
-                // second step, apply gradient of value to delta location
+                // second take, use linear least squares to approximate value
                 if (true) {
-                const int nearest = 16;
-                const int istart = nearest*(iorig/nearest);
-                const int iend = istart+nearest;
-                //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                targs.u[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
-                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
-                targs.v[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
-                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
-                targs.w[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
-                                                   eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                    const int nearest = 16;
+                    const int istart = nearest*(iorig/nearest);
+                    const int iend = istart+nearest;
+                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
+                    targs.u[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                       eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
+                    targs.v[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                       eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
+                    targs.w[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
+                                                       eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                } else {
+                    // as a first take, simply copy the result to the children
+                    targs.u[idest] = eqtargs.u[iorig];
+                    targs.v[idest] = eqtargs.v[iorig];
+                    targs.w[idest] = eqtargs.w[iorig];
                 }
             }
             lpc++;
@@ -467,22 +468,23 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
-                // as a first step, simply copy the result to the children
-                eqtargs.u[idest] = eqtargs.u[iorig];
-                eqtargs.v[idest] = eqtargs.v[iorig];
-                eqtargs.w[idest] = eqtargs.w[iorig];
-                // second step, apply gradient of value to delta location
+                // second take, apply gradient of value to delta location
                 if (true) {
-                const int nearest = 16;
-                const int istart = nearest*(iorig/nearest);
-                const int iend = istart+nearest;
-                //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                eqtargs.u[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
-                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
-                eqtargs.v[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
-                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
-                eqtargs.w[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
-                                                     eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                    const int nearest = 16;
+                    const int istart = nearest*(iorig/nearest);
+                    const int iend = istart+nearest;
+                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
+                    eqtargs.u[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                         eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
+                    eqtargs.v[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                         eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.v, istart, iend);
+                    eqtargs.w[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
+                                                         eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.w, istart, iend);
+                } else {
+                    // as a first take, simply copy the result to the children
+                    eqtargs.u[idest] = eqtargs.u[iorig];
+                    eqtargs.v[idest] = eqtargs.v[iorig];
+                    eqtargs.w[idest] = eqtargs.w[iorig];
                 }
             }
             bpc++;
@@ -491,6 +493,9 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
 
     // initialize a new vector of source boxes to pass to this target box's children
     std::vector<int> cstv;
+
+    // make a local copy of the input source tree vector
+    std::vector<int> istv = istv_in;
 
     // for target box ittn, check all unaccounted-for source boxes
     int num_istv = istv.size();
@@ -607,22 +612,18 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
     if (not targetIsLeaf) {
         // prolongation of equivalent particle velocities to children's equivalent particles
 
-        if (false) {
-            std::cout << "    passing source boxes";
-            for (auto&& sn : cstv) {
-                std::cout << " " << sn;
-            }
-            std::cout << " to target boxes " << 2*ittn << " and " << 2*ittn+1;
-            std::cout << std::endl;
-        }
-
         // recurse onto the target box's children
+        // can't use reduction(+:sltl,sbtl,sltb,sbtb,tlc,lpc,bpc) for tasks
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+        //#pragma omp taskwait
     }
 
     // report counter results
     if (ittn == 1) {
+        #pragma omp taskwait
         printf("%d target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
                tlc, sltl/(float)tlc, sbtl/(float)tlc);
         printf("  sltl %d  sbtl %d  sltb %d  sbtb %d\n", sltl, sbtl, sltb, sbtb);
@@ -1177,8 +1178,11 @@ int main(int argc, char *argv[]) {
     for (unsigned int i = 0; i < test_iterations[3]; ++i) {
         reset_and_start_timer();
         std::vector<int> source_boxes = {1};
+        #pragma omp parallel
+        #pragma omp single
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
                        1, source_boxes, 1.6f);
+        #pragma omp taskwait
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minFast = std::min(minFast, dt);
