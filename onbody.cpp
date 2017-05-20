@@ -20,6 +20,9 @@ const int blockSize = 64;
 //
 // A set of particles, can be sources or targets
 //
+// templatized on storage and accumulator types
+//
+template <class S, class A>
 class Parts {
 public:
     Parts(int);
@@ -28,26 +31,28 @@ public:
 
     int n;
     // state
-    alignas(32) std::vector<float> x;
-    alignas(32) std::vector<float> y;
-    alignas(32) std::vector<float> z;
-    alignas(32) std::vector<float> r;
+    alignas(32) std::vector<S> x;
+    alignas(32) std::vector<S> y;
+    alignas(32) std::vector<S> z;
+    alignas(32) std::vector<S> r;
     // actuator (needed by sources)
-    alignas(32) std::vector<float> m;
+    alignas(32) std::vector<S> m;
     // results (needed by targets)
-    alignas(32) std::vector<float> u;
-    alignas(32) std::vector<float> v;
-    alignas(32) std::vector<float> w;
+    alignas(32) std::vector<A> u;
+    alignas(32) std::vector<A> v;
+    alignas(32) std::vector<A> w;
     // temporary
     alignas(32) std::vector<size_t> itemp;
-    alignas(32) std::vector<float> ftemp;
+    alignas(32) std::vector<S> ftemp;
 };
 
-Parts::Parts(int _num) {
+template <class S, class A>
+Parts<S,A>::Parts(int _num) {
     resize(_num);
 }
 
-void Parts::resize(int _num) {
+template <class S, class A>
+void Parts<S,A>::resize(int _num) {
     n = _num;
     x.resize(n);
     y.resize(n);
@@ -61,12 +66,13 @@ void Parts::resize(int _num) {
     ftemp.resize(n);
 }
 
-void Parts::random_in_cube() {
-    for (auto&& _x : x) { _x = (float)rand()/(float)RAND_MAX; }
-    for (auto&& _y : y) { _y = (float)rand()/(float)RAND_MAX; }
-    for (auto&& _z : z) { _z = (float)rand()/(float)RAND_MAX; }
-    for (auto&& _r : r) { _r = 1.0f / cbrt((float)n); }
-    for (auto&& _m : m) { _m = 2.0f*(float)rand()/(float)RAND_MAX / (float)n; }
+template <class S, class A>
+void Parts<S,A>::random_in_cube() {
+    for (auto&& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
+    for (auto&& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
+    for (auto&& _z : z) { _z = (S)rand()/(S)RAND_MAX; }
+    for (auto&& _r : r) { _r = 1.0f / cbrt((S)n); }
+    for (auto&& _m : m) { _m = 2.0f*(S)rand()/(S)RAND_MAX / (S)n; }
 }
 
 //
@@ -76,6 +82,7 @@ void Parts::random_in_cube() {
 // arrays always have 2^levels boxes allocated, even if some are not used
 // this way, node i children are 2*i and 2*i+1
 //
+//template <class S>
 struct Tree {
     // number of levels in the tree
     int levels;
@@ -112,15 +119,16 @@ static inline uint32_t log_2(const uint32_t x) {
 //
 // The inner, scalar kernel
 //
-static inline void nbody_kernel(const float sx, const float sy, const float sz,
-                                const float sr, const float sm,
-                                const float tx, const float ty, const float tz,
-                                float& __restrict__ tax, float& __restrict__ tay, float& __restrict__ taz) {
+template <class S, class A>
+static inline void nbody_kernel(const S sx, const S sy, const S sz,
+                                const S sr, const S sm,
+                                const S tx, const S ty, const S tz,
+                                A& __restrict__ tax, A& __restrict__ tay, A& __restrict__ taz) {
     // 19 flops
-    const float dx = sx - tx;
-    const float dy = sy - ty;
-    const float dz = sz - tz;
-    float r2 = dx*dx + dy*dy + dz*dz + sr*sr;
+    const S dx = sx - tx;
+    const S dy = sy - ty;
+    const S dz = sz - tz;
+    S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
     r2 = sm/(r2*sqrt(r2));
     tax += r2 * dx;
     tay += r2 * dy;
@@ -135,7 +143,8 @@ static inline void nbody_kernel(const float sx, const float sy, const float sz,
 //
 // Caller for the O(N^2) kernel
 //
-void nbody_naive(const Parts& __restrict__ srcs, Parts& __restrict__ targs, const int tskip) {
+template <class S, class A>
+void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const int tskip) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0f;
@@ -153,9 +162,10 @@ void nbody_naive(const Parts& __restrict__ srcs, Parts& __restrict__ targs, cons
 //
 // Recursive kernel for the treecode using 1st order box approximations
 //
-void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const float theta,
-                     const float tx, const float ty, const float tz,
-                     float& tax, float& tay, float& taz) {
+template <class S, class A>
+void treecode1_block(const Parts<S,A>& sp, const Tree& st, const int tnode, const float theta,
+                     const S tx, const S ty, const S tz,
+                     A& tax, A& tay, A& taz) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
@@ -168,10 +178,10 @@ void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const flo
     }
 
     // distance from box center of mass to target point
-    const float dx = st.x[tnode] - tx;
-    const float dy = st.y[tnode] - ty;
-    const float dz = st.z[tnode] - tz;
-    const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+    const S dx = st.x[tnode] - tx;
+    const S dy = st.y[tnode] - ty;
+    const S dz = st.z[tnode] - tz;
+    const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -188,7 +198,8 @@ void treecode1_block(const Parts& sp, const Tree& st, const int tnode, const flo
 //
 // Caller for the simple O(NlogN) kernel
 //
-void nbody_treecode1(const Parts& srcs, const Tree& stree, Parts& targs, const float theta) {
+template <class S, class A>
+void nbody_treecode1(const Parts<S,A>& srcs, const Tree& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -203,10 +214,11 @@ void nbody_treecode1(const Parts& srcs, const Tree& stree, Parts& targs, const f
 //
 // Recursive kernel for the treecode using equivalent particles
 //
-void treecode2_block(const Parts& sp, const Parts& ep,
+template <class S, class A>
+void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const Tree& st, const int tnode, const float theta,
-                     const float tx, const float ty, const float tz,
-                     float& tax, float& tay, float& taz) {
+                     const S tx, const S ty, const S tz,
+                     A& tax, A& tay, A& taz) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
@@ -219,10 +231,10 @@ void treecode2_block(const Parts& sp, const Parts& ep,
     }
 
     // distance from box center of mass to target point
-    const float dx = st.x[tnode] - tx;
-    const float dy = st.y[tnode] - ty;
-    const float dz = st.z[tnode] - tz;
-    const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+    const S dx = st.x[tnode] - tx;
+    const S dy = st.y[tnode] - ty;
+    const S dz = st.z[tnode] - tz;
+    const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -241,7 +253,9 @@ void treecode2_block(const Parts& sp, const Parts& ep,
 //
 // Caller for the better (equivalent particle) O(NlogN) kernel
 //
-void nbody_treecode2(const Parts& srcs, const Parts& eqsrcs, const Tree& stree, Parts& targs, const float theta) {
+template <class S, class A>
+void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
+                     const Tree& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0f;
@@ -351,8 +365,9 @@ float least_squares_val(const float xt, const float yt, const float zt,
 //
 // We will change u,v,w for the targs points and the eqtargs equivalent points
 //
-void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
-                    Parts& targs, Parts& eqtargs, const Tree& ttree,
+template <class S, class A>
+void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree& stree,
+                    Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree& ttree,
                     const int ittn, std::vector<int> istv, const float theta) {
 
     static int sltl = 0;
@@ -505,11 +520,11 @@ void nbody_fastsumm(const Parts& srcs, const Parts& eqsrcs, const Tree& stree,
         }
 
         // distance from box center of mass to target point
-        const float dx = stree.x[sn] - ttree.x[ittn];
-        const float dy = stree.y[sn] - ttree.y[ittn];
-        const float dz = stree.z[sn] - ttree.z[ittn];
-        const float halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
-        const float dist = sqrtf(dx*dx + dy*dy + dz*dz);
+        const S dx = stree.x[sn] - ttree.x[ittn];
+        const S dy = stree.y[sn] - ttree.y[ittn];
+        const S dz = stree.z[sn] - ttree.z[ittn];
+        const S halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
+        const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
         //printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
 
         // split on what to do with this pair
@@ -666,7 +681,8 @@ std::pair<float,float> minMaxValue(const std::vector<float> &x, size_t istart, s
 //
 // Helper function to reorder a segment of a vector
 //
-void reorder(std::vector<float> &x, std::vector<float> &t,
+template <class S>
+void reorder(std::vector<S> &x, std::vector<S> &t,
              const std::vector<size_t> &idx,
              const size_t pfirst, const size_t plast) {
 
@@ -681,7 +697,8 @@ void reorder(std::vector<float> &x, std::vector<float> &t,
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
-void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
+template <class S, class A>
+void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
@@ -767,7 +784,8 @@ void splitNode(Parts& p, size_t pfirst, size_t plast, Tree& t, int tnode) {
 // Recursively refine leaf node's particles until they are hierarchically nearby
 // Code is borrowed from splitNode above
 //
-void refineLeaf(Parts& p, Tree& t, size_t pfirst, size_t plast) {
+template <class S, class A>
+void refineLeaf(Parts<S,A>& p, Tree& t, size_t pfirst, size_t plast) {
 
     // if there are 1 or 2 particles, then they are already in "order"
     if (plast-pfirst < 3) return;
@@ -814,7 +832,8 @@ void refineLeaf(Parts& p, Tree& t, size_t pfirst, size_t plast) {
 //
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
-void refineTree(Parts& p, Tree& t, int tnode) {
+template <class S, class A>
+void refineTree(Parts<S,A>& p, Tree& t, int tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
@@ -836,7 +855,8 @@ void refineTree(Parts& p, Tree& t, int tnode) {
 //       another: we are a non-leaf node taking eq parts from two non-leaf nodes
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
-void calcEquivalents(Parts& p, Parts& ep, Tree& t, int tnode) {
+template <class S, class A>
+void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree& t, int tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
 
     t.epoffset[tnode] = tnode * blockSize;
@@ -958,11 +978,11 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
 
     // allocate space for sources and targets
-    Parts srcs(numSrcs);
+    Parts<float,float> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
 
-    Parts targs(numTargs);
+    Parts<float,float> targs(numTargs);
     targs.random_in_cube();
     for (auto&& m : targs.m) { m = 1.0f; }
     printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
@@ -997,7 +1017,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     reset_and_start_timer();
-    Parts eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<float,float> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqsrcs.n);
     stree.epoffset.resize(stree.numnodes);
     stree.epnum.resize(stree.numnodes);
@@ -1045,7 +1065,7 @@ int main(int argc, char *argv[]) {
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     reset_and_start_timer();
-    Parts eqtargs((ttree.numnodes/2) * blockSize);
+    Parts<float,float> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqtargs.n);
     ttree.epoffset.resize(ttree.numnodes);
     ttree.epnum.resize(ttree.numnodes);
