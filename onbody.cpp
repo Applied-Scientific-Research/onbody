@@ -147,9 +147,9 @@ template <class S, class A>
 void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const int tskip) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i+=tskip) {
-        targs.u[i] = 0.0f;
-        targs.v[i] = 0.0f;
-        targs.w[i] = 0.0f;
+        targs.u[i] = 0.0;
+        targs.v[i] = 0.0;
+        targs.w[i] = 0.0;
         //#pragma clang loop vectorize(enable) interleave(enable)
         for (int j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
@@ -202,9 +202,9 @@ template <class S, class A>
 void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0f;
-        targs.v[i] = 0.0f;
-        targs.w[i] = 0.0f;
+        targs.u[i] = 0.0;
+        targs.v[i] = 0.0;
+        targs.w[i] = 0.0;
         treecode1_block(srcs, stree, 1, theta,
                         targs.x[i], targs.y[i], targs.z[i],
                         targs.u[i], targs.v[i], targs.w[i]);
@@ -258,9 +258,9 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
                      const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
     for (int i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0f;
-        targs.v[i] = 0.0f;
-        targs.w[i] = 0.0f;
+        targs.u[i] = 0.0;
+        targs.v[i] = 0.0;
+        targs.w[i] = 0.0;
         treecode2_block(srcs, eqsrcs, stree, 1, theta,
                         targs.x[i], targs.y[i], targs.z[i],
                         targs.u[i], targs.v[i], targs.w[i]);
