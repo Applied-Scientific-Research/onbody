@@ -120,6 +120,24 @@ N       | leafs | ll per l| bl per l| b per b
 262144  | 4096  | 84.9561 | 14.5999 | 26.9609
 2097152 | 32768 | 93.9102 | 16.6942 | 33.7703
 
+#### GCC 4.9.2 vs. 6.3.0
+
+It seems very hard to get gcc 4.9.2 to vectorize loops. Here are some performance numbers from a 6-core AMD PhenomII X6 1090T processor at 3.21 GHz (OpenMP active) using `g++` 4.9.2 and then 6.3.0. The command-line to build both versions was:
+
+    g++ -std=c++11 -O2 -march=native -fopenmp -ffast-math -ftree-vectorize -ftree-loop-vectorize -o onbody onbody.cpp
+
+N       | naive  | tree2  | fast
+--------|--------|--------|--------
+10000   | 1202.3 | 240.78 | 733.52
+100000  | 111748 | 3403.1 | 14880
+1000000 | 1.157+7| 46156  | 198450
+
+N       | naive  | tree2  | fast
+--------|--------|--------|--------
+10000   | 224.50 | 75.518 | 199.17
+100000  | 23761. | 987.29 | 3489.9
+1000000 | 4270680| 13004  | 45853
+
 
 ## To do
 
