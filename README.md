@@ -120,9 +120,9 @@ N       | leafs | ll per l| bl per l| b per b
 262144  | 4096  | 84.9561 | 14.5999 | 26.9609
 2097152 | 32768 | 93.9102 | 16.6942 | 33.7703
 
-#### GCC 4.9.2 vs. 6.3.0
+#### GCC 4.9.2 vs. 5.4.0 vs. 6.3.0
 
-It seems very hard to get gcc 4.9.2 to vectorize loops. Here are some performance numbers from a 6-core AMD Phenom II X6 1090T processor at 3.21 GHz (OpenMP active) using `g++` 4.9.2 and then 6.3.0. The command-line to build both versions was:
+It seems very hard to get gcc 4.9.2 to vectorize loops. Here are some performance numbers from a 6-core AMD Phenom II X6 1090T processor at 3.21 GHz (OpenMP active) using `g++` 4.9.2, 5.4.0, and then 6.3.0. The command-line to build both versions was:
 
     g++ -std=c++11 -O2 -march=native -fopenmp -ffast-math -ftree-vectorize -ftree-loop-vectorize -o onbody onbody.cpp
 
@@ -134,11 +134,19 @@ N       | naive  | tree2  | fast
 
 N       | naive  | tree2  | fast
 --------|--------|--------|--------
+10000   | 378.81 | 109.20 | 286.29
+100000  | 38273. | 1422.3 | 5499.6
+1000000 | 4448477| 20124  | 72884
+
+N       | naive  | tree2  | fast
+--------|--------|--------|--------
 10000   | 224.50 | 75.518 | 199.17
 100000  | 23761. | 987.29 | 3489.9
 1000000 | 4270680| 13004  | 45853
 
-Note that the `tree2` method, a simple treecode, can solve for the velocities from 1 million vortex particles to 1.5e-3 mean error in four seconds (13004/3210) on a CPU alone.
+It looks like both 5.4.0 and 6.3.0 can vectorize properly, though 6.3.0 is substantially better. Note that CUDA 8.0 can only work with gcc versions 5.x or older.
+
+Also note that the `tree2` method, a simple treecode, can solve for the velocities from 1 million vortex particles to 1.5e-3 mean error in four seconds (13004/3210) on a CPU alone. The OmegaFlow v2 code does the same in about 20s on the CPU and 0.7s when using a 1060GTX GPU.
 
 ## To Do
 
