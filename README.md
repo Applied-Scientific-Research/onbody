@@ -122,7 +122,7 @@ N       | leafs | ll per l| bl per l| b per b
 
 #### GCC 4.9.2 vs. 6.3.0
 
-It seems very hard to get gcc 4.9.2 to vectorize loops. Here are some performance numbers from a 6-core AMD PhenomII X6 1090T processor at 3.21 GHz (OpenMP active) using `g++` 4.9.2 and then 6.3.0. The command-line to build both versions was:
+It seems very hard to get gcc 4.9.2 to vectorize loops. Here are some performance numbers from a 6-core AMD Phenom II X6 1090T processor at 3.21 GHz (OpenMP active) using `g++` 4.9.2 and then 6.3.0. The command-line to build both versions was:
 
     g++ -std=c++11 -O2 -march=native -fopenmp -ffast-math -ftree-vectorize -ftree-loop-vectorize -o onbody onbody.cpp
 
@@ -138,8 +138,9 @@ N       | naive  | tree2  | fast
 100000  | 23761. | 987.29 | 3489.9
 1000000 | 4270680| 13004  | 45853
 
+Note that the `tree2` method, a simple treecode, can solve for the velocities from 1 million vortex particles to 1.5e-3 mean error in four seconds (13004/3210) on a CPU alone.
 
-## To do
+## To Do
 
 * Start comparing accuracy of treecode and report it  - DONE
 * Find out why tree-build is O(N^2) - DONE
