@@ -118,7 +118,7 @@ static inline void nbody_kernel(const S sx, const S sy,
                                 const S sr, const S sm,
                                 const S tx, const S ty,
                                 A& __restrict__ tax, A& __restrict__ tay) {
-    // 19 flops
+    // 13 flops
     const S dx = sx - tx;
     const S dy = sy - ty;
     S r2 = dx*dx + dy*dy + sr*sr;
