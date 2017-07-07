@@ -213,4 +213,5 @@ For the n=100000 problem, this CPU achieves 107 GFlop/s.
 * Specialize or Templatize the Particle class to allow it to be used efficiently for sources or targets
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
+* Add radii to the target points (even if all zeros) and include their effect in the core function
 
