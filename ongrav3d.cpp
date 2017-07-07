@@ -220,6 +220,19 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
+    static int sltp = 0;
+    static int sbtp = 0;
+
+    // report on interactions
+    if (tnode == 0) {
+        int tlc = sp.n;
+        printf("%d target particles averaged %g leaf-part and %g equiv-part interactions\n",
+               tlc, sltp/(float)tlc, sbtp/(float)tlc);
+        printf("  sltp %d  sbtp %d\n", sltp, sbtp);
+
+        return;
+    }
+
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
@@ -227,6 +240,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
                          tx, ty, tz, tax, tay, taz);
         }
+        sltp++;
         return;
     }
 
@@ -243,6 +257,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(ep.x[j], ep.y[j], ep.z[j], ep.r[j], ep.m[j],
                          tx, ty, tz, tax, tay, taz);
         }
+        sbtp++;
     } else {
         // box is too close, open up its children
         (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tz, tax, tay, taz);
@@ -265,6 +280,11 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
                         targs.x[i], targs.y[i], targs.z[i],
                         targs.u[i], targs.v[i], targs.w[i]);
     }
+
+    // report on the number of interactions
+    treecode2_block(srcs, eqsrcs, stree, 0, theta,
+                    targs.x[0], targs.y[0], targs.z[0],
+                    targs.u[0], targs.v[0], targs.w[0]);
 }
 
 //
@@ -272,9 +292,9 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
 //
 template <class S, class A>
 A least_squares_val(const S xt, const S yt, const S zt,
-                        const std::vector<S>& x, const std::vector<S>& y,
-                        const std::vector<S>& z, const std::vector<A>& u,
-                        const int istart, const int iend) {
+                    const std::vector<S>& x, const std::vector<S>& y,
+                    const std::vector<S>& z, const std::vector<A>& u,
+                    const int istart, const int iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
     S sn = 0.0f;
@@ -323,6 +343,7 @@ A least_squares_val(const S xt, const S yt, const S zt,
         sy2 += weight*dy*dy;
         sz2 += weight*dz*dz;
     }
+    // 47 flops per iter
     //printf("    sums are %g %g %g %g %g ...\n", sx, sy, sz, sv, sxy);
 
     // now begin to solve the equation
@@ -344,8 +365,10 @@ A least_squares_val(const S xt, const S yt, const S zt,
     const S r1 = i3*k1 - i1*k3;
     const S r2 = i3*k2 - i2*k3;
     const S r3 = i3*k4 - i4*k3;
+    // 18*3 = 54 flops
 
     const A b1 = (r2*q3 - r3*q2) / (r2*q1 - r1*q2);
+    // 7 more
     //printf("    b1 is %g\n", b1);
     //const float b2 = r3/r2 - b1*r1/r2;
     //printf("    b2 is %g\n", b2);
@@ -353,6 +376,8 @@ A least_squares_val(const S xt, const S yt, const S zt,
     //printf("    b3 is %g\n", b3);
     //const float b4 = sv/sz - b1/sz - b2*sx/sz - b3*sy/sz;
     //printf("    b4 is %g\n", b4);
+
+    // when 16 contributing points, this is 813 flops
 
     //if (fabs(u[istart]) > 0.0) exit(0);
     return b1;
