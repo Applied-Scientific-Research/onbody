@@ -148,6 +148,21 @@ It looks like both 5.4.0 and 6.3.0 can vectorize properly, though 6.3.0 is subst
 
 Also note that the `tree2` method, a simple treecode, can solve for the velocities from 1 million vortex particles to 1.5e-3 mean error in four seconds (13004/3210) on a CPU alone. The OmegaFlow v2 code does the same in about 20s on the CPU and 0.7s when using a 1060GTX GPU.
 
+#### How much work is the treecode doing?
+
+For ~2e-3 error (theta=0.95), the equivalent particle treecode performs, on average, and for each target 
+particle, the following number of box interactions. Also are the same numbers for the O(N) code for
+numbers of source boxes per target box with theta=1.6.
+
+N       | leaf   | equiv   | leaf-b  | equiv-b
+--------|--------|---------|---------|--------
+10000   | 7.8352 | 20.5085 | 74.2102 | 3.55414
+100000  | 10.066 | 37.0454 | 142.049 | 5.0032
+1000000 | 11.043 | 53.5838 | 194.929 | 6.53357
+
+Clearly the logic or the box-opening criteria for the O(N) solver are flawed, or the prolongation
+is horribly inaccurate.
+
 #### Performance on 12-core pair of E5-2640
 
 Runs at 2.8 GHz when all-cores are going, 3 GHz when one. First, GCC 4.8.5 (which has no `-ftree-loop-vectorize` option):
