@@ -148,6 +148,50 @@ It looks like both 5.4.0 and 6.3.0 can vectorize properly, though 6.3.0 is subst
 
 Also note that the `tree2` method, a simple treecode, can solve for the velocities from 1 million vortex particles to 1.5e-3 mean error in four seconds (13004/3210) on a CPU alone. The OmegaFlow v2 code does the same in about 20s on the CPU and 0.7s when using a 1060GTX GPU.
 
+#### Performance on 12-core pair of E5-2640
+
+Runs at 2.8 GHz when all-cores are going, 3 GHz when one. First, GCC 4.8.5 (which has no `-ftree-loop-vectorize` option):
+
+N        | build src tree | naive     | tree2   | fast
+---------|----------------|-----------|---------|---------
+10000    | 30.200         | 418.651   | 77.973  | 241.923
+100000   | 300.189        | 33630.274 | 1177.29 | 4255.02
+1000000  | 3165.784       | 3404879.2 | 14892.9 | 56113.8
+10000000 | 47878.648      | 341073932 | 223259.7| 683045.8
+
+Now 4.9.2, which has both vectorize options:
+
+N        | build src tree | naive     | tree2   | fast
+---------|----------------|-----------|---------|---------
+100000   | 300.037        | 33089.904 | 1285.03 | 4150.51
+1000000  | 3468.261       | 3347075.6 | 14747.3 | 54929.4
+
+Now 5.4.0:
+
+N        | build src tree | naive     | tree2   | fast
+---------|----------------|-----------|---------|---------
+100000   | 294.262        | 16795.127 | 667.680 | 2165.22
+1000000  | 3166.409       | 1687193.3 | 7775.89 | 28453.8
+
+And 6.3.0:
+
+N        | build src tree | naive     | tree2   | fast
+---------|----------------|-----------|---------|---------
+100000   | 285.601        | 5575.831  | 318.697 | 903.100
+1000000  | 3124.428       | 626915.86 | 2961.90 | 10244.95
+
+And finally 7.1.0 (yep, still 2.8 GHz):
+
+N        | build src tree | naive     | tree2   | fast
+---------|----------------|-----------|---------|---------
+100000   | 298.209        | 5468.109  | 310.892 | 852.453
+1000000  | 3183.098       | 659180.43 | 2884.31 | 9562.412
+10000000 | 48107.493      | 81118117. | 43595.8 | 118644.39
+
+For the n=100000 problem, this CPU achieves 107 GFlop/s.
+
+
+
 ## To Do
 
 * Start comparing accuracy of treecode and report it  - DONE
