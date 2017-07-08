@@ -209,6 +209,18 @@ For the n=100000 problem, this CPU achieves 107 GFlop/s.
 
 ## To Do
 
+* Increase accuracy of the prolongation operator
+* This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
+* Tweak box-opening criterion and see if it improves accuracy per time
+* Use smarter or faster data structures in the O(N) list-building system
+* Enable OpenMP parallelization for the tree-build part
+* Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
+* Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
+* Add radii to the target points (even if all zeros) and include their effect in the core function
+* Compare stats to fast method
+
+* Add SSE2 vectorization - DONE
+* Try gcc 6.3.0 to see if it vectorizes - DONE
 * Start comparing accuracy of treecode and report it  - DONE
 * Find out why tree-build is O(N^2) - DONE
 * Why is error not zero for n=129 ? - DONE
@@ -216,17 +228,15 @@ For the n=100000 problem, this CPU achieves 107 GFlop/s.
 * Run with equivalent particles and compare performance and error - DONE
 * Begin building target trees - DONE
 * Work on O(N) method - DONE
-* Increase accuracy of the prolongation operator
-* This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
-* Tweak box-opening criterion and see if it improves accuracy per time
-* Use smarter or faster data structures in the O(N) list-building system
 * Write O(N^2) method in double-precision to allow more fair error comparisons
-  but only run it on the first 100 or 1000 target particles
-* Get clang or g++ to vectorize the innermost loops
-* Enable OpenMP parallelization - or - try std::thread for the tree-build part
-* Turn Particles (done) and Tree (not done) into classes
-* Specialize or Templatize the Particle class to allow it to be used efficiently for sources or targets
-* Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
-* Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
-* Add radii to the target points (even if all zeros) and include their effect in the core function
+  but only run it on the first 100 or 1000 target particles - DONE
+* Get clang or g++ to vectorize the innermost loops - DONE for g++
+* Turn Particles (done) and Tree (done) into classes - DONE
+* Specialize or Templatize the Particle class to allow it to be used efficiently for sources or targets - DONE
+* Calculate stats (leaf boxes, non-leaf boxes) for equiv particle treecode - DONE
+* Compare performance vs. various block sizes - while 64 is probably ideal for GPUs, is less best for CPU?
+  make sure to add tree-build times to the performance figures - DONE
+* See if I can get gcc to vectorize the inner loops - we need to speed this up - DONE
+
+
 
