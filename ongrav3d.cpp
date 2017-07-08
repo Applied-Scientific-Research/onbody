@@ -12,7 +12,7 @@
 #include <vector>
 #include <iostream>
 #include <algorithm>	// for sort and minmax
-#include <numeric>		// for iota
+#include <numeric>	// for iota
 #include "timing.h"
 
 const int blockSize = 64;
@@ -1135,7 +1135,7 @@ int main(int argc, char *argv[]) {
     std::vector<float> naiveu(targs.u.begin(), targs.u.end());
 
     float errsum = 0.0;
-    int errcnt = 0;
+    float errcnt = 0.0;
 
     //
     // Run a simple O(NlogN) treecode - boxes approximate as particles
@@ -1158,11 +1158,11 @@ int main(int argc, char *argv[]) {
 
     // compare accuracy
     errsum = 0.0;
-    errcnt = 0;
+    errcnt = 0.0;
     for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
-        errcnt++;
+        errcnt += naiveu[i]*naiveu[i];
     }
     printf("RMS error in treecode is %g\n", sqrtf(errsum/errcnt));
     }
@@ -1189,11 +1189,11 @@ int main(int argc, char *argv[]) {
 
     // compare accuracy
     errsum = 0.0;
-    errcnt = 0;
+    errcnt = 0.0;
     for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
-        errcnt++;
+        errcnt += naiveu[i]*naiveu[i];
     }
     printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
     }
@@ -1225,11 +1225,11 @@ int main(int argc, char *argv[]) {
 
     // compare accuracy
     errsum = 0.0;
-    errcnt = 0;
+    errcnt = 0.0;
     for (auto i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
-        errcnt++;
+        errcnt += naiveu[i]*naiveu[i];
     }
     printf("RMS error in fastsumm is %g\n", sqrtf(errsum/errcnt));
     }
