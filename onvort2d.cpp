@@ -18,6 +18,16 @@
 const int blockSize = 64;
 
 //
+// Find index of msb of uint32
+// from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
+//
+static inline uint32_t log_2(const uint32_t x) {
+    if (x == 0) return 0;
+    return (31 - __builtin_clz (x));
+}
+
+
+//
 // A set of particles, can be sources or targets
 //
 // templatized on storage and accumulator types
@@ -78,11 +88,16 @@ void Parts<S,A>::random_in_cube() {
 // this way, node i children are 2*i and 2*i+1
 //
 template <class S>
-struct Tree {
+class Tree {
+public:
+    Tree(int);
+    void resize(int);
+
     // number of levels in the tree
     int levels;
     // number of nodes in the tree (always 2^l)
     int numnodes;
+
     // tree node centers (of mass?)
     alignas(32) std::vector<S> x;
     alignas(32) std::vector<S> y;
@@ -101,14 +116,34 @@ struct Tree {
     alignas(32) std::vector<int> epnum;
 };
 
-//
-// Find index of msb of uint32
-// from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
-//
-static inline uint32_t log_2(const uint32_t x) {
-    if (x == 0) return 0;
-    return (31 - __builtin_clz (x));
+template <class S>
+Tree<S>::Tree(int _num) {
+    // _num is number of elements this tree needs to store
+    uint32_t numLeaf = 1 + ((_num-1)/blockSize);
+    printf("  %d nodes at leaf level\n", numLeaf);
+    levels = 1 + log_2(2*numLeaf-1);
+    printf("  makes %d levels in tree\n", levels);
+    numnodes = 1 << levels;
+    printf("  and %d total nodes in tree\n", numnodes);
+    resize(numnodes);
 }
+
+template <class S>
+void Tree<S>::resize(int _num) {
+    numnodes = _num;
+    x.resize(numnodes);
+    y.resize(numnodes);
+    s.resize(numnodes);
+    r.resize(numnodes);
+    m.resize(numnodes);
+    ioffset.resize(numnodes);
+    num.resize(numnodes);
+    std::fill(num.begin(), num.end(), 0);
+    epoffset.resize(numnodes);
+    epnum.resize(numnodes);
+}
+
+
 
 //
 // The inner, scalar kernel
@@ -949,6 +984,7 @@ int main(int argc, char *argv[]) {
     srcs.random_in_cube();
 
     Parts<float,double> targs(numTargs);
+    // initialize particle data
     targs.random_in_cube();
     for (auto&& m : targs.m) { m = 1.0f; }
     printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
@@ -957,21 +993,8 @@ int main(int argc, char *argv[]) {
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
     reset_and_start_timer();
-    Tree<float> stree;
+    Tree<float> stree(numSrcs);
     printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
-    uint32_t numLeaf = 1 + ((numSrcs-1)/blockSize);
-    printf("  %d nodes at leaf level\n", numLeaf);
-    stree.levels = 1 + log_2(2*numLeaf-1);
-    printf("  makes %d levels in tree\n", stree.levels);
-    stree.numnodes = 1 << stree.levels;
-    printf("  and %d total nodes in tree\n", stree.numnodes);
-    stree.x.resize(stree.numnodes);
-    stree.y.resize(stree.numnodes);
-    stree.s.resize(stree.numnodes);
-    stree.m.resize(stree.numnodes);
-    stree.ioffset.resize(stree.numnodes);
-    stree.num.resize(stree.numnodes);
-    std::fill(stree.num.begin(), stree.num.end(), 0);
     printf("  allocate and init tree:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // split this node and recurse
@@ -984,8 +1007,6 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
     Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqsrcs.n);
-    stree.epoffset.resize(stree.numnodes);
-    stree.epnum.resize(stree.numnodes);
     printf("  allocate eqsrcs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
@@ -1000,24 +1021,11 @@ int main(int argc, char *argv[]) {
     (void) calcEquivalents(srcs, eqsrcs, stree, 1);
     printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
+
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     reset_and_start_timer();
-    Tree<float> ttree;
-    printf("  with %d particles and block size of %d\n", numTargs, blockSize);
-    numLeaf = 1 + ((numTargs-1)/blockSize);
-    printf("  %d nodes at leaf level\n", numLeaf);
-    ttree.levels = 1 + log_2(2*numLeaf-1);
-    printf("  makes %d levels in tree\n", ttree.levels);
-    ttree.numnodes = 1 << ttree.levels;
-    printf("  and %d total nodes in tree\n", ttree.numnodes);
-    ttree.x.resize(ttree.numnodes);
-    ttree.y.resize(ttree.numnodes);
-    ttree.s.resize(ttree.numnodes);
-    ttree.m.resize(ttree.numnodes);
-    ttree.ioffset.resize(ttree.numnodes);
-    ttree.num.resize(ttree.numnodes);
-    std::fill(ttree.num.begin(), ttree.num.end(), 0);
+    Tree<float> ttree(numTargs);
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
     printf("  allocate and init tree:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
@@ -1031,8 +1039,6 @@ int main(int argc, char *argv[]) {
     reset_and_start_timer();
     Parts<float,double> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqtargs.n);
-    ttree.epoffset.resize(ttree.numnodes);
-    ttree.epnum.resize(ttree.numnodes);
     printf("  allocate eqtargs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
