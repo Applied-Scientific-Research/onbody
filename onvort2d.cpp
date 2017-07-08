@@ -52,6 +52,10 @@ public:
     // temporary
     alignas(32) std::vector<size_t> itemp;
     alignas(32) std::vector<S> ftemp;
+
+    // useful later
+    //typename S::value_type state_type;
+    //typename A::value_type accumulator_type;
 };
 
 template <class S, class A>
@@ -77,7 +81,7 @@ void Parts<S,A>::random_in_cube() {
     for (auto&& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
     for (auto&& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
     for (auto&& _r : r) { _r = 1.0f / sqrt((S)n); }
-    for (auto&& _m : m) { _m = -1.0f + 2.0f*(S)rand()/(S)RAND_MAX / (S)n; }
+    for (auto&& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / sqrt((S)n); }
 }
 
 //
@@ -157,7 +161,7 @@ static inline void nbody_kernel(const S sx, const S sy,
     const S dx = sx - tx;
     const S dy = sy - ty;
     S r2 = dx*dx + dy*dy + sr*sr;
-    r2 = sm/sqrt(r2);
+    r2 = sm/r2;
     tax += r2 * dy;
     tay -= r2 * dx;
 }
@@ -740,9 +744,25 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("find mass/cm\n");
     //reset_and_start_timer();
     t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
-    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
-    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
-    //printf("  total mass %g and cm %g %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode], t.z[tnode]);
+
+    // create temporary vector of absolute values of strength
+    //alignas(32) decltype(p.m) absstr(plast-pfirst);
+    alignas(32) decltype(p.m) absstr(p.m.begin()+pfirst, p.m.begin()+plast);
+    //std::cout << "allocating length " << plast-pfirst << std::endl;
+    //std::copy(p.m.begin()+pfirst, p.m.begin()+plast, absstr.begin());
+    //std::for_each(absstr.begin(), absstr.end(), [](float &str){ std::cout << str; });
+    //std::cout << std::endl;
+
+    //std::transform(p.m.begin()+pfirst, p.m.begin()+plast, absstr.begin(), std::abs<float>());
+    //for_each(absstr.begin(), absstr.end(), std::abs);
+    std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
+
+    // sum of abs of strengths
+    auto nodestr = std::accumulate(absstr.begin(), absstr.end(), 0.0);
+
+    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, absstr.begin(), 0.0) / nodestr;
+    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, absstr.begin(), 0.0) / nodestr;
+    //printf("  total mass %g abs mass %g and cm %g %g\n", t.m[tnode], nodestr, t.x[tnode], t.y[tnode]);
 
     // write all this data to the tree node
     t.ioffset[tnode] = pfirst;
@@ -894,11 +914,13 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S pairm = ep.m[ip-1] + ep.m[ip];
-                ep.x[iep] = (ep.x[ip-1]*ep.m[ip-1] + ep.x[ip]*ep.m[ip]) / pairm;
-                ep.y[iep] = (ep.y[ip-1]*ep.m[ip-1] + ep.y[ip]*ep.m[ip]) / pairm;
-                ep.r[iep] = (ep.r[ip-1]*ep.m[ip-1] + ep.r[ip]*ep.m[ip]) / pairm;
-                ep.m[iep] = pairm;
+                S str1 = abs(ep.m[ip-1]);
+                S str2 = abs(ep.m[ip]);
+                S pairm = str1 + str2;
+                ep.x[iep] = (ep.x[ip-1]*str1 + ep.x[ip]*str2) / pairm;
+                ep.y[iep] = (ep.y[ip-1]*str1 + ep.y[ip]*str2) / pairm;
+                ep.r[iep] = (ep.r[ip-1]*str1 + ep.r[ip]*str2) / pairm;
+                ep.m[iep] = ep.m[ip-1] + ep.m[ip];
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.epoffset[ichild]+t.epnum[ichild]) {
@@ -925,11 +947,13 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S pairm = p.m[ip-1] + p.m[ip];
-                ep.x[iep] = (p.x[ip-1]*p.m[ip-1] + p.x[ip]*p.m[ip]) / pairm;
-                ep.y[iep] = (p.y[ip-1]*p.m[ip-1] + p.y[ip]*p.m[ip]) / pairm;
-                ep.r[iep] = (p.r[ip-1]*p.m[ip-1] + p.r[ip]*p.m[ip]) / pairm;
-                ep.m[iep] = pairm;
+                S str1 = abs(p.m[ip-1]);
+                S str2 = abs(p.m[ip]);
+                S pairm = str1 + str2;
+                ep.x[iep] = (p.x[ip-1]*str1 + p.x[ip]*str2) / pairm;
+                ep.y[iep] = (p.y[ip-1]*str1 + p.y[ip]*str2) / pairm;
+                ep.r[iep] = (p.r[ip-1]*str1 + p.r[ip]*str2) / pairm;
+                ep.m[iep] = p.m[ip-1] + p.m[ip];
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.ioffset[ichild]+t.num[ichild]) {
@@ -959,7 +983,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 0, 1, 1};
+    static std::vector<int> test_iterations = {1, 1, 1, 1};
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -1080,12 +1104,12 @@ int main(int argc, char *argv[]) {
     double minTreecode = 1e30;
     for (unsigned int i = 0; i < test_iterations[1]; ++i) {
         reset_and_start_timer();
-        nbody_treecode1(srcs, stree, targs, 2.9f);
+        nbody_treecode1(srcs, stree, targs, 8.0f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode = std::min(minTreecode, dt);
     }
-    printf("[onbody treecode]:\t\t\t[%.3f] million cycles\n", minTreecode);
+    printf("[onbody treecode]:\t\t[%.3f] million cycles\n", minTreecode);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g\n",i,targs.u[i],targs.v[i]);
     // save the results for comparison
@@ -1111,7 +1135,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.95f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 2.5f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
