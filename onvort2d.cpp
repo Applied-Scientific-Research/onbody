@@ -749,16 +749,9 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //reset_and_start_timer();
     t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
 
-    // create temporary vector of absolute values of strength
-    //alignas(32) decltype(p.m) absstr(plast-pfirst);
+    // copy strength vector
     alignas(32) decltype(p.m) absstr(p.m.begin()+pfirst, p.m.begin()+plast);
-    //std::cout << "allocating length " << plast-pfirst << std::endl;
-    //std::copy(p.m.begin()+pfirst, p.m.begin()+plast, absstr.begin());
-    //std::for_each(absstr.begin(), absstr.end(), [](float &str){ std::cout << str; });
-    //std::cout << std::endl;
-
-    //std::transform(p.m.begin()+pfirst, p.m.begin()+plast, absstr.begin(), std::abs<float>());
-    //for_each(absstr.begin(), absstr.end(), std::abs);
+    // find abs() of each entry using a lambda
     std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
 
     // sum of abs of strengths
