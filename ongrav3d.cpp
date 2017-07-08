@@ -1115,7 +1115,7 @@ int main(int argc, char *argv[]) {
     //
     // Run the O(N^2) implementation
     //
-    printf("\nRun the naive O(N^2) method (every %d particle)\n", ntskip);
+    printf("\nRun the naive O(N^2) method (every %d particles)\n", ntskip);
     double minNaive = 1e30;
     for (unsigned int i = 0; i < test_iterations[0]; ++i) {
         reset_and_start_timer();
@@ -1171,7 +1171,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (unsigned int i = 0; i < test_iterations[2]; ++i) {
         reset_and_start_timer();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.95f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.1f);
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
@@ -1206,7 +1206,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 1.6f);
+                       1, source_boxes, 2.3f);
         #pragma omp taskwait
         double dt = get_elapsed_mcycles();
         printf("  this run time:\t\t[%.3f] million cycles\n", dt);
