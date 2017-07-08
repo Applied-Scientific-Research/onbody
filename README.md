@@ -219,6 +219,7 @@ N        | build tree serial | build tree omp | refine serial | refine omp
 
 ## To Do
 
+* For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency!
 * Increase accuracy of the prolongation operator
 * This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Tweak box-opening criterion and see if it improves accuracy per time
