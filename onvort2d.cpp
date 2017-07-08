@@ -676,6 +676,10 @@ void sortIndexesSection(const std::vector<S> &v,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
+  // use omp to figure out how many threads are being used now,
+  // then split into threads to perform the sort in parallel, then
+  // zipper them all together again
+
   // initialize original index locations
   std::iota(idx.begin()+istart, idx.begin()+istop, istart);
 
@@ -992,7 +996,7 @@ static void usage() {
 int main(int argc, char *argv[]) {
 
     static std::vector<int> test_iterations = {1, 0, 1, 1};
-    bool just_build_trees = true;
+    bool just_build_trees = false;
     int numSrcs = 10000;
     int numTargs = 10000;
 
