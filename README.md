@@ -205,6 +205,16 @@ N        | build src tree | naive     | tree2   | fast
 
 For the n=100000 problem, this CPU achieves 107 GFlop/s.
 
+#### Parallelizing the tree-build
+
+Using GCC 6.3.0 we add OpenMP tasks to parallelize the tree-build. Here are some performance results for the sources in `ongrav3d`. All measurements are in mcycles on `spy` using `blockSize` of 64.
+
+N        | build tree serial | build tree omp | refine serial | refine omp
+---------|-------------------|----------------|---------------|------------
+100000   | 186.627           | 70.526         | 41.942        | 10.050
+1000000  | 2740.769          | 920.562        | 396.547       | 87.359
+10000000 | 48629.241         | 22333.097      | 3998.997      | 887.707
+
 
 
 ## To Do
@@ -213,7 +223,6 @@ For the n=100000 problem, this CPU achieves 107 GFlop/s.
 * This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Tweak box-opening criterion and see if it improves accuracy per time
 * Use smarter or faster data structures in the O(N) list-building system
-* Enable OpenMP parallelization for the tree-build part
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
@@ -237,6 +246,7 @@ For the n=100000 problem, this CPU achieves 107 GFlop/s.
 * Compare performance vs. various block sizes - while 64 is probably ideal for GPUs, is less best for CPU?
   make sure to add tree-build times to the performance figures - DONE
 * See if I can get gcc to vectorize the inner loops - we need to speed this up - DONE
+* Enable OpenMP parallelization for the tree-build part - DONE
 
 
 

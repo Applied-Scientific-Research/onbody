@@ -842,8 +842,14 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
 
     // recursively call this routine for this node's new children
+    #pragma omp task shared(p,t)
     (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
+    #pragma omp task shared(p,t)
     (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
+
+    if (tnode == 1) {
+        // this is executed on the final call
+    }
 }
 
 //
@@ -908,7 +914,9 @@ void refineTree(Parts<S,A>& p, Tree<S>& t, int tnode) {
         //    printf("  %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     } else {
         // recurse and check child nodes
+        #pragma omp task shared(p,t)
         (void) refineTree(p, t, 2*tnode);
+        #pragma omp task shared(p,t)
         (void) refineTree(p, t, 2*tnode+1);
     }
 }
@@ -1025,6 +1033,7 @@ static void usage() {
 int main(int argc, char *argv[]) {
 
     static std::vector<int> test_iterations = {1, 0, 1, 1};
+    bool just_build_trees = true;
     int numSrcs = 10000;
     int numTargs = 10000;
 
@@ -1064,7 +1073,10 @@ int main(int argc, char *argv[]) {
 
     // split this node and recurse
     reset_and_start_timer();
+    #pragma omp parallel
+    #pragma omp single
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
+    #pragma omp taskwait
     printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find equivalent particles
@@ -1076,7 +1088,10 @@ int main(int argc, char *argv[]) {
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
+    #pragma omp parallel
+    #pragma omp single
     (void) refineTree(srcs, stree, 1);
+    #pragma omp taskwait
     printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
     //for (int i=0; i<stree.num[1]; ++i)
     //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
@@ -1096,7 +1111,10 @@ int main(int argc, char *argv[]) {
 
     // split this node and recurse
     reset_and_start_timer();
+    #pragma omp parallel
+    #pragma omp single
     (void) splitNode(targs, 0, targs.n, ttree, 1);
+    #pragma omp taskwait
     printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find equivalent points
@@ -1108,7 +1126,10 @@ int main(int argc, char *argv[]) {
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     reset_and_start_timer();
+    #pragma omp parallel
+    #pragma omp single
     (void) refineTree(targs, ttree, 1);
+    #pragma omp taskwait
     printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // then, march through arrays merging pairs as you go up
@@ -1116,6 +1137,7 @@ int main(int argc, char *argv[]) {
     (void) calcEquivalents(targs, eqtargs, ttree, 1);
     printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
+    if (just_build_trees) exit(0);
 
     //
     // Run the O(N^2) implementation
