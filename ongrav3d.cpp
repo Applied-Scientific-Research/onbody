@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+#include <omp.h>
 #include <vector>
 #include <iostream>
 #include <algorithm>	// for sort and minmax
@@ -723,6 +724,10 @@ void sortIndexesSection(const std::vector<S> &v,
   // use omp to figure out how many threads are being used now,
   // then split into threads to perform the sort in parallel, then
   // zipper them all together again
+  // no: get tree level from caller and decide here whether to split or not!
+  // openmp nested parallelism will work, but don't use tasks here
+  // std::merge_inplace() is your friend here! as is recursion
+  // make sub call named "split_sort_and_merge" or something
 
   // initialize original index locations
   std::iota(idx.begin()+istart, idx.begin()+istop, istart);
@@ -772,13 +777,15 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
+    const int thislev = log_2(tnode);
 
     // debug print - starting condition
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //if (pfirst == 0) printf("  splitNode at level ? with %n threads\n", ::omp_get_num_threads());
+    if (pfirst == 0) printf("  splitNode at level %d with %d threads\n", thislev, ::omp_get_num_threads());
 
     // find the min/max of the three axes
-    //printf("find min/max\n");
-    //reset_and_start_timer();
+    if (pfirst == 0) reset_and_start_timer();
     std::vector<S> boxsizes(3);
     auto minmax = minMaxValue(p.x, pfirst, plast);
     boxsizes[0] = minmax.second - minmax.first;
@@ -789,16 +796,17 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     minmax = minMaxValue(p.z, pfirst, plast);
     boxsizes[2] = minmax.second - minmax.first;
     //printf("       z min/max %g %g\n", minmax.first, minmax.second);
-    //printf("  minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    if (pfirst == 0) printf("    minmax time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // find total mass and center of mass
     //printf("find mass/cm\n");
-    //reset_and_start_timer();
+    if (pfirst == 0) reset_and_start_timer();
     t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
     t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
     t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
     t.z[tnode] = std::inner_product(p.z.begin()+pfirst, p.z.begin()+plast, p.m.begin()+pfirst, 0.0) / t.m[tnode];
     //printf("  total mass %g and cm %g %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode], t.z[tnode]);
+    if (pfirst == 0) printf("    inner product time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // write all this data to the tree node
     t.ioffset[tnode] = pfirst;
@@ -816,7 +824,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
 
     // sort this portion of the array along the big axis
     //printf("sort\n");
-    //reset_and_start_timer();
+    if (pfirst == 0) reset_and_start_timer();
     if (maxaxis == 0) {
         (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
         //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
@@ -828,18 +836,25 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
         //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
     }
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
-    //printf("  sort time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
-    // rearrange the elements
+    // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
-    //reset_and_start_timer();
-    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.z, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
+    if (pfirst == 0) reset_and_start_timer();
+    //#pragma omp parallel sections if(thislev < 2)
+    {
+      { reorder(p.x, p.ftemp, p.itemp, pfirst, plast); }
+      //#pragma omp section
+      { reorder(p.y, p.ftemp, p.itemp, pfirst, plast); }
+      //#pragma omp section
+      { reorder(p.z, p.ftemp, p.itemp, pfirst, plast); }
+      //#pragma omp section
+      { reorder(p.m, p.ftemp, p.itemp, pfirst, plast); }
+      //#pragma omp section
+      { reorder(p.r, p.ftemp, p.itemp, pfirst, plast); }
+    }
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
-    //printf("  reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // determine where the split should be
     size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
@@ -1037,7 +1052,7 @@ static void usage() {
 int main(int argc, char *argv[]) {
 
     static std::vector<int> test_iterations = {1, 0, 1, 1};
-    bool just_build_trees = false;
+    bool just_build_trees = true;
     int numSrcs = 10000;
     int numTargs = 10000;
 
