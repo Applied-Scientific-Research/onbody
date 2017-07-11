@@ -717,7 +717,8 @@ std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
 template <class S>
-void sortIndexesSection(const std::vector<S> &v,
+void sortIndexesSection(const int recursion_level,
+                        const std::vector<S> &v,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
@@ -726,8 +727,10 @@ void sortIndexesSection(const std::vector<S> &v,
   // zipper them all together again
   // no: get tree level from caller and decide here whether to split or not!
   // openmp nested parallelism will work, but don't use tasks here
-  // std::merge_inplace() is your friend here! as is recursion
+  // std::inplace_merge() is your friend here! as is recursion
   // make sub call named "split_sort_and_merge" or something
+
+  //const int split_threads = 2 << recursion_level;
 
   // initialize original index locations
   std::iota(idx.begin()+istart, idx.begin()+istop, istart);
@@ -778,11 +781,12 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
     const int thislev = log_2(tnode);
+    const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
 
     // debug print - starting condition
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("  splitNode at level ? with %n threads\n", ::omp_get_num_threads());
-    if (pfirst == 0) printf("  splitNode at level %d with %d threads\n", thislev, ::omp_get_num_threads());
+    if (pfirst == 0) printf("  splitNode at level %d with %d threads, %d recursions\n", thislev, ::omp_get_num_threads(), sort_recursion);
 
     // find the min/max of the three axes
     if (pfirst == 0) reset_and_start_timer();
@@ -826,13 +830,13 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("sort\n");
     if (pfirst == 0) reset_and_start_timer();
     if (maxaxis == 0) {
-        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(sort_recursion, p.x, p.itemp, pfirst, plast);
         //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
     } else if (maxaxis == 1) {
-        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(sort_recursion, p.y, p.itemp, pfirst, plast);
         //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
     } else if (maxaxis == 2) {
-        (void) sortIndexesSection(p.z, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(sort_recursion, p.z, p.itemp, pfirst, plast);
         //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
     }
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
@@ -898,11 +902,11 @@ void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
 
     // sort this portion of the array along the big axis
     if (maxaxis == 0) {
-        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(0, p.x, p.itemp, pfirst, plast);
     } else if (maxaxis == 1) {
-        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(0, p.y, p.itemp, pfirst, plast);
     } else if (maxaxis == 2) {
-        (void) sortIndexesSection(p.z, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(0, p.z, p.itemp, pfirst, plast);
     }
 
     // rearrange the elements
