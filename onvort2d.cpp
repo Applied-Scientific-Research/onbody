@@ -979,7 +979,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: onbody [-n=<factor>] [iterations]\n");
+    fprintf(stderr, "Usage: onvort2d [-n=<nparticles>]\n");
     exit(1);
 }
 
