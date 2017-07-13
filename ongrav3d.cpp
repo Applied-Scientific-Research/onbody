@@ -722,13 +722,13 @@ void splitSort(const int recursion_level,
                std::vector<size_t> &idx,
                const size_t istart, const size_t istop) {
 
-  printf("      inside splitSort with level %d\n", recursion_level);
+  //printf("      inside splitSort with level %d\n", recursion_level);
   // std::inplace_merge() is your friend here! as is recursion
 
 
   if (recursion_level == 0 or (istop-istart < 100) ) {
     // we are parallel enough: let this thread sort its chunk
-    printf("      performing standard sort\n");
+    //printf("      performing standard sort\n");
 
     // sort indexes based on comparing values in v
     std::sort(idx.begin()+istart,
@@ -737,22 +737,25 @@ void splitSort(const int recursion_level,
 
   } else {
     // we are not parallel enough: fork and join until we are
-    printf("      performing split sort\n");
+    //printf("      performing split sort\n");
 
     const size_t imiddle = istart + (istop-istart)/2;
 
     // fork a thread for the first half
-    //auto handle = std::async(std::launch::async,
-    std::future<void> handle = std::async(std::launch::async,
-                             splitSort<S>, recursion_level-1, v, idx, istart, imiddle);
-                             //&splitSort<S>, recursion_level-1, v, idx, istart, imiddle);
-                             //splitSort, recursion_level-1, v, idx, istart, imiddle);
+    #ifdef _OPENMP
+    auto handle = std::async(std::launch::async,
+                             splitSort<S>, recursion_level-1, std::cref(v), std::ref(idx), istart, imiddle);
+    #else
+    splitSort(recursion_level-1, v, idx, istart, imiddle);
+    #endif
 
     // do the second half here
     splitSort(recursion_level-1, v, idx, imiddle, istop);
 
     // force the thread to join
+    #ifdef _OPENMP
     handle.get();
+    #endif
 
     // zipper the results together
     std::inplace_merge(idx.begin()+istart,
@@ -773,13 +776,7 @@ void sortIndexesSection(const int recursion_level,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
-  if (istart == 0) printf("    inside sortIndexesSection with level %d\n", recursion_level);
-  // use omp to figure out how many threads are being used now,
-  // then split into threads to perform the sort in parallel, then
-  // zipper them all together again
-  // no: get tree level from caller and decide here whether to split or not!
-  // openmp nested parallelism will work, but don't use tasks here
-  // std::inplace_merge() is your friend here! as is recursion
+  //if (istart == 0) printf("    inside sortIndexesSection with level %d\n", recursion_level);
 
   // initialize original index locations
   std::iota(idx.begin()+istart, idx.begin()+istop, istart);
@@ -787,8 +784,8 @@ void sortIndexesSection(const int recursion_level,
   // sort indexes based on comparing values in v, possibly with forking
   splitSort(recursion_level, v, idx, istart, istop);
 
-  for (auto i = istart; i < istop; i+=10) printf("   %d %d %g\n",i,idx[i],v[idx[i]]);
-  exit(0);
+  //for (auto i = istart; i < istop; i+=10) printf("   %d %d %g\n",i,idx[i],v[idx[i]]);
+  //exit(0);
 }
 
 //
@@ -833,8 +830,8 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
     const int thislev = log_2(tnode);
     //const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
-    const int sort_recursion = std::max(0, 1 - thislev);
-    //const int sort_recursion = 0;
+    //const int sort_recursion = std::max(0, 2 - thislev);
+    const int sort_recursion = 0;
 
     // debug print - starting condition
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
