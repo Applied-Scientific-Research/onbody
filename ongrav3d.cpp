@@ -14,6 +14,7 @@
 #include <iostream>
 #include <algorithm>	// for sort and minmax
 #include <numeric>	// for iota
+#include <future>	// for async
 #include "timing.h"
 
 const int blockSize = 64;
@@ -713,6 +714,56 @@ std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 }
 
 //
+// Split into two threads, sort, and zipper
+//
+template <class S>
+void splitSort(const int recursion_level,
+               const std::vector<S> &v,
+               std::vector<size_t> &idx,
+               const size_t istart, const size_t istop) {
+
+  printf("      inside splitSort with level %d\n", recursion_level);
+  // std::inplace_merge() is your friend here! as is recursion
+
+
+  if (recursion_level == 0 or (istop-istart < 100) ) {
+    // we are parallel enough: let this thread sort its chunk
+    printf("      performing standard sort\n");
+
+    // sort indexes based on comparing values in v
+    std::sort(idx.begin()+istart,
+              idx.begin()+istop,
+              [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  } else {
+    // we are not parallel enough: fork and join until we are
+    printf("      performing split sort\n");
+
+    const size_t imiddle = istart + (istop-istart)/2;
+
+    // fork a thread for the first half
+    //auto handle = std::async(std::launch::async,
+    std::future<void> handle = std::async(std::launch::async,
+                             splitSort<S>, recursion_level-1, v, idx, istart, imiddle);
+                             //&splitSort<S>, recursion_level-1, v, idx, istart, imiddle);
+                             //splitSort, recursion_level-1, v, idx, istart, imiddle);
+
+    // do the second half here
+    splitSort(recursion_level-1, v, idx, imiddle, istop);
+
+    // force the thread to join
+    handle.get();
+
+    // zipper the results together
+    std::inplace_merge(idx.begin()+istart,
+                       idx.begin()+imiddle,
+                       idx.begin()+istop,
+                       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+  }
+
+}
+
+//
 // Sort but retain only sorted index! Uses C++11 lambdas
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
@@ -722,22 +773,22 @@ void sortIndexesSection(const int recursion_level,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
+  if (istart == 0) printf("    inside sortIndexesSection with level %d\n", recursion_level);
   // use omp to figure out how many threads are being used now,
   // then split into threads to perform the sort in parallel, then
   // zipper them all together again
   // no: get tree level from caller and decide here whether to split or not!
   // openmp nested parallelism will work, but don't use tasks here
   // std::inplace_merge() is your friend here! as is recursion
-  // make sub call named "split_sort_and_merge" or something
-
-  //const int split_threads = 2 << recursion_level;
 
   // initialize original index locations
   std::iota(idx.begin()+istart, idx.begin()+istop, istart);
 
-  // sort indexes based on comparing values in v
-  std::sort(idx.begin()+istart, idx.begin()+istop,
-       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+  // sort indexes based on comparing values in v, possibly with forking
+  splitSort(recursion_level, v, idx, istart, istop);
+
+  for (auto i = istart; i < istop; i+=10) printf("   %d %d %g\n",i,idx[i],v[idx[i]]);
+  exit(0);
 }
 
 //
@@ -781,12 +832,18 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
     const int thislev = log_2(tnode);
-    const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
+    //const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
+    const int sort_recursion = std::max(0, 1 - thislev);
+    //const int sort_recursion = 0;
 
     // debug print - starting condition
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("  splitNode at level ? with %n threads\n", ::omp_get_num_threads());
+    #ifdef _OPENMP
     if (pfirst == 0) printf("  splitNode at level %d with %d threads, %d recursions\n", thislev, ::omp_get_num_threads(), sort_recursion);
+    #else
+    if (pfirst == 0) printf("  splitNode at level %d with 1 threads, %d recursions\n", thislev, sort_recursion);
+    #endif
 
     // find the min/max of the three axes
     if (pfirst == 0) reset_and_start_timer();
