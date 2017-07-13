@@ -215,22 +215,28 @@ N        | build tree serial | build tree omp | refine serial | refine omp
 1000000  | 2740.769          | 920.562        | 396.547       | 87.359
 10000000 | 48629.241         | 22333.097      | 3998.997      | 887.707
 
+Using `std::async` to partition the first few levels of tree-builds saves a little more time. These are running on a pair of 6-core, 2.9 GHz E5-2640 CPUs (2.5 GHz nominally), and built with GCC 6.3.0.
+
+N        | build tree | build tree async
+---------|------------|------------------
+100000   | 111.375    | 83.539
+1000000  | 1000.821   | 690.409
+10000000 | 20730.938  | 14150.123
 
 
 ## To Do
 
-* For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency!
-* Increase accuracy of the prolongation operator
-* This means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
+* Increase accuracy of the prolongation operator - this means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Tweak box-opening criterion and see if it improves accuracy per time
 * Use smarter or faster data structures in the O(N) list-building system
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
-* Compare stats to fast method
 
+* For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency! - DONE
 * Add SSE2 vectorization - DONE
 * Try gcc 6.3.0 to see if it vectorizes - DONE
+* Compare stats to fast method - DONE
 * Start comparing accuracy of treecode and report it  - DONE
 * Find out why tree-build is O(N^2) - DONE
 * Why is error not zero for n=129 ? - DONE
