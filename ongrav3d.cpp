@@ -9,7 +9,9 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <vector>
 #include <iostream>
 #include <algorithm>	// for sort and minmax
@@ -829,8 +831,11 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
     const int thislev = log_2(tnode);
+    #ifdef _OPENMP
     const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
-    //const int sort_recursion = 0;
+    #else
+    const int sort_recursion = 0;
+    #endif
 
     // debug print - starting condition
     //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
