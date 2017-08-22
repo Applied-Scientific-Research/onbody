@@ -7,8 +7,8 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
-#include <math.h>
+#include <cstdint>
+#include <cmath>
 #include <vector>
 #include <iostream>
 #include <algorithm>	// for sort and minmax
@@ -919,8 +919,8 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S str1 = abs(ep.m[ip-1]);
-                S str2 = abs(ep.m[ip]);
+                S str1 = std::abs(ep.m[ip-1]);
+                S str2 = std::abs(ep.m[ip]);
                 S pairm = str1 + str2;
                 ep.x[iep] = (ep.x[ip-1]*str1 + ep.x[ip]*str2) / pairm;
                 ep.y[iep] = (ep.y[ip-1]*str1 + ep.y[ip]*str2) / pairm;
@@ -952,8 +952,8 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S str1 = abs(p.m[ip-1]);
-                S str2 = abs(p.m[ip]);
+                S str1 = std::abs(p.m[ip-1]);
+                S str2 = std::abs(p.m[ip]);
                 S pairm = str1 + str2;
                 ep.x[iep] = (p.x[ip-1]*str1 + p.x[ip]*str2) / pairm;
                 ep.y[iep] = (p.y[ip-1]*str1 + p.y[ip]*str2) / pairm;
