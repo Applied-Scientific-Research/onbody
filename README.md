@@ -17,6 +17,9 @@ The "equivalent particle" technique is where, given a `blockSize` representing t
 
 ## Build and run
 
+    mkdir Release
+    cd Release
+    cmake -DCMAKE_BUILD_TYPE=Release ..
     make
     ./onbody -n=10000
 
@@ -235,6 +238,7 @@ N        | build tree | build tree async
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
 
+* Build with CMake - DONE
 * For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency! - DONE
 * Add SSE2 vectorization - DONE
 * Try gcc 6.3.0 to see if it vectorizes - DONE
