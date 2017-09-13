@@ -23,6 +23,10 @@ The "equivalent particle" technique is where, given a `blockSize` representing t
     make
     ./onbody -n=10000
 
+Alternatively, configure the build to use another compiler with a command like:
+
+    cmake -DCMAKE_CXX_COMPILER=/opt/gcc/gcc-6.3.0/bin/g++ -DCMAKE_BUILD_TYPE=Release ..
+
 ## Development notes and performance
 
 All tests below run on MBP 12,1 with Intel i7 at 3.1 GHz, on MacOS 10.11. Program is single-threaded, compiled with `-O2` and uses block size of 64.
