@@ -1,5 +1,5 @@
 /*
- * onbody - testbed for an O(N) 3d gravitational solver
+ * ongrav3d - testbed for an O(N) 3d gravitational solver
  *
  * Copyright (c) 2017, Mark J Stock
  */
@@ -14,10 +14,10 @@
 #endif
 #include <vector>
 #include <iostream>
+#include <chrono>
 #include <algorithm>	// for sort and minmax
 #include <numeric>	// for iota
 #include <future>	// for async
-#include "timing.h"
 
 const int blockSize = 64;
 
@@ -475,7 +475,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
             const int destStart = ttree.ioffset[ittn];
             const int destNum = ttree.num[ittn];
             const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
-            const int origNum = (destNum+1)/2;
+            //const int origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
             for (int i=0; i<destNum; ++i) {
@@ -518,7 +518,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
             const int destStart = ttree.epoffset[ittn];
             const int destNum = ttree.epnum[ittn];
             const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
-            const int origNum = (destNum+1)/2;
+            //const int origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
 
@@ -818,7 +818,7 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
     std::copy(x.begin()+pfirst, x.begin()+plast, t.begin()+pfirst);
 
     // scatter values from the temp vector back into the original vector
-    for (int i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
+    for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
 }
 
 //
@@ -1131,7 +1131,7 @@ int main(int argc, char *argv[]) {
     int ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
 
     printf("Allocate and initialize\n");
-    reset_and_start_timer();
+    auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
     Parts<float,double> srcs(numSrcs);
@@ -1142,81 +1142,93 @@ int main(int argc, char *argv[]) {
     // initialize particle data
     targs.random_in_cube();
     for (auto&& m : targs.m) { m = 1.0f; }
-    printf("  init parts time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     Tree<float> stree(numSrcs);
     printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
-    printf("  allocate and init tree:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // split this node and recurse
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) splitNode(srcs, 0, srcs.n, stree, 1);
     #pragma omp taskwait
-    printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqsrcs.n);
-    printf("  allocate eqsrcs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) refineTree(srcs, stree, 1);
     #pragma omp taskwait
-    printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-    //for (int i=0; i<stree.num[1]; ++i)
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
+    //for (size_t i=0; i<stree.num[1]; ++i)
     //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
 
     // then, march through arrays merging pairs as you go up
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     (void) calcEquivalents(srcs, eqsrcs, stree, 1);
-    printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     Tree<float> ttree(numTargs);
     printf("  with %d particles and block size of %d\n", numTargs, blockSize);
-    printf("  allocate and init tree:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // split this node and recurse
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) splitNode(targs, 0, targs.n, ttree, 1);
     #pragma omp taskwait
-    printf("  build tree time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     Parts<float,double> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %d particles\n", eqtargs.n);
-    printf("  allocate eqtargs structures:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // first, reorder tree until all parts are adjacent in space-filling curve
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) refineTree(targs, ttree, 1);
     #pragma omp taskwait
-    printf("  refine within leaf nodes:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // then, march through arrays merging pairs as you go up
-    reset_and_start_timer();
+    start = std::chrono::system_clock::now();
     (void) calcEquivalents(targs, eqtargs, ttree, 1);
-    printf("  create equivalent parts:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     if (just_build_trees) exit(0);
 
@@ -1225,14 +1237,15 @@ int main(int argc, char *argv[]) {
     //
     printf("\nRun the naive O(N^2) method (every %d particles)\n", ntskip);
     double minNaive = 1e30;
-    for (unsigned int i = 0; i < test_iterations[0]; ++i) {
-        reset_and_start_timer();
+    for (int i = 0; i < test_iterations[0]; ++i) {
+        start = std::chrono::system_clock::now();
         nbody_naive(srcs, targs, ntskip);
-        double dt = get_elapsed_mcycles() * (float)ntskip;
-        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        double dt = elapsed_seconds.count() * (float)ntskip;
+        printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minNaive = std::min(minNaive, dt);
     }
-    printf("[onbody naive]:\t\t\t[%.3f] million cycles\n", minNaive);
+    printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     std::vector<float> naiveu(targs.u.begin(), targs.u.end());
@@ -1246,14 +1259,15 @@ int main(int argc, char *argv[]) {
     if (test_iterations[1] > 0) {
     printf("\nRun the treecode O(NlogN)\n");
     double minTreecode = 1e30;
-    for (unsigned int i = 0; i < test_iterations[1]; ++i) {
-        reset_and_start_timer();
+    for (int i = 0; i < test_iterations[1]; ++i) {
+        start = std::chrono::system_clock::now();
         nbody_treecode1(srcs, stree, targs, 2.9f);
-        double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        double dt = elapsed_seconds.count();
+        printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minTreecode = std::min(minTreecode, dt);
     }
-    printf("[onbody treecode]:\t\t\t[%.3f] million cycles\n", minTreecode);
+    printf("[onbody treecode]:\t\t[%.4f] seconds\n", minTreecode);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
@@ -1262,7 +1276,7 @@ int main(int argc, char *argv[]) {
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (auto i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
@@ -1277,14 +1291,15 @@ int main(int argc, char *argv[]) {
     if (test_iterations[2] > 0) {
     printf("\nRun the treecode O(NlogN) with equivalent particles\n");
     double minTreecode2 = 1e30;
-    for (unsigned int i = 0; i < test_iterations[2]; ++i) {
-        reset_and_start_timer();
+    for (int i = 0; i < test_iterations[2]; ++i) {
+        start = std::chrono::system_clock::now();
         nbody_treecode2(srcs, eqsrcs, stree, targs, 1.1f);
-        double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        double dt = elapsed_seconds.count();
+        printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
     }
-    printf("[onbody treecode2]:\t\t[%.3f] million cycles\n", minTreecode2);
+    printf("[onbody treecode2]:\t\t[%.4f] seconds\n", minTreecode2);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
@@ -1293,7 +1308,7 @@ int main(int argc, char *argv[]) {
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (auto i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
@@ -1308,19 +1323,20 @@ int main(int argc, char *argv[]) {
     if (test_iterations[3] > 0) {
     printf("\nRun the fast O(N) method\n");
     double minFast = 1e30;
-    for (unsigned int i = 0; i < test_iterations[3]; ++i) {
-        reset_and_start_timer();
+    for (int i = 0; i < test_iterations[3]; ++i) {
+        start = std::chrono::system_clock::now();
         std::vector<int> source_boxes = {1};
         #pragma omp parallel
         #pragma omp single
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
                        1, source_boxes, 2.3f);
         #pragma omp taskwait
-        double dt = get_elapsed_mcycles();
-        printf("  this run time:\t\t[%.3f] million cycles\n", dt);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        double dt = elapsed_seconds.count();
+        printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minFast = std::min(minFast, dt);
     }
-    printf("[onbody fast]:\t\t\t[%.3f] million cycles\n", minFast);
+    printf("[onbody fast]:\t\t\t[%.4f] seconds\n", minFast);
     // write sample results
     for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
@@ -1329,7 +1345,7 @@ int main(int argc, char *argv[]) {
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (auto i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
         float thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
