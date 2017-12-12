@@ -2,11 +2,16 @@ CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
 PROJECT ( onbody )
 
 SET (CMAKE_VERBOSE_MAKEFILE on)
+SET (DEFAULT_BUILD_TYPE "Release")
+
+IF (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}")
+ENDIF ()
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++11")
-  SET (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -ggdb")
-  SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2 -march=native -ffast-math -ftree-vectorize -ftree-loop-vectorize")
+  SET (CMAKE_CXX_FLAGS_DEBUG "-g -ggdb")
+  SET (CMAKE_CXX_FLAGS_RELEASE "-O2 -march=native -ffast-math -ftree-vectorize -ftree-loop-vectorize")
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++11 -stdlib=libc++")
 ELSEIF (MSVC)
