@@ -251,15 +251,15 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const S tx, const S ty,
                      A& tax, A& tay) {
 
-    static int sltp = 0;
-    static int sbtp = 0;
+    static size_t sltp = 0;
+    static size_t sbtp = 0;
 
     // report on interactions
     if (tnode == 0) {
-        int tlc = sp.n;
-        printf("%d target particles averaged %g leaf-part and %g equiv-part interactions\n",
+        size_t tlc = sp.n;
+        printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
                tlc, sltp/(float)tlc, sbtp/(float)tlc);
-        printf("  sltp %d  sbtp %d\n", sltp, sbtp);
+        printf("  sltp %ld  sbtp %ld\n", sltp, sbtp);
 
         return;
     }
@@ -807,7 +807,11 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
-    if (t.num[tnode] <= blockSize) return;
+    if (t.num[tnode] <= blockSize) {
+        // we are at block size!
+        //printf("  tree node %ld position %g %g size %g %g\n", tnode, t.x[tnode], t.y[tnode], boxsizes[0], boxsizes[1]);
+        return;
+    }
 
     // sort this portion of the array along the big axis
     //printf("sort\n");
