@@ -19,6 +19,7 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+const char* progname = "ongrav3d";
 const size_t blockSize = 64;
 
 //
@@ -260,15 +261,15 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
-    static int sltp = 0;
-    static int sbtp = 0;
+    static size_t sltp = 0;
+    static size_t sbtp = 0;
 
     // report on interactions
     if (tnode == 0) {
-        int tlc = sp.n;
-        printf("%d target particles averaged %g leaf-part and %g equiv-part interactions\n",
+        size_t tlc = sp.n;
+        printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
                tlc, sltp/(float)tlc, sbtp/(float)tlc);
-        printf("  sltp %d  sbtp %d\n", sltp, sbtp);
+        //printf("  sltp %ld  sbtp %ld\n", sltp, sbtp);
 
         return;
     }
@@ -436,13 +437,13 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                     Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
                     const size_t ittn, std::vector<size_t> istv_in, const float theta) {
 
-    static int sltl = 0;
-    static int sbtl = 0;
-    static int sltb = 0;
-    static int sbtb = 0;
-    static int tlc = 0;
-    static int lpc = 0;
-    static int bpc = 0;
+    static size_t sltl = 0;
+    static size_t sbtl = 0;
+    static size_t sltb = 0;
+    static size_t sbtb = 0;
+    static size_t tlc = 0;
+    static size_t lpc = 0;
+    static size_t bpc = 0;
 
     // start counters
     if (ittn == 1) {
@@ -689,10 +690,10 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        printf("%d target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+        printf("%ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
                tlc, sltl/(float)tlc, sbtl/(float)tlc);
-        printf("  sltl %d  sbtl %d  sltb %d  sbtb %d\n", sltl, sbtl, sltb, sbtb);
-        printf("  leaf prolongation count %d  box pc %d\n", lpc, bpc);
+        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", sltl, sbtl, sltb, sbtb);
+        printf("  leaf prolongation count %ld  box pc %ld\n", lpc, bpc);
     }
 
 }
@@ -879,7 +880,11 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
-    if (t.num[tnode] <= blockSize) return;
+    if (t.num[tnode] <= blockSize) {
+        // we are at block size!
+        //printf("  tree node %ld position %g %g size %g %g\n", tnode, t.x[tnode], t.y[tnode], boxsizes[0], boxsizes[1]);
+        return;
+    }
 
     // sort this portion of the array along the big axis
     //printf("sort\n");
@@ -1093,7 +1098,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, size_t tnode) {
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: ongrav3d [-n=<nparticles>]\n");
+    fprintf(stderr, "Usage: %s [-n=<nparticles>]\n", progname);
     exit(1);
 }
 
@@ -1103,7 +1108,7 @@ static void usage() {
 int main(int argc, char *argv[]) {
 
     static std::vector<int> test_iterations = {1, 0, 1, 1};
-    bool just_build_trees = true;
+    bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
 
@@ -1115,6 +1120,8 @@ int main(int argc, char *argv[]) {
             numTargs = num;
         }
     }
+
+    printf("Running %s with %ld sources and %ld targets\n\n", progname, numSrcs, numTargs);
 
     // if problem is too big, skip some number of target particles
     size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
