@@ -5,10 +5,10 @@
  */
 
 #include <cstdlib>
+#include <cstdint>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
-#include <math.h>
+#include <cmath>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -19,7 +19,7 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
-const int blockSize = 64;
+const size_t blockSize = 64;
 
 //
 // Find index of msb of uint32
@@ -39,11 +39,11 @@ static inline uint32_t log_2(const uint32_t x) {
 template <class S, class A>
 class Parts {
 public:
-    Parts(int);
-    void resize(int);
+    Parts(size_t);
+    void resize(size_t);
     void random_in_cube();
 
-    int n;
+    size_t n;
     // state
     alignas(32) std::vector<S> x;
     alignas(32) std::vector<S> y;
@@ -61,12 +61,12 @@ public:
 };
 
 template <class S, class A>
-Parts<S,A>::Parts(int _num) {
+Parts<S,A>::Parts(size_t _num) {
     resize(_num);
 }
 
 template <class S, class A>
-void Parts<S,A>::resize(int _num) {
+void Parts<S,A>::resize(size_t _num) {
     n = _num;
     x.resize(n);
     y.resize(n);
@@ -99,8 +99,8 @@ void Parts<S,A>::random_in_cube() {
 template <class S>
 class Tree {
 public:
-    Tree(int);
-    void resize(int);
+    Tree(size_t);
+    void resize(size_t);
 
     // number of levels in the tree
     int levels;
@@ -119,15 +119,15 @@ public:
     alignas(32) std::vector<S> m;
 
     // real point offset and count
-    alignas(32) std::vector<int> ioffset;		// is this redundant?
-    alignas(32) std::vector<int> num;
+    alignas(32) std::vector<size_t> ioffset;		// is this redundant?
+    alignas(32) std::vector<size_t> num;
     // equivalent point offset and count
-    alignas(32) std::vector<int> epoffset;		// is this redundant?
-    alignas(32) std::vector<int> epnum;
+    alignas(32) std::vector<size_t> epoffset;		// is this redundant?
+    alignas(32) std::vector<size_t> epnum;
 };
 
 template <class S>
-Tree<S>::Tree(int _num) {
+Tree<S>::Tree(size_t _num) {
     // _num is number of elements this tree needs to store
     uint32_t numLeaf = 1 + ((_num-1)/blockSize);
     printf("  %d nodes at leaf level\n", numLeaf);
@@ -139,7 +139,7 @@ Tree<S>::Tree(int _num) {
 }
 
 template <class S>
-void Tree<S>::resize(int _num) {
+void Tree<S>::resize(size_t _num) {
     numnodes = _num;
     x.resize(numnodes);
     y.resize(numnodes);
@@ -186,12 +186,12 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
 template <class S, class A>
 void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const int tskip) {
     #pragma omp parallel for
-    for (int i = 0; i < targs.n; i+=tskip) {
+    for (size_t i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0;
         targs.v[i] = 0.0;
         targs.w[i] = 0.0;
         //#pragma clang loop vectorize(enable) interleave(enable)
-        for (int j = 0; j < srcs.n; j++) {
+        for (size_t j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[j], srcs.y[j], srcs.z[j], srcs.r[j], srcs.m[j],
                          targs.x[i], targs.y[i], targs.z[i],
                          targs.u[i], targs.v[i], targs.w[i]);
@@ -203,14 +203,14 @@ void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ t
 // Recursive kernel for the treecode using 1st order box approximations
 //
 template <class S, class A>
-void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const int tnode, const float theta,
+void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode, const float theta,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
-        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
+        for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
             nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
                          tx, ty, tz, tax, tay, taz);
         }
@@ -241,7 +241,7 @@ void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const int tnode, c
 template <class S, class A>
 void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
-    for (int i = 0; i < targs.n; i++) {
+    for (size_t i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0;
         targs.v[i] = 0.0;
         targs.w[i] = 0.0;
@@ -256,7 +256,7 @@ void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& t
 //
 template <class S, class A>
 void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
-                     const Tree<S>& st, const int tnode, const float theta,
+                     const Tree<S>& st, const size_t tnode, const float theta,
                      const S tx, const S ty, const S tz,
                      A& tax, A& tay, A& taz) {
 
@@ -276,7 +276,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
-        for (int j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
+        for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
             nbody_kernel(sp.x[j], sp.y[j], sp.z[j], sp.r[j], sp.m[j],
                          tx, ty, tz, tax, tay, taz);
         }
@@ -293,7 +293,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
         // this version uses equivalent points instead!
-        for (int j = st.epoffset[tnode]; j < st.epoffset[tnode] + st.epnum[tnode]; j++) {
+        for (size_t j = st.epoffset[tnode]; j < st.epoffset[tnode] + st.epnum[tnode]; j++) {
             nbody_kernel(ep.x[j], ep.y[j], ep.z[j], ep.r[j], ep.m[j],
                          tx, ty, tz, tax, tay, taz);
         }
@@ -312,7 +312,7 @@ template <class S, class A>
 void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
                      const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
     #pragma omp parallel for
-    for (int i = 0; i < targs.n; i++) {
+    for (size_t i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0;
         targs.v[i] = 0.0;
         targs.w[i] = 0.0;
@@ -334,7 +334,7 @@ template <class S, class A>
 A least_squares_val(const S xt, const S yt, const S zt,
                     const std::vector<S>& x, const std::vector<S>& y,
                     const std::vector<S>& z, const std::vector<A>& u,
-                    const int istart, const int iend) {
+                    const size_t istart, const size_t iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
     S sn = 0.0f;
@@ -351,7 +351,7 @@ A least_squares_val(const S xt, const S yt, const S zt,
     S sxy = 0.0f;
     S sxz = 0.0f;
     S syz = 0.0f;
-    for (int i=istart; i<iend; ++i) {
+    for (size_t i=istart; i<iend; ++i) {
         const S dx = x[i] - xt;
         const S dy = y[i] - yt;
         const S dz = z[i] - zt;
@@ -434,7 +434,7 @@ A least_squares_val(const S xt, const S yt, const S zt,
 template <class S, class A>
 void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree<S>& stree,
                     Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
-                    const int ittn, std::vector<int> istv_in, const float theta) {
+                    const size_t ittn, std::vector<size_t> istv_in, const float theta) {
 
     static int sltl = 0;
     static int sbtl = 0;
@@ -472,23 +472,23 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our real points
-            const int destStart = ttree.ioffset[ittn];
-            const int destNum = ttree.num[ittn];
-            const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
-            //const int origNum = (destNum+1)/2;
+            const size_t destStart = ttree.ioffset[ittn];
+            const size_t destNum = ttree.num[ittn];
+            const size_t origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
+            //const size_t origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
-            for (int i=0; i<destNum; ++i) {
-                const int idest = destStart + i;
-                const int iorig = origStart + i/2;
+            for (size_t i=0; i<destNum; ++i) {
+                const size_t idest = destStart + i;
+                const size_t iorig = origStart + i/2;
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
                 // second take, use linear least squares to approximate value
                 if (true) {
-                    const int nearest = 16;
-                    const int istart = nearest*(iorig/nearest);
-                    const int iend = istart+nearest;
+                    const size_t nearest = 16;
+                    const size_t istart = nearest*(iorig/nearest);
+                    const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
                     targs.u[idest] = least_squares_val(targs.x[idest], targs.y[idest], targs.z[idest],
                                                        eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
@@ -515,29 +515,29 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our equiv points
-            const int destStart = ttree.epoffset[ittn];
-            const int destNum = ttree.epnum[ittn];
-            const int origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
-            //const int origNum = (destNum+1)/2;
+            const size_t destStart = ttree.epoffset[ittn];
+            const size_t destNum = ttree.epnum[ittn];
+            const size_t origStart = ttree.epoffset[ittn/2] + (blockSize/2) * (ittn%2);
+            //const size_t origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
 
-            //for (int i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
-            //    int ipe = ttree.epoffset[ittn]/2 + i;
+            //for (size_t i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
+            //    size_t ipe = ttree.epoffset[ittn]/2 + i;
             //    printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
             //}
 
-            for (int i=0; i<destNum; ++i) {
-                const int idest = destStart + i;
-                const int iorig = origStart + i/2;
+            for (size_t i=0; i<destNum; ++i) {
+                const size_t idest = destStart + i;
+                const size_t iorig = origStart + i/2;
                 //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
                 //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
                 //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
                 // second take, apply gradient of value to delta location
                 if (true) {
-                    const int nearest = 16;
-                    const int istart = nearest*(iorig/nearest);
-                    const int iend = istart+nearest;
+                    const size_t nearest = 16;
+                    const size_t istart = nearest*(iorig/nearest);
+                    const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
                     eqtargs.u[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest],
                                                          eqtargs.x, eqtargs.y, eqtargs.z, eqtargs.u, istart, iend);
@@ -557,15 +557,15 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
     }
 
     // initialize a new vector of source boxes to pass to this target box's children
-    std::vector<int> cstv;
+    std::vector<size_t> cstv;
 
     // make a local copy of the input source tree vector
-    std::vector<int> istv = istv_in;
+    std::vector<size_t> istv = istv_in;
 
     // for target box ittn, check all unaccounted-for source boxes
-    int num_istv = istv.size();
-    for (int i=0; i<num_istv; i++) {
-        const int sn = istv[i];
+    size_t num_istv = istv.size();
+    for (size_t i=0; i<num_istv; i++) {
+        const size_t sn = istv[i];
 
         // skip this loop iteration
         if (stree.num[sn] < 1) continue;
@@ -579,8 +579,8 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
             //printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
 
             // compute all-on-all direct influence
-            for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-            for (int j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
+            for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
+            for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
                 nbody_kernel(srcs.x[j],  srcs.y[j],  srcs.z[j], srcs.r[j], srcs.m[j],
                              targs.x[i], targs.y[i], targs.z[i],
                              targs.u[i], targs.v[i], targs.w[i]);
@@ -605,8 +605,8 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
 
             if (sourceIsLeaf) {
                 // compute real source particles on equivalent target points
-                for (int i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (int j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
+                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
+                for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
                     nbody_kernel(srcs.x[j],    srcs.y[j],    srcs.z[j], srcs.r[j], srcs.m[j],
                                  eqtargs.x[i], eqtargs.y[i], eqtargs.z[i],
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
@@ -616,8 +616,8 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
 
             } else if (targetIsLeaf) {
                 // compute equivalent source particles on real target points
-                for (int i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-                for (int j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
+                for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
+                for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
                     nbody_kernel(eqsrcs.x[j], eqsrcs.y[j], eqsrcs.z[j], eqsrcs.r[j], eqsrcs.m[j],
                                  targs.x[i],  targs.y[i],  targs.z[i],
                                  targs.u[i],  targs.v[i],  targs.w[i]);
@@ -627,8 +627,8 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
 
             } else {
                 // compute equivalent source particles on equivalent target points
-                for (int i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (int j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
+                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
+                for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
                     nbody_kernel(eqsrcs.x[j],  eqsrcs.y[j],  eqsrcs.z[j], eqsrcs.r[j], eqsrcs.m[j],
                                  eqtargs.x[i], eqtargs.y[i], eqtargs.z[i],
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
@@ -826,7 +826,7 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
 // Split this segment of the particles on its longest axis
 //
 template <class S, class A>
-void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode) {
+void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tnode) {
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
@@ -838,7 +838,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     #endif
 
     // debug print - starting condition
-    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("  splitNode at level ? with %n threads\n", ::omp_get_num_threads());
     #ifdef _OPENMP
     //if (pfirst == 0) printf("  splitNode at level %d with %d threads, %d recursions\n", thislev, ::omp_get_num_threads(), sort_recursion);
@@ -889,15 +889,15 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
     //if (pfirst == 0) reset_and_start_timer();
     if (maxaxis == 0) {
         (void) sortIndexesSection(sort_recursion, p.x, p.itemp, pfirst, plast);
-        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
+        //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
     } else if (maxaxis == 1) {
         (void) sortIndexesSection(sort_recursion, p.y, p.itemp, pfirst, plast);
-        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
+        //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
     } else if (maxaxis == 2) {
         (void) sortIndexesSection(sort_recursion, p.z, p.itemp, pfirst, plast);
-        //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
+        //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.z[p.itemp[i]]);
     }
-    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
     //if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // rearrange the elements - parallel sections did not make things faster
@@ -915,7 +915,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, int tnode
       //#pragma omp section
       { reorder(p.r, p.ftemp, p.itemp, pfirst, plast); }
     }
-    //for (int i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // determine where the split should be
@@ -986,12 +986,12 @@ void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
 template <class S, class A>
-void refineTree(Parts<S,A>& p, Tree<S>& t, int tnode) {
+void refineTree(Parts<S,A>& p, Tree<S>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
         (void) refineLeaf(p, t, t.ioffset[tnode], t.ioffset[tnode]+t.num[tnode]);
-        //for (int i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
+        //for (size_t i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
         //    printf("  %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     } else {
         // recurse and check child nodes
@@ -1011,7 +1011,7 @@ void refineTree(Parts<S,A>& p, Tree<S>& t, int tnode) {
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
 template <class S, class A>
-void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
+void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
 
     t.epoffset[tnode] = tnode * blockSize;
@@ -1019,7 +1019,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
     //printf("    equivalent particles start at %d\n", t.epoffset[tnode]);
 
     // loop over children, adding equivalent particles to our list
-    for (auto ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
+    for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
         //printf("  child %d has %d particles\n", ichild, t.num[ichild]);
 
         // split on whether this child is a leaf node or not
@@ -1033,14 +1033,14 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             //printf("    child %d made equiv parts %d to %d\n", ichild, t.epoffset[ichild], t.epoffset[ichild]+t.epnum[ichild]);
 
             // merge pairs of child's equivalent particles until we have half
-            int numEqps = (t.epnum[ichild]+1) / 2;
-            int istart = (blockSize/2) * ichild;
-            int istop = istart + numEqps;
+            size_t numEqps = (t.epnum[ichild]+1) / 2;
+            size_t istart = (blockSize/2) * ichild;
+            size_t istop = istart + numEqps;
             //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
 
             // loop over new equivalent particles and real particles together
-            int iep = istart;
-            int ip = t.epoffset[ichild] + 1;
+            size_t iep = istart;
+            size_t ip = t.epoffset[ichild] + 1;
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
@@ -1066,14 +1066,14 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, int tnode) {
             //printf("    child leaf node has particles %d to %d\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
 
             // if we're a leaf node, merge pairs of particles until we have half
-            int numEqps = (t.num[ichild]+1) / 2;
-            int istart = (blockSize/2) * ichild;
-            int istop = istart + numEqps;
+            size_t numEqps = (t.num[ichild]+1) / 2;
+            size_t istart = (blockSize/2) * ichild;
+            size_t istop = istart + numEqps;
             //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
 
             // loop over new equivalent particles and real particles together
-            int iep = istart;
-            int ip = t.ioffset[ichild] + 1;
+            size_t iep = istart;
+            size_t ip = t.ioffset[ichild] + 1;
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
@@ -1115,12 +1115,12 @@ int main(int argc, char *argv[]) {
 
     static std::vector<int> test_iterations = {1, 0, 1, 1};
     bool just_build_trees = true;
-    int numSrcs = 10000;
-    int numTargs = 10000;
+    size_t numSrcs = 10000;
+    size_t numTargs = 10000;
 
     if (argc > 1) {
         if (strncmp(argv[1], "-n=", 3) == 0) {
-            int num = atof(argv[1] + 3);
+            size_t num = atof(argv[1] + 3);
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
@@ -1128,7 +1128,7 @@ int main(int argc, char *argv[]) {
     }
 
     // if problem is too big, skip some number of target particles
-    int ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+    size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
 
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
@@ -1151,7 +1151,7 @@ int main(int argc, char *argv[]) {
     printf("\nBuilding the source tree\n");
     start = std::chrono::system_clock::now();
     Tree<float> stree(numSrcs);
-    printf("  with %d particles and block size of %d\n", numSrcs, blockSize);
+    printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -1168,7 +1168,7 @@ int main(int argc, char *argv[]) {
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
     Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
-    printf("  need %d particles\n", eqsrcs.n);
+    printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -1194,7 +1194,7 @@ int main(int argc, char *argv[]) {
     printf("\nBuilding the target tree\n");
     start = std::chrono::system_clock::now();
     Tree<float> ttree(numTargs);
-    printf("  with %d particles and block size of %d\n", numTargs, blockSize);
+    printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -1211,7 +1211,7 @@ int main(int argc, char *argv[]) {
     printf("\nCalculating equivalent targ points\n");
     start = std::chrono::system_clock::now();
     Parts<float,double> eqtargs((ttree.numnodes/2) * blockSize);
-    printf("  need %d particles\n", eqtargs.n);
+    printf("  need %ld particles\n", eqtargs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -1235,7 +1235,7 @@ int main(int argc, char *argv[]) {
     //
     // Run the O(N^2) implementation
     //
-    printf("\nRun the naive O(N^2) method (every %d particles)\n", ntskip);
+    printf("\nRun the naive O(N^2) method (every %ld particles)\n", ntskip);
     double minNaive = 1e30;
     for (int i = 0; i < test_iterations[0]; ++i) {
         start = std::chrono::system_clock::now();
@@ -1247,7 +1247,7 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive);
     // write sample results
-    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     std::vector<float> naiveu(targs.u.begin(), targs.u.end());
 
     float errsum = 0.0;
@@ -1269,7 +1269,7 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode]:\t\t[%.4f] seconds\n", minTreecode);
     // write sample results
-    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
     std::vector<float> treecodeu(targs.u.begin(), targs.u.end());
 
@@ -1301,7 +1301,7 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode2]:\t\t[%.4f] seconds\n", minTreecode2);
     // write sample results
-    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
     std::vector<float> treecodeu2(targs.u.begin(), targs.u.end());
 
@@ -1325,7 +1325,7 @@ int main(int argc, char *argv[]) {
     double minFast = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         start = std::chrono::system_clock::now();
-        std::vector<int> source_boxes = {1};
+        std::vector<size_t> source_boxes = {1};
         #pragma omp parallel
         #pragma omp single
         nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
@@ -1338,7 +1338,7 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody fast]:\t\t\t[%.4f] seconds\n", minFast);
     // write sample results
-    for (int i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %d vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
     std::vector<float> fastu(targs.u.begin(), targs.u.end());
 
