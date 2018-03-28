@@ -43,6 +43,7 @@ public:
     Parts(size_t);
     void resize(size_t);
     void random_in_cube();
+    void smooth_strengths();
 
     size_t n;
     // state
@@ -87,6 +88,14 @@ void Parts<S,A>::random_in_cube() {
     for (auto&& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
     for (auto&& _r : r) { _r = 1.0f / sqrt((S)n); }
     for (auto&& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / sqrt((S)n); }
+}
+
+template <class S, class A>
+void Parts<S,A>::smooth_strengths() {
+    const S factor = 1.0 / sqrt((S)n);
+    for (size_t i = 0; i < n; i++) {
+        m[i] = factor * (x[i] - y[i]);
+    }
 }
 
 //
@@ -245,26 +254,21 @@ void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& t
 }
 
 //
+// Data structure for accumulating interaction counts
+//
+struct treecode2_stats {
+    size_t sltp, sbtp;
+};
+
+//
 // Recursive kernel for the treecode using equivalent particles
 //
 template <class S, class A>
 void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const Tree<S>& st, const size_t tnode, const float theta,
                      const S tx, const S ty,
-                     A& tax, A& tay) {
-
-    static size_t sltp = 0;
-    static size_t sbtp = 0;
-
-    // report on interactions
-    if (tnode == 0) {
-        size_t tlc = sp.n;
-        printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
-               tlc, sltp/(float)tlc, sbtp/(float)tlc);
-        //printf("  sltp %ld  sbtp %ld\n", sltp, sbtp);
-
-        return;
-    }
+                     A& tax, A& tay,
+                     struct treecode2_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
@@ -273,7 +277,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(sp.x[j], sp.y[j], sp.r[j], sp.m[j],
                          tx, ty, tax, tay);
         }
-        sltp++;
+        stats.sltp++;
         return;
     }
 
@@ -289,11 +293,11 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(ep.x[j], ep.y[j], ep.r[j], ep.m[j],
                          tx, ty, tax, tay);
         }
-        sbtp++;
+        stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tax, tay);
-        (void) treecode2_block(sp, ep, st, 2*tnode+1, theta, tx, ty, tax, tay);
+        (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tax, tay, stats);
+        (void) treecode2_block(sp, ep, st, 2*tnode+1, theta, tx, ty, tax, tay, stats);
     }
 }
 
@@ -303,19 +307,33 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
 template <class S, class A>
 void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
                      const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
-    #pragma omp parallel for
-    for (size_t i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0;
-        targs.v[i] = 0.0;
-        treecode2_block(srcs, eqsrcs, stree, 1, theta,
-                        targs.x[i], targs.y[i],
-                        targs.u[i], targs.v[i]);
+
+    struct treecode2_stats stats = {0, 0};
+
+    #pragma omp parallel
+    {
+        struct treecode2_stats threadstats = {0, 0};
+
+        #pragma omp for
+        for (size_t i = 0; i < targs.n; i++) {
+            targs.u[i] = 0.0;
+            targs.v[i] = 0.0;
+            treecode2_block(srcs, eqsrcs, stree, 1, theta,
+                            targs.x[i], targs.y[i],
+                            targs.u[i], targs.v[i],
+                            threadstats);
+        }
+
+        #pragma omp critical
+        {
+            stats.sltp += threadstats.sltp;
+            stats.sbtp += threadstats.sbtp;
+        }
     }
 
-    // report on the number of interactions
-    treecode2_block(srcs, eqsrcs, stree, 0, theta,
-                    targs.x[0], targs.y[0],
-                    targs.u[0], targs.v[0]);
+    printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
+           targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
+    //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 }
 
 //
@@ -1109,6 +1127,7 @@ int main(int argc, char *argv[]) {
     Parts<float,double> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
+    srcs.smooth_strengths();
 
     Parts<float,double> targs(numTargs);
     // initialize particle data
@@ -1265,7 +1284,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 2.5f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.1f);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
