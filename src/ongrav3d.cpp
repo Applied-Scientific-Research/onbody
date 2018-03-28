@@ -184,7 +184,7 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
 // Caller for the O(N^2) kernel
 //
 template <class S, class A>
-void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const int tskip) {
+void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0;
@@ -785,9 +785,6 @@ void sortIndexesSection(const int recursion_level,
 
   // sort indexes based on comparing values in v, possibly with forking
   splitSort(recursion_level, v, idx, istart, istop);
-
-  //for (auto i = istart; i < istop; i+=10) printf("   %d %d %g\n",i,idx[i],v[idx[i]]);
-  //exit(0);
 }
 
 //
@@ -902,19 +899,11 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
 
     // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
-    //if (pfirst == 0) reset_and_start_timer();
-    //#pragma omp parallel sections if(thislev < 2)
-    {
-      { reorder(p.x, p.ftemp, p.itemp, pfirst, plast); }
-      //#pragma omp section
-      { reorder(p.y, p.ftemp, p.itemp, pfirst, plast); }
-      //#pragma omp section
-      { reorder(p.z, p.ftemp, p.itemp, pfirst, plast); }
-      //#pragma omp section
-      { reorder(p.m, p.ftemp, p.itemp, pfirst, plast); }
-      //#pragma omp section
-      { reorder(p.r, p.ftemp, p.itemp, pfirst, plast); }
-    }
+    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.z, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
+    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
