@@ -17,7 +17,9 @@
 #include <chrono>
 #include <algorithm>	// for sort and minmax
 #include <numeric>	// for iota
+#include <future>	// for async
 
+const char* progname = "onvort2d";
 const size_t blockSize = 64;
 
 //
@@ -259,7 +261,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
         size_t tlc = sp.n;
         printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
                tlc, sltp/(float)tlc, sbtp/(float)tlc);
-        printf("  sltp %ld  sbtp %ld\n", sltp, sbtp);
+        //printf("  sltp %ld  sbtp %ld\n", sltp, sbtp);
 
         return;
     }
@@ -420,13 +422,13 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                     Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
                     const size_t ittn, std::vector<size_t> istv_in, const float theta) {
 
-    static int sltl = 0;
-    static int sbtl = 0;
-    static int sltb = 0;
-    static int sbtb = 0;
-    static int tlc = 0;
-    static int lpc = 0;
-    static int bpc = 0;
+    static size_t sltl = 0;
+    static size_t sbtl = 0;
+    static size_t sltb = 0;
+    static size_t sbtb = 0;
+    static size_t tlc = 0;
+    static size_t lpc = 0;
+    static size_t bpc = 0;
 
     // start counters
     if (ittn == 1) {
@@ -664,10 +666,10 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        printf("%d target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+        printf("%ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
                tlc, sltl/(float)tlc, sbtl/(float)tlc);
-        printf("  sltl %d  sbtl %d  sltb %d  sbtb %d\n", sltl, sbtl, sltb, sbtb);
-        printf("  leaf prolongation count %d  box pc %d\n", lpc, bpc);
+        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", sltl, sbtl, sltb, sbtb);
+        printf("  leaf prolongation count %ld  box pc %ld\n", lpc, bpc);
     }
 
 }
@@ -691,6 +693,59 @@ std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 }
 
 //
+// Split into two threads, sort, and zipper
+//
+template <class S>
+void splitSort(const int recursion_level,
+               const std::vector<S> &v,
+               std::vector<size_t> &idx,
+               const size_t istart, const size_t istop) {
+
+  //printf("      inside splitSort with level %d\n", recursion_level);
+  // std::inplace_merge() is your friend here! as is recursion
+
+
+  if (recursion_level == 0 or (istop-istart < 100) ) {
+    // we are parallel enough: let this thread sort its chunk
+    //printf("      performing standard sort\n");
+
+    // sort indexes based on comparing values in v
+    std::sort(idx.begin()+istart,
+              idx.begin()+istop,
+              [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  } else {
+    // we are not parallel enough: fork and join until we are
+    //printf("      performing split sort\n");
+
+    const size_t imiddle = istart + (istop-istart)/2;
+
+    // fork a thread for the first half
+    #ifdef _OPENMP
+    auto handle = std::async(std::launch::async,
+                             splitSort<S>, recursion_level-1, std::cref(v), std::ref(idx), istart, imiddle);
+    #else
+    splitSort(recursion_level-1, v, idx, istart, imiddle);
+    #endif
+
+    // do the second half here
+    splitSort(recursion_level-1, v, idx, imiddle, istop);
+
+    // force the thread to join
+    #ifdef _OPENMP
+    handle.get();
+    #endif
+
+    // zipper the results together
+    std::inplace_merge(idx.begin()+istart,
+                       idx.begin()+imiddle,
+                       idx.begin()+istop,
+                       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+  }
+
+}
+
+//
 // Sort but retain only sorted index! Uses C++11 lambdas
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
@@ -710,6 +765,9 @@ void sortIndexesSection(const int recursion_level,
   // sort indexes based on comparing values in v
   std::sort(idx.begin()+istart, idx.begin()+istop,
        [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  // sort indexes based on comparing values in v, possibly with forking
+  //splitSort(recursion_level, v, idx, istart, istop);
 }
 
 //
@@ -1016,7 +1074,7 @@ void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, size_t tnode) {
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: onvort2d [-n=<nparticles>]\n");
+    fprintf(stderr, "Usage: %s [-n=<nparticles>]\n", progname);
     exit(1);
 }
 
@@ -1038,6 +1096,8 @@ int main(int argc, char *argv[]) {
             numTargs = num;
         }
     }
+
+    printf("Running %s with %ld sources and %ld targets\n\n", progname, numSrcs, numTargs);
 
     // if problem is too big, skip some number of target particles
     size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
