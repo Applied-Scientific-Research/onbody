@@ -434,6 +434,13 @@ A least_squares_val(const S xt, const S yt, const S zt,
 }
 
 //
+// Data structure for accumulating interaction counts
+//
+struct fastsumm_stats {
+    size_t sltl, sbtl, sltb, sbtb, tlc, lpc, bpc;
+};
+
+//
 // Caller for the fast summation O(N) method
 //
 // ittn is the target tree node that this routine will work on
@@ -442,38 +449,22 @@ A least_squares_val(const S xt, const S yt, const S zt,
 // We will change u,v,w for the targs points and the eqtargs equivalent points
 //
 template <class S, class A>
-void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree<S>& stree,
+struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree<S>& stree,
                     Parts<S,A>& targs, Parts<S,A>& eqtargs, const Tree<S>& ttree,
                     const size_t ittn, std::vector<size_t> istv_in, const float theta) {
 
-    static size_t sltl = 0;
-    static size_t sbtl = 0;
-    static size_t sltb = 0;
-    static size_t sbtb = 0;
-    static size_t tlc = 0;
-    static size_t lpc = 0;
-    static size_t bpc = 0;
-
     // start counters
-    if (ittn == 1) {
-        sltl = 0;
-        sbtl = 0;
-        sltb = 0;
-        sbtb = 0;
-        tlc = 0;
-        lpc = 0;
-        bpc = 0;
-    }
+    struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
 
     // quit out if we've gone too far
-    if (ttree.num[ittn] < 1) return;
+    if (ttree.num[ittn] < 1) return stats;
 
     //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
     const bool targetIsLeaf = ttree.num[ittn] <= blockSize;
 
     // prepare the target arrays for accumulations
     if (targetIsLeaf) {
-        tlc++;
+        stats.tlc++;
         // zero the velocities
         std::fill_n(&(targs.u[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
         std::fill_n(&(targs.v[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
@@ -513,7 +504,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                     targs.w[idest] = eqtargs.w[iorig];
                 }
             }
-            lpc++;
+            stats.lpc++;
         }
 
     } else {
@@ -562,7 +553,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                     eqtargs.w[idest] = eqtargs.w[iorig];
                 }
             }
-            bpc++;
+            stats.bpc++;
         }
     }
 
@@ -596,7 +587,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                              targs.u[i], targs.v[i], targs.w[i]);
             }
             }
-            sltl++;
+            stats.sltl++;
             continue;
         }
 
@@ -622,7 +613,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
                 }
                 }
-                sltb++;
+                stats.sltb++;
 
             } else if (targetIsLeaf) {
                 // compute equivalent source particles on real target points
@@ -633,7 +624,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                                  targs.u[i],  targs.v[i],  targs.w[i]);
                 }
                 }
-                sbtl++;
+                stats.sbtl++;
 
             } else {
                 // compute equivalent source particles on equivalent target points
@@ -644,7 +635,7 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
                                  eqtargs.u[i], eqtargs.v[i], eqtargs.w[i]);
                 }
                 }
-                sbtb++;
+                stats.sbtb++;
             }
 
         } else if (ttree.s[ittn] > stree.s[sn]) {
@@ -684,27 +675,43 @@ void nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs, const Tree
         //printf("    istv now has %lu entries\n",istv.size());
     }
 
-    if (not targetIsLeaf) {
+    if (targetIsLeaf) {
+        //printf("  leaf box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+
+    } else {
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         // recurse onto the target box's children
-        // can't use reduction(+:sltl,sbtl,sltb,sbtb,tlc,lpc,bpc) for tasks
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
-        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
-        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
-        //#pragma omp taskwait
+        struct fastsumm_stats cstats1, cstats2;
+
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats1)
+        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats2)
+        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+
+        // accumulate the child box's stats - but must wait until preceding tasks complete
+        #pragma omp taskwait
+        stats.sltl += cstats1.sltl + cstats2.sltl;
+        stats.sbtl += cstats1.sbtl + cstats2.sbtl;
+        stats.sltb += cstats1.sltb + cstats2.sltb;
+        stats.sbtb += cstats1.sbtb + cstats2.sbtb;
+        stats.tlc  += cstats1.tlc  + cstats2.tlc;
+        stats.lpc  += cstats1.lpc  + cstats2.lpc;
+        stats.bpc  += cstats1.bpc  + cstats2.bpc;
     }
 
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        printf("%ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
-               tlc, sltl/(float)tlc, sbtl/(float)tlc);
-        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", sltl, sbtl, sltb, sbtb);
-        printf("  leaf prolongation count %ld  box pc %ld\n", lpc, bpc);
+        printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+               stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
+        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+        printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
     }
 
+    //printf("  box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+    return stats;
 }
 
 //
@@ -1333,8 +1340,8 @@ int main(int argc, char *argv[]) {
         std::vector<size_t> source_boxes = {1};
         #pragma omp parallel
         #pragma omp single
-        nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                       1, source_boxes, 2.3f);
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
+                              1, source_boxes, 1.1f);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
