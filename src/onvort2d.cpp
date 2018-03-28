@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <vector>
 #include <iostream>
 #include <chrono>
@@ -248,6 +251,19 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
                      const S tx, const S ty,
                      A& tax, A& tay) {
 
+    static int sltp = 0;
+    static int sbtp = 0;
+
+    // report on interactions
+    if (tnode == 0) {
+        int tlc = sp.n;
+        printf("%d target particles averaged %g leaf-part and %g equiv-part interactions\n",
+               tlc, sltp/(float)tlc, sbtp/(float)tlc);
+        printf("  sltp %d  sbtp %d\n", sltp, sbtp);
+
+        return;
+    }
+
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
@@ -255,6 +271,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(sp.x[j], sp.y[j], sp.r[j], sp.m[j],
                          tx, ty, tax, tay);
         }
+        sltp++;
         return;
     }
 
@@ -270,6 +287,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
             nbody_kernel(ep.x[j], ep.y[j], ep.r[j], ep.m[j],
                          tx, ty, tax, tay);
         }
+        sbtp++;
     } else {
         // box is too close, open up its children
         (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tax, tay);
@@ -291,6 +309,11 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
                         targs.x[i], targs.y[i],
                         targs.u[i], targs.v[i]);
     }
+
+    // report on the number of interactions
+    treecode2_block(srcs, eqsrcs, stree, 0, theta,
+                    targs.x[0], targs.y[0],
+                    targs.u[0], targs.v[0]);
 }
 
 //
@@ -672,7 +695,8 @@ std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
 template <class S>
-void sortIndexesSection(const std::vector<S> &v,
+void sortIndexesSection(const int recursion_level,
+                        const std::vector<S> &v,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
@@ -728,12 +752,24 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
+    const int thislev = log_2(tnode);
+    #ifdef _OPENMP
+    const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
+    #else
+    const int sort_recursion = 0;
+    #endif
 
     // debug print - starting condition
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //if (pfirst == 0) printf("  splitNode at level ? with %n threads\n", ::omp_get_num_threads());
+    #ifdef _OPENMP
+    //if (pfirst == 0) printf("  splitNode at level %d with %d threads, %d recursions\n", thislev, ::omp_get_num_threads(), sort_recursion);
+    #else
+    //if (pfirst == 0) printf("  splitNode at level %d with 1 threads, %d recursions\n", thislev, sort_recursion);
+    #endif
 
     // find the min/max of the three axes
-    //printf("find min/max\n");
+    //if (pfirst == 0) reset_and_start_timer();
     std::vector<S> boxsizes(2);
     auto minmax = minMaxValue(p.x, pfirst, plast);
     boxsizes[0] = minmax.second - minmax.first;
@@ -744,6 +780,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
 
     // find total mass and center of mass
     //printf("find mass/cm\n");
+    //if (pfirst == 0) reset_and_start_timer();
     t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
 
     // copy strength vector
@@ -767,28 +804,32 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
     t.s[tnode] = boxsizes[maxaxis];
+    //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
     if (t.num[tnode] <= blockSize) return;
 
     // sort this portion of the array along the big axis
     //printf("sort\n");
+    //if (pfirst == 0) reset_and_start_timer();
     if (maxaxis == 0) {
-        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(sort_recursion, p.x, p.itemp, pfirst, plast);
         //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
     } else if (maxaxis == 1) {
-        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(sort_recursion, p.y, p.itemp, pfirst, plast);
         //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
     }
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    //if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
-    // rearrange the elements
+    // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
     reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
+    //if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // determine where the split should be
     size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
@@ -830,9 +871,9 @@ void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
 
     // sort this portion of the array along the big axis
     if (maxaxis == 0) {
-        (void) sortIndexesSection(p.x, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(0, p.x, p.itemp, pfirst, plast);
     } else if (maxaxis == 1) {
-        (void) sortIndexesSection(p.y, p.itemp, pfirst, plast);
+        (void) sortIndexesSection(0, p.y, p.itemp, pfirst, plast);
     }
 
     // rearrange the elements
