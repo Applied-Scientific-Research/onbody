@@ -292,7 +292,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
     const S dz = st.z[tnode] - tz;
-    const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
+    const S dist = sqrt(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -464,7 +464,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
 
-    // quit out if we've gone too far
+    // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
 
     //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
@@ -603,12 +603,12 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
         const S dx = stree.x[sn] - ttree.x[ittn];
         const S dy = stree.y[sn] - ttree.y[ittn];
         const S dz = stree.z[sn] - ttree.z[ittn];
-        const S halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
-        const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
-        //printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
+        const S diag = stree.s[sn] + ttree.s[ittn];
+        const S dist = sqrt(dx*dx + dy*dy + dz*dz);
+        //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
-        if ((dist-halfsize) / halfsize > theta) {
+        if (dist / diag > theta) {
             // it is far enough - we can approximate
             //printf("    well-separated\n");
 
@@ -646,7 +646,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
                 stats.sbtb++;
             }
 
-        } else if (ttree.s[ittn] > stree.s[sn]) {
+        } else if (ttree.s[ittn] > 0.7*stree.s[sn]) {
+        //} else if (true) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 
@@ -684,9 +685,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
     }
 
     if (targetIsLeaf) {
-        //printf("  leaf box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+        //printf("  leaf box %ld  sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
 
     } else {
+        //printf("  non-leaf box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         // recurse onto the target box's children
@@ -1228,7 +1230,7 @@ int main(int argc, char *argv[]) {
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
-    ttree.print(300);
+    //ttree.print(300);
 
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
@@ -1316,7 +1318,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.5f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.4f);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -1349,10 +1351,12 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < test_iterations[3]; ++i) {
         start = std::chrono::system_clock::now();
         std::vector<size_t> source_boxes = {1};
+        // theta=0.82f roughly matches treecode2's 1.4f re: num of leaf-leaf interactions
+        // theta=1.5f roughly matches treecode2's 1.4f re: RMS error
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 1.5f);
+                              1, source_boxes, 0.82f);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
