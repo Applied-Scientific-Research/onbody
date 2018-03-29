@@ -102,6 +102,7 @@ class Tree {
 public:
     Tree(size_t);
     void resize(size_t);
+    void print(size_t);
 
     // number of levels in the tree
     int levels;
@@ -155,6 +156,13 @@ void Tree<S>::resize(size_t _num) {
     epnum.resize(numnodes);
 }
 
+template <class S>
+void Tree<S>::print(size_t _num) {
+    printf("\nTree with %d levels\n",levels);
+    for(size_t i=1; i<numnodes && i<_num; ++i) {
+        printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
+    }
+}
 
 
 //
@@ -892,7 +900,8 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     // find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
-    t.s[tnode] = boxsizes[maxaxis];
+    //t.s[tnode] = boxsizes[maxaxis];
+    t.s[tnode] = 0.5 * sqrt(pow(boxsizes[0],2) + pow(boxsizes[1],2) + pow(boxsizes[2],2));
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
@@ -1219,6 +1228,8 @@ int main(int argc, char *argv[]) {
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
+    ttree.print(300);
+
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     start = std::chrono::system_clock::now();
@@ -1305,7 +1316,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.1f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.5f);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -1341,7 +1352,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 1.1f);
+                              1, source_boxes, 1.5f);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
