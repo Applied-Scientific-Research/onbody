@@ -84,10 +84,10 @@ void Parts<S,A>::resize(size_t _num) {
 
 template <class S, class A>
 void Parts<S,A>::random_in_cube() {
-    for (auto&& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
-    for (auto&& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
-    for (auto&& _r : r) { _r = 1.0f / sqrt((S)n); }
-    for (auto&& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / sqrt((S)n); }
+    for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
+    for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
+    for (auto& _r : r) { _r = 1.0f / sqrt((S)n); }
+    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / sqrt((S)n); }
 }
 
 template <class S, class A>
@@ -1139,7 +1139,7 @@ int main(int argc, char *argv[]) {
     Parts<float,double> targs(numTargs);
     // initialize particle data
     targs.random_in_cube();
-    for (auto&& m : targs.m) { m = 1.0f; }
+    for (auto& m : targs.m) { m = 1.0f; }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
