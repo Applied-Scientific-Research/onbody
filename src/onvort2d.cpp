@@ -19,6 +19,8 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+#include "Polynomial.hh"
+
 const char* progname = "onvort2d";
 const size_t blockSize = 64;
 
@@ -354,75 +356,41 @@ A least_squares_val(const S xt, const S yt,
                     const size_t istart, const size_t iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
-    S sn = 0.0f;
-    S sx = 0.0f;
-    S sy = 0.0f;
-    S sx2 = 0.0f;
-    S sy2 = 0.0f;
-    S sv = 0.0f;
-    S sxv = 0.0f;
-    S syv = 0.0f;
-    S sxy = 0.0f;
-    for (size_t i=istart; i<iend; ++i) {
-        const S dx = x[i] - xt;
-        const S dy = y[i] - yt;
+
+    // prepare the arrays for CxxPolyFit
+    std::vector<double> xs(2*(iend-istart));
+    std::vector<double> vs(iend-istart);
+
+    // fill the arrays
+    size_t icnt = 0;
+    for (size_t i=0; i<iend-istart; ++i) {
+        // eventually want weighted least squares
         //const S dist = sqrt(dx*dx+dy*dy);
-        //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
-        //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
         // we should really use radius to scale this weight!!!
         //const S weight = 1.f / (0.001f + dist);
-        const S weight = 1.f;
-        //const float oods = 1.0f / 
-        //nsum
-        // see https://en.wikipedia.org/wiki/Linear_least_squares_%28mathematics%29
-        // must solve a system of equations for ax + by + cz + d = 0
-        // while minimizing the square error, this is a 4x4 matrix solve
-        // ideally while also weighting the data points by their distance
+        size_t idx = istart+i;
 
-        // compute sums of moments
-        //const float weight = 1.f;
-        sn += weight;
-        sx += weight*dx;
-        sy += weight*dy;
-        sv += weight*u[i];
-        sxy += weight*dx*dy;
-        sxv += weight*dx*u[i];
-        syv += weight*dy*u[i];
-        sx2 += weight*dx*dx;
-        sy2 += weight*dy*dy;
+        // but for now, keep it simple
+        xs[icnt++] = x[idx] - xt;
+        xs[icnt++] = y[idx] - yt;
+        vs[i] = u[idx];
     }
-    //printf("    sums are %g %g %g %g %g ...\n", sx, sy, sz, sv, sxy);
 
-    // now begin to solve the equation
-    const S i1 = sv/sn;
-    const S i2 = sx/sn;
-    const S i3 = sy/sn;
-    const S j1 = sxv/sx;
-    const S j2 = sx2/sx;
-    const S j3 = sxy/sx;
-    const S k1 = syv/sy;
-    const S k2 = sxy/sy;
-    const S k3 = sy2/sy;
-    const S q1 = k1 - j1;
-    const S q2 = k2 - j2;
-    const S q3 = k3 - j3;
-    const S r1 = k1 - i1;
-    const S r2 = k2 - i2;
-    const S r3 = k3 - i3;
+    // generate the least squares fit (not weighted yet)
+    // args are points, solutions, dimensions, polynomial order
+    Polynomial lsfit(xs, vs, 2, 2);
 
-    const A b3 = (r1/r2 - q1/q2) / (r3/r2 - q2/q2);
-    const A b2 = (q1/q2) - (q3/q2)*b3;
-    const A b1 = i1 - i2*b2 - i3*b3;
-    //printf("    b1 is %g\n", b1);
-    //const float b2 = r3/r2 - b1*r1/r2;
-    //printf("    b2 is %g\n", b2);
-    //const float b3 = j4/j3 - b1*j1/j3 - b2*j2/j3;
-    //printf("    b3 is %g\n", b3);
-    //const float b4 = sv/sz - b1/sz - b2*sx/sz - b3*sy/sz;
-    //printf("    b4 is %g\n", b4);
+    // I want to do this:
+    // Polynomial<S,2,2> mypolyfit;
+    // mypolyfit.setPointsAndValues(xs, vs);
+    // mypolyfit.getValueAt(xep1);
+    // mypolyfit.getValueAt(xep2);
+    // mypolyfit.getValueAt(xep3);
+    // mypolyfit.setWeights(wgt);
 
-    //if (fabs(u[istart]) > 0.0) exit(0);
-    return b1;
+    // evaluate at xt,yt, the origin
+    std::vector<double> xep = {0.0, 0.0};
+    return (S)lsfit.eval(xep);
 }
 
 //
@@ -1293,7 +1261,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.8f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.3f);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -1331,7 +1299,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 0.6f);
+                              1, source_boxes, 1.0f);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
