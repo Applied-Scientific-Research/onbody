@@ -110,6 +110,7 @@ class Tree {
 public:
     Tree(size_t);
     void resize(size_t);
+    void print(size_t);
 
     // number of levels in the tree
     int levels;
@@ -161,6 +162,13 @@ void Tree<S>::resize(size_t _num) {
     epnum.resize(numnodes);
 }
 
+template <class S>
+void Tree<S>::print(size_t _num) {
+    printf("\nTree with %d levels\n",levels);
+    for(size_t i=1; i<numnodes && i<_num; ++i) {
+        printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
+    }
+}
 
 
 //
@@ -284,7 +292,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     // distance from box center of mass to target point
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
-    const S dist = sqrtf(dx*dx + dy*dy);
+    const S dist = sqrt(dx*dx + dy*dy);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -349,25 +357,21 @@ A least_squares_val(const S xt, const S yt,
     S sn = 0.0f;
     S sx = 0.0f;
     S sy = 0.0f;
-    S sz = 0.0f;
     S sx2 = 0.0f;
     S sy2 = 0.0f;
-    S sz2 = 0.0f;
     S sv = 0.0f;
     S sxv = 0.0f;
     S syv = 0.0f;
-    S szv = 0.0f;
     S sxy = 0.0f;
-    S sxz = 0.0f;
-    S syz = 0.0f;
     for (size_t i=istart; i<iend; ++i) {
         const S dx = x[i] - xt;
         const S dy = y[i] - yt;
-        const S dz = 0.0;
-        const S dist = sqrt(dx*dx+dy*dy+dz*dz);
+        const S dist = sqrt(dx*dx+dy*dy);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
-        const S weight = 1.f / (0.001f + dist);
+        // we should really use radius to scale this weight!!!
+        //const S weight = 1.f / (0.001f + dist);
+        const S weight = 1.f;
         //const float oods = 1.0f / 
         //nsum
         // see https://en.wikipedia.org/wiki/Linear_least_squares_%28mathematics%29
@@ -380,41 +384,35 @@ A least_squares_val(const S xt, const S yt,
         sn += weight;
         sx += weight*dx;
         sy += weight*dy;
-        sz += weight*dz;
         sv += weight*u[i];
         sxy += weight*dx*dy;
-        sxz += weight*dx*dz;
-        syz += weight*dy*dz;
         sxv += weight*dx*u[i];
         syv += weight*dy*u[i];
-        szv += weight*dz*u[i];
         sx2 += weight*dx*dx;
         sy2 += weight*dy*dy;
-        sz2 += weight*dz*dz;
     }
     //printf("    sums are %g %g %g %g %g ...\n", sx, sy, sz, sv, sxy);
 
     // now begin to solve the equation
-    const S i1 = sx/sxz - sn/sz;
-    const S i2 = sx2/sxz - sx/sz;
-    const S i3 = sxy/sxz - sy/sz;
-    const S i4 = sxv/sxz - sv/sz;
-    const S j1 = sy/syz - sn/sz;
-    const S j2 = sxy/syz - sx/sz;
-    const S j3 = sy2/syz - sy/sz;
-    const S j4 = syv/syz - sv/sz;
-    const S k1 = sz/sz2 - sn/sz;
-    const S k2 = sxz/sz2 - sx/sz;
-    const S k3 = syz/sz2 - sy/sz;
-    const S k4 = szv/sz2 - sv/sz;
-    const S q1 = i3*j1 - i1*j3;
-    const S q2 = i3*j2 - i2*j3;
-    const S q3 = i3*j4 - i4*j3;
-    const S r1 = i3*k1 - i1*k3;
-    const S r2 = i3*k2 - i2*k3;
-    const S r3 = i3*k4 - i4*k3;
+    const S i1 = sv/sn;
+    const S i2 = sx/sn;
+    const S i3 = sy/sn;
+    const S j1 = sxv/sx;
+    const S j2 = sx2/sx;
+    const S j3 = sxy/sx;
+    const S k1 = syv/sy;
+    const S k2 = sxy/sy;
+    const S k3 = sy2/sy;
+    const S q1 = k1 - j1;
+    const S q2 = k2 - j2;
+    const S q3 = k3 - j3;
+    const S r1 = k1 - i1;
+    const S r2 = k2 - i2;
+    const S r3 = k3 - i3;
 
-    const A b1 = (r2*q3 - r3*q2) / (r2*q1 - r1*q2);
+    const A b3 = (r1/r2 - q1/q2) / (r3/r2 - q2/q2);
+    const A b2 = (q1/q2) - (q3/q2)*b3;
+    const A b1 = i1 - i2*b2 - i3*b3;
     //printf("    b1 is %g\n", b1);
     //const float b2 = r3/r2 - b1*r1/r2;
     //printf("    b2 is %g\n", b2);
@@ -450,7 +448,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
 
-    // quit out if we've gone too far
+    // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
 
     //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
@@ -580,12 +578,12 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
         // distance from box center of mass to target point
         const S dx = stree.x[sn] - ttree.x[ittn];
         const S dy = stree.y[sn] - ttree.y[ittn];
-        const S halfsize = 0.5*(stree.s[sn] + ttree.s[ittn]);
-        const S dist = sqrtf(dx*dx + dy*dy);
-        //printf("  src box %d is %g away and halfsize %g\n",sn, dist, halfsize);
+        const S diag = stree.s[sn] + ttree.s[ittn];
+        const S dist = sqrt(dx*dx + dy*dy);
+        //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
-        if ((dist-halfsize) / halfsize > theta) {
+        if (dist / diag > theta) {
             // it is far enough - we can approximate
             //printf("    well-separated\n");
 
@@ -623,7 +621,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
                 stats.sbtb++;
             }
 
-        } else if (ttree.s[ittn] > stree.s[sn]) {
+        } else if (ttree.s[ittn] > 0.7*stree.s[sn]) {
+        //} else if (true) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 
@@ -661,9 +660,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
     }
 
     if (targetIsLeaf) {
-        //printf("  leaf box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+        //printf("  leaf box %ld  sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
 
     } else {
+        //printf("  non-leaf box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         // recurse onto the target box's children
@@ -1205,6 +1205,8 @@ int main(int argc, char *argv[]) {
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
+    //ttree.print(300);
+
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     start = std::chrono::system_clock::now();
@@ -1291,7 +1293,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 1.1f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, 0.8f);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -1324,10 +1326,12 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < test_iterations[3]; ++i) {
         start = std::chrono::system_clock::now();
         std::vector<size_t> source_boxes = {1};
+        // theta=0.82f roughly matches treecode2's 1.4f re: num of leaf-leaf interactions
+        // theta=1.5f roughly matches treecode2's 1.4f re: RMS error
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 1.1f);
+                              1, source_boxes, 0.6f);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
