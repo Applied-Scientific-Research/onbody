@@ -366,7 +366,7 @@ A least_squares_val(const S xt, const S yt,
     for (size_t i=istart; i<iend; ++i) {
         const S dx = x[i] - xt;
         const S dy = y[i] - yt;
-        const S dist = sqrt(dx*dx+dy*dy);
+        //const S dist = sqrt(dx*dx+dy*dy);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
         // we should really use radius to scale this weight!!!
@@ -886,8 +886,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     // find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
-    //t.s[tnode] = boxsizes[maxaxis];
-    t.s[tnode] = 0.5 * sqrt(pow(boxsizes[0],2) + pow(boxsizes[1],2)));
+    t.s[tnode] = 0.5 * sqrt(pow(boxsizes[0],2) + pow(boxsizes[1],2));
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
