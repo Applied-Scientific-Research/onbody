@@ -236,13 +236,13 @@ N        | build tree | build tree async
 * Increase accuracy of the prolongation operator - this means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box
 * Pull in Eigen to assemble and solve the matrix equation for the prolongation - we need more moments taken into consideration to raise the accuracy, I believe
-* Tweak box-opening criterion and see if it improves accuracy per time
 * Use smarter or faster data structures in the O(N) list-building system
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
-* Update ongrav3d to the same state as onvort2d
 
+* Tweak box-opening criterion and see if it improves accuracy per time - DONE
+* Update ongrav3d to the same state as onvort2d - DONE
 * Use the std::chrono instead of counting mcycles - DONE
 * Build with CMake - DONE
 * For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency! - DONE
