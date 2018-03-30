@@ -3,6 +3,18 @@
 //
 // templatized on data type, number of spatial dimensions, and polynomial order
 //
+// Portions of this code are
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Copyright (c) 2016, Lawrence Livermore National Security, LLC.
+// Produced at the Lawrence Livermore National Laboratory
+// Written by Jim Leek <leek2@llnl.gov> and Adrian Wong <adrianskw@gmail.com>
+// LLNL-CODE-704097
+// All rights reserved.
+// This file is part of C++ PolyFit.·
+// For details, see https://github.com/llnl/CxxPolyFit.
+// Please also CxxPolyFit/LICENSE.
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//
 
 #include <vector>
 #include <Eigen/Dense>
