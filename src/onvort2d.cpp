@@ -359,8 +359,8 @@ A least_squares_val(const S xt, const S yt,
     //printf("  target point at %g %g %g\n", xt, yt, zt);
 
     // prepare the arrays for CxxPolyFit
-    std::vector<double> xs(2*(iend-istart));
-    std::vector<double> vs(iend-istart);
+    std::vector<S> xs(2*(iend-istart));
+    std::vector<S> vs(iend-istart);
 
     // fill the arrays
     size_t icnt = 0;
@@ -378,17 +378,9 @@ A least_squares_val(const S xt, const S yt,
     }
 
     // generate the least squares fit (not weighted yet)
-    // args are points, solutions, dimensions, polynomial order
-    //Polynomial lsfit(xs, vs, 2, 2);
-    WLSPoly<S,2,1> lsfit();
-
-    // I want to do this:
-    // Polynomial<S,2,2> mypolyfit;
-    // mypolyfit.setPointsAndValues(xs, vs);
-    // mypolyfit.getValueAt(xep1);
-    // mypolyfit.getValueAt(xep2);
-    // mypolyfit.getValueAt(xep3);
-    // mypolyfit.setWeights(wgt);
+    // template params are type, dimensions, polynomial order
+    WLSPoly<S,2,1> lsfit;
+    //lsfit.solve(xs, vs);
 
     // evaluate at xt,yt, the origin
     std::vector<double> xep = {0.0, 0.0};
