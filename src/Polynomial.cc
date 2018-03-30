@@ -24,6 +24,10 @@ extern "C"
 }
 
 
+// read about dgelss here: http://www.netlib.org/lapack/explore-html/d7/d3b/group__double_g_esolve_gaa6ed601d0622edcecb90de08d7a218ec.html#gaa6ed601d0622edcecb90de08d7a218ec
+// read about Eigen's solvers here: https://eigen.tuxfamily.org/dox/group__LeastSquares.html
+
+
 /**
  * This constructor makes a Polynomial from a set of data points via regression.
  *  xs is a multidimensional array of the axes of the polynomial points.  
@@ -51,7 +55,7 @@ Polynomial::Polynomial(const vector<double>& xs, const vector<double>& ys, int i
     vector<double> i_xs(xs.begin()+(dims*ii), xs.begin()+(dims*ii)+dims);  //Get the function values as calculated with existing basis functions for each point.
     vector<double> vals;
     basisEvals(i_xs,vals); //get all basis function values at each point
-    
+
     //Since A is passed into LAPack, it must be in column major order, but it's the only thing that is.
     //So I just have this special copy here
     for(int jj = 0; jj < numBasis; ++jj) {
@@ -73,7 +77,7 @@ Polynomial::Polynomial(const vector<double>& xs, const vector<double>& ys, int i
   int rank = 0;
   int info = 0;
   dgelss_(&numPoints,&numBasis,&nrhs,Awork,&numPoints,Bwork,&numPoints,S,&rcond,&rank,work,&work_size, &info);
-  
+
   coefficients.resize(numBasis);
   copy(Bwork, Bwork+numBasis, coefficients.begin());   //You get the coefficients out of B[1:n] from column 1
 
@@ -82,7 +86,7 @@ Polynomial::Polynomial(const vector<double>& xs, const vector<double>& ys, int i
 /*
 Polynomial::Polynomial(const vector<double>& in_powers, const vector<double>& in_coefficients, double in_dims, double in_order) : dims(in_dims), order(in_order) {
   numBasis = getNumBasis(dims, order);
-  
+
   copy(in_powers.begin(), in_powers.end(), back_inserter(powers));
   copy(in_coefficients.begin(), in_coefficients.end(), back_inserter(coefficients));
 
@@ -102,7 +106,7 @@ Polynomial::Polynomial(const vector<double>& in_coefficients, double in_dims, do
 }
 
 Polynomial::Polynomial(const Polynomial& rhs) : dims(rhs.dims), order(rhs.order), numBasis(rhs.numBasis) {
-  
+
   copy(rhs.powers.begin(), rhs.powers.end(), back_inserter(powers));
   copy(rhs.coefficients.begin(), rhs.coefficients.end(), back_inserter(coefficients));
 
