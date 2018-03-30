@@ -19,7 +19,8 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
-#include "Polynomial.hh"
+//#include "Polynomial.hh"
+#include "wlspoly.hpp"
 
 const char* progname = "onvort2d";
 const size_t blockSize = 64;
@@ -378,7 +379,8 @@ A least_squares_val(const S xt, const S yt,
 
     // generate the least squares fit (not weighted yet)
     // args are points, solutions, dimensions, polynomial order
-    Polynomial lsfit(xs, vs, 2, 2);
+    //Polynomial lsfit(xs, vs, 2, 2);
+    WLSPoly<S,2,1> lsfit();
 
     // I want to do this:
     // Polynomial<S,2,2> mypolyfit;
@@ -390,7 +392,8 @@ A least_squares_val(const S xt, const S yt,
 
     // evaluate at xt,yt, the origin
     std::vector<double> xep = {0.0, 0.0};
-    return (S)lsfit.eval(xep);
+    //return (S)lsfit.eval(xep);
+    return 0.0;
 }
 
 //

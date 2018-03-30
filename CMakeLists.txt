@@ -9,11 +9,11 @@ IF (NOT CMAKE_BUILD_TYPE)
 ENDIF ()
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
-  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++11")
+  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14")
   SET (CMAKE_CXX_FLAGS_DEBUG "-g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-O2 -march=native -ffast-math -ftree-vectorize -ftree-loop-vectorize")
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++11 -stdlib=libc++")
+  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14 -stdlib=libc++")
 ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
 ENDIF ()
@@ -44,11 +44,13 @@ ELSEIF ( UNIX )
 
   FIND_PACKAGE( OpenMP REQUIRED)
   IF (OPENMP_FOUND)
-    MESSAGE ("OPENMP FOUND")
+    #MESSAGE ("OPENMP FOUND")
     SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
   ENDIF ()
+
+  INCLUDE_DIRECTORIES ( "/usr/include/eigen3" )
 
 ENDIF ()
 
