@@ -86,7 +86,7 @@ void Parts<S,A>::random_in_cube() {
     for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
     for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
     for (auto& _z : z) { _z = (S)rand()/(S)RAND_MAX; }
-    for (auto& _r : r) { _r = 1.0f / cbrt((S)n); }
+    for (auto& _r : r) { _r = 1.0f / std::cbrt((S)n); }
     for (auto& _m : m) { _m = 2.0f*(S)rand()/(S)RAND_MAX / (S)n; }
 }
 
@@ -178,7 +178,7 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dy = sy - ty;
     const S dz = sz - tz;
     S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
-    r2 = sm/(r2*sqrt(r2));
+    r2 = sm/(r2*std::sqrt(r2));
     tax += r2 * dx;
     tay += r2 * dy;
     taz += r2 * dz;
@@ -230,7 +230,7 @@ void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
     const S dz = st.z[tnode] - tz;
-    const S dist = sqrtf(dx*dx + dy*dy + dz*dz);
+    const S dist = std::sqrt(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -292,7 +292,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
     const S dz = st.z[tnode] - tz;
-    const S dist = sqrt(dx*dx + dy*dy + dz*dz);
+    const S dist = std::sqrt(dx*dx + dy*dy + dz*dz);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -373,7 +373,7 @@ A least_squares_val(const S xt, const S yt, const S zt,
         const S dx = x[i] - xt;
         const S dy = y[i] - yt;
         const S dz = z[i] - zt;
-        const S dist = sqrt(dx*dx+dy*dy+dz*dz);
+        const S dist = std::sqrt(dx*dx+dy*dy+dz*dz);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, x[i], y[i], z[i], u[i]);
         //printf("    point %d at %g %g %g dist %g with value %g\n", i, dx, dy, dz, dist, u[i]);
         const S weight = 1.f / (0.001f + dist);
@@ -604,7 +604,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
         const S dy = stree.y[sn] - ttree.y[ittn];
         const S dz = stree.z[sn] - ttree.z[ittn];
         const S diag = stree.s[sn] + ttree.s[ittn];
-        const S dist = sqrt(dx*dx + dy*dy + dz*dz);
+        const S dist = std::sqrt(dx*dx + dy*dy + dz*dz);
         //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
@@ -903,7 +903,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
     //t.s[tnode] = boxsizes[maxaxis];
-    t.s[tnode] = 0.5 * sqrt(pow(boxsizes[0],2) + pow(boxsizes[1],2) + pow(boxsizes[2],2));
+    t.s[tnode] = 0.5 * std::sqrt(std::pow(boxsizes[0],2) + std::pow(boxsizes[1],2) + std::pow(boxsizes[2],2));
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
@@ -1306,7 +1306,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in treecode is %g\n", std::sqrt(errsum/errcnt));
     }
 
 
@@ -1338,7 +1338,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in treecode2 is %g\n", std::sqrt(errsum/errcnt));
     }
 
 
@@ -1377,7 +1377,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in fastsumm is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in fastsumm is %g\n", std::sqrt(errsum/errcnt));
     }
 
     return 0;

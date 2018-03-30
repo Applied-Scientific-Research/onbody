@@ -88,8 +88,8 @@ template <class S, class A>
 void Parts<S,A>::random_in_cube() {
     for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
     for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
-    for (auto& _r : r) { _r = 1.0f / sqrt((S)n); }
-    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / sqrt((S)n); }
+    for (auto& _r : r) { _r = 1.0f / std::sqrt((S)n); }
+    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / std::sqrt((S)n); }
 }
 
 template <class S, class A>
@@ -234,7 +234,7 @@ void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode
     // distance from box center of mass to target point
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
-    const S dist = sqrtf(dx*dx + dy*dy);
+    const S dist = std::sqrt(dx*dx + dy*dy);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -294,7 +294,7 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
     // distance from box center of mass to target point
     const S dx = st.x[tnode] - tx;
     const S dy = st.y[tnode] - ty;
-    const S dist = sqrt(dx*dx + dy*dy);
+    const S dist = std::sqrt(dx*dx + dy*dy);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -365,7 +365,7 @@ A least_squares_val(const S xt, const S yt,
     size_t icnt = 0;
     for (size_t i=0; i<iend-istart; ++i) {
         // eventually want weighted least squares
-        //const S dist = sqrt(dx*dx+dy*dy);
+        //const S dist = std::sqrt(dx*dx+dy*dy);
         // we should really use radius to scale this weight!!!
         //const S weight = 1.f / (0.001f + dist);
         size_t idx = istart+i;
@@ -547,7 +547,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A>& srcs, const Parts<S,A>& e
         const S dx = stree.x[sn] - ttree.x[ittn];
         const S dy = stree.y[sn] - ttree.y[ittn];
         const S diag = stree.s[sn] + ttree.s[ittn];
-        const S dist = sqrt(dx*dx + dy*dy);
+        const S dist = std::sqrt(dx*dx + dy*dy);
         //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
@@ -854,7 +854,7 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
     // find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
-    t.s[tnode] = 0.5 * sqrt(pow(boxsizes[0],2) + pow(boxsizes[1],2));
+    t.s[tnode] = 0.5 * std::sqrt(std::pow(boxsizes[0],2) + std::pow(boxsizes[1],2));
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
@@ -1249,7 +1249,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in treecode is %g\n", std::sqrt(errsum/errcnt));
     }
 
 
@@ -1281,7 +1281,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode2 is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in treecode2 is %g\n", std::sqrt(errsum/errcnt));
     }
 
 
@@ -1320,7 +1320,7 @@ int main(int argc, char *argv[]) {
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in fastsumm is %g\n", sqrtf(errsum/errcnt));
+    printf("RMS error in fastsumm is %g\n", std::sqrt(errsum/errcnt));
     }
 
     return 0;
