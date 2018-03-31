@@ -62,25 +62,25 @@ constexpr int32_t getNumBasis(const int32_t ndim, const int32_t norder) {
 template <int32_t NPOWERS>
 using VectorBasis = Eigen::Matrix<int32_t, NPOWERS, 1>;
 
-template <int32_t NDIM>
-constexpr auto getBasisPowers(const int32_t norder) {
+template <int32_t NDIM, int32_t NORDER>
+auto getBasisPowers() {
 
-    constexpr int32_t numBasis = getNumBasis(NDIM, norder);
+    constexpr int32_t numBasis = getNumBasis(NDIM, NORDER);
     VectorBasis<numBasis*NDIM> powers;
     int32_t basisNum = 0;
 
     switch(NDIM) {
 
     case 1:
-        for (int32_t ii = 0; ii < norder+1; ++ii) {
+        for (int32_t ii = 0; ii < NORDER+1; ++ii) {
             powers[ii] = ii;
         }
         break;
 
     case 2:
-        for (int32_t ii = 0; ii < norder+1; ++ii) {
-            for (int32_t j1 = norder; j1 >= 0; --j1) {
-                for (int32_t j2 = norder; j2 >= 0; --j2) {
+        for (int32_t ii = 0; ii < NORDER+1; ++ii) {
+            for (int32_t j1 = NORDER; j1 >= 0; --j1) {
+                for (int32_t j2 = NORDER; j2 >= 0; --j2) {
                     if (j1+j2==ii) {
                         powers[basisNum] = j1;				//1st dimension
                         powers[numBasis + basisNum] = j2;	//2nd dimension
@@ -92,10 +92,10 @@ constexpr auto getBasisPowers(const int32_t norder) {
         break;
 
     case 3:
-        for (int32_t ii = 0; ii < norder+1; ++ii) {
-            for (int32_t j1 = norder; j1 >= 0; --j1) {
-                for (int32_t j2 = norder; j2 >= 0; --j2) {
-                    for (int32_t j3 = norder; j3 >= 0; --j3) {
+        for (int32_t ii = 0; ii < NORDER+1; ++ii) {
+            for (int32_t j1 = NORDER; j1 >= 0; --j1) {
+                for (int32_t j2 = NORDER; j2 >= 0; --j2) {
+                    for (int32_t j3 = NORDER; j3 >= 0; --j3) {
                         if (j1+j2+j3==ii) {
                             powers[basisNum] = j1;				//1st dimension
                             powers[numBasis + basisNum] = j2;	//2nd dimension
@@ -137,7 +137,7 @@ private:
     static constexpr int32_t numBasis = getNumBasis(NDIM, NORDER);
 
     // powers of the the basis functions
-    static constexpr VectorBasis<numBasis*NDIM> powers = getBasisPowers<NDIM>(NORDER);
+    VectorBasis<numBasis*NDIM> powers;
 
     // A matrix for the problem
     Eigen::Matrix<T, Eigen::Dynamic, numBasis> A;
@@ -149,7 +149,8 @@ private:
 template <class T, int32_t NDIM, int32_t NORDER>
 WLSPoly<T,NDIM,NORDER>::WLSPoly() {
     // reserve space?
-    // compute powers? done already
+    // compute powers
+    powers = getBasisPowers<NDIM,NORDER>();
 }
 
 //
@@ -161,7 +162,7 @@ void WLSPoly<T,NDIM,NORDER>::solve(const std::vector<T>& pts,
 
     // make sure inputs line up
     const size_t numPoints = soln.size();
-    static_assert(numPoints == NDIM*pts.size());
+    //assert(numPoints == NDIM*pts.size());
 
     // set up the A matrix from the given points
     std::vector<T> xs(NDIM);
@@ -181,12 +182,12 @@ void WLSPoly<T,NDIM,NORDER>::solve(const std::vector<T>& pts,
             }
         }
         for (size_t jj=0; jj<numBasis; ++jj) {
-            A[ii][jj] = vals[jj];
+            A(ii,jj) = vals[jj];
         }
     }
 
     // solve it
-    coefficients = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(soln);
+    //coefficients = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(soln);
 }
 
 
