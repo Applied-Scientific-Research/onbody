@@ -380,12 +380,11 @@ A least_squares_val(const S xt, const S yt,
     // generate the least squares fit (not weighted yet)
     // template params are type, dimensions, polynomial order
     WLSPoly<S,2,1> lsfit;
-    //lsfit.solve(xs, vs);
+    lsfit.solve(xs, vs);
 
     // evaluate at xt,yt, the origin
-    std::vector<double> xep = {0.0, 0.0};
-    //return (S)lsfit.eval(xep);
-    return 0.0;
+    std::vector<S> xep = {0.0, 0.0};
+    return (S)lsfit.eval(xep);
 }
 
 //
