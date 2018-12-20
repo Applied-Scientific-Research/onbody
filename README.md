@@ -230,6 +230,14 @@ N        | build tree | build tree async
 1000000  | 1000.821   | 690.409
 10000000 | 20730.938  | 14150.123
 
+Now that we are using std::chrono for timing, let's look at these performance numbers in a sane unit. These were conducted on an 8-core AMD Ryzen 2700X CPU. Thetas are 2.75 for both fast codes.
+
+N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
+---------|----------|-------------|---------|----------|-------
+10000    |  0.0080  |    0.0024   |  0.0288 |   0.0192 | 0.0392
+100000   |  0.0198  |    0.0068   |  2.5251 |   0.4484 | 1.1426
+1000000  |  0.1708  |    0.0384   |  268.51 |   8.7608 | 18.696
+10000000 |  3.2547  |    0.3782   |  38036. |   227.87 | 213.30
 
 ## To Do
 
