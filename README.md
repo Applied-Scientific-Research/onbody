@@ -251,6 +251,8 @@ N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
 
 ## To Do
 
+* Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code
+* Is it possible to pull [Vc](https://github.com/VcDevel/Vc) into this project?
 * Increase accuracy of the prolongation operator - this means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box; but that uses non-local information!
 * Pull in Eigen to assemble and solve the matrix equation for the prolongation - we need more moments taken into consideration to raise the accuracy, I believe
