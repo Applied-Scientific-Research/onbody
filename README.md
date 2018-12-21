@@ -230,7 +230,7 @@ N        | build tree | build tree async
 1000000  | 1000.821   | 690.409
 10000000 | 20730.938  | 14150.123
 
-Now that we are using std::chrono for timing, let's look at these performance numbers in a sane unit. These were conducted on an 8-core AMD Ryzen 2700X CPU. Thetas are 2.75 for both fast codes.
+Now that we are using std::chrono for timing, let's look at these performance numbers in a sane unit - seconds. These were conducted on an 8-core AMD Ryzen 2700X CPU. Thetas are 2.75 for both fast codes, and RMS errors peaked at 5e-4.
 
 N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
 ---------|----------|-------------|---------|----------|-------
@@ -239,10 +239,20 @@ N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
 1000000  |  0.1708  |    0.0384   |  268.51 |   8.7608 | 18.696
 10000000 |  3.2547  |    0.3782   |  38036. |   227.87 | 213.30
 
+This is the same table but for an 8-core Intel i7-5960X Haswell CPU and GCC 7.3.0.
+
+N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
+---------|----------|-------------|---------|----------|-------
+10000    |  0.0113  |    0.0011   |  0.0232 |   0.0200 | 0.0419
+100000   |  0.0303  |    0.0074   |  2.0405 |   0.4446 | 0.9111
+1000000  |  0.2042  |    0.0475   |  236.83 |   8.1706 | 14.556
+10000000 |  3.5744  |    0.4113   |  21307. |   127.70 | 164.02
+
+
 ## To Do
 
 * Increase accuracy of the prolongation operator - this means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
-* Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box
+* Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box; but that uses non-local information!
 * Pull in Eigen to assemble and solve the matrix equation for the prolongation - we need more moments taken into consideration to raise the accuracy, I believe
 * Use smarter or faster data structures in the O(N) list-building system
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
