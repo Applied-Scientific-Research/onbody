@@ -22,6 +22,9 @@
 const char* progname = "ongrav3d";
 const size_t blockSize = 64;
 
+#define STORE float
+#define ACCUM double
+
 //
 // Find index of msb of uint32
 // from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
@@ -235,7 +238,7 @@ void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
         // box is far enough removed, approximate its influence
-        nbody_kernel(st.x[tnode], st.y[tnode], st.z[tnode], 0.0f, st.m[tnode],
+        nbody_kernel(st.x[tnode], st.y[tnode], st.z[tnode], (S)0.0, st.m[tnode],
                      tx, ty, tz, tax, tay, taz);
     } else {
         // box is too close, open up its children
@@ -1134,34 +1137,40 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 0, 1, 1};
+    static std::vector<int> test_iterations = {1, 0, 4, 0};
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
+    float theta = 2.75;
 
-    if (argc > 1) {
-        if (strncmp(argv[1], "-n=", 3) == 0) {
-            size_t num = atof(argv[1] + 3);
+    for (int i=1; i<argc; i++) {
+        if (strncmp(argv[i], "-n=", 3) == 0) {
+            size_t num = atoi(argv[i]+3);
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
+        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+            float testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta = testtheta;
         }
     }
 
     printf("Running %s with %ld sources and %ld targets\n\n", progname, numSrcs, numTargs);
 
     // if problem is too big, skip some number of target particles
-    size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+    //size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+    size_t ntskip = std::max(1, (int)((float)numTargs/1.e+4));
 
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double> srcs(numSrcs);
+    Parts<STORE,ACCUM> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
 
-    Parts<float,double> targs(numTargs);
+    Parts<STORE,ACCUM> targs(numTargs);
     // initialize particle data
     targs.random_in_cube();
     for (auto& m : targs.m) { m = 1.0f; }
@@ -1173,7 +1182,7 @@ int main(int argc, char *argv[]) {
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
     start = std::chrono::system_clock::now();
-    Tree<float> stree(numSrcs);
+    Tree<STORE> stree(numSrcs);
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -1190,7 +1199,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -1216,7 +1225,7 @@ int main(int argc, char *argv[]) {
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     start = std::chrono::system_clock::now();
-    Tree<float> ttree(numTargs);
+    Tree<STORE> ttree(numTargs);
     printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -1235,7 +1244,7 @@ int main(int argc, char *argv[]) {
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double> eqtargs((ttree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqtargs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -1318,7 +1327,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 2.75f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
