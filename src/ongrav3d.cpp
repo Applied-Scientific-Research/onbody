@@ -1142,6 +1142,7 @@ int main(int argc, char *argv[]) {
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     float theta = 2.75;
+    double treetime = 0.0;
 
     for (int i=1; i<argc; i++) {
         if (strncmp(argv[i], "-n=", 3) == 0) {
@@ -1186,6 +1187,7 @@ int main(int argc, char *argv[]) {
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime += elapsed_seconds.count();
 
     // split this node and recurse
     start = std::chrono::system_clock::now();
@@ -1195,6 +1197,7 @@ int main(int argc, char *argv[]) {
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime += elapsed_seconds.count();
 
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
@@ -1203,6 +1206,7 @@ int main(int argc, char *argv[]) {
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime += elapsed_seconds.count();
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     start = std::chrono::system_clock::now();
@@ -1212,6 +1216,7 @@ int main(int argc, char *argv[]) {
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime += elapsed_seconds.count();
     //for (size_t i=0; i<stree.num[1]; ++i)
     //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
 
@@ -1220,6 +1225,7 @@ int main(int argc, char *argv[]) {
     (void) calcEquivalents(srcs, eqsrcs, stree, 1);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime += elapsed_seconds.count();
 
 
     // don't need the target tree for treecode, but will for fast code
@@ -1302,6 +1308,7 @@ int main(int argc, char *argv[]) {
         minTreecode = std::min(minTreecode, dt);
     }
     printf("[onbody treecode]:\t\t[%.4f] seconds\n", minTreecode);
+    printf("[treecode total]:\t\t[%.4f] seconds\n", treetime + minTreecode);
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
@@ -1334,6 +1341,7 @@ int main(int argc, char *argv[]) {
         minTreecode2 = std::min(minTreecode2, dt);
     }
     printf("[onbody treecode2]:\t\t[%.4f] seconds\n", minTreecode2);
+    printf("[treecode2 total]:\t\t[%.4f] seconds\n", treetime + minTreecode2);
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
