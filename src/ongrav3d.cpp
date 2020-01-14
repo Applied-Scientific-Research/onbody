@@ -1282,10 +1282,10 @@ int main(int argc, char *argv[]) {
     printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive);
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
-    std::vector<float> naiveu(targs.u.begin(), targs.u.end());
+    std::vector<ACCUM> naiveu(targs.u.begin(), targs.u.end());
 
-    float errsum = 0.0;
-    float errcnt = 0.0;
+    ACCUM errsum = 0.0;
+    ACCUM errcnt = 0.0;
 
     //
     // Run a simple O(NlogN) treecode - boxes approximate as particles
@@ -1305,13 +1305,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> treecodeu(targs.u.begin(), targs.u.end());
+    std::vector<ACCUM> treecodeu(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i< targs.u.size(); i+=ntskip) {
-        float thiserr = treecodeu[i]-naiveu[i];
+        ACCUM thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
@@ -1337,13 +1337,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> treecodeu2(targs.u.begin(), targs.u.end());
+    std::vector<ACCUM> treecodeu2(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i< targs.u.size(); i+=ntskip) {
-        float thiserr = treecodeu2[i]-naiveu[i];
+        ACCUM thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
@@ -1376,13 +1376,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
-    std::vector<float> fastu(targs.u.begin(), targs.u.end());
+    std::vector<ACCUM> fastu(targs.u.begin(), targs.u.end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i< targs.u.size(); i+=ntskip) {
-        float thiserr = fastu[i]-naiveu[i];
+        ACCUM thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
