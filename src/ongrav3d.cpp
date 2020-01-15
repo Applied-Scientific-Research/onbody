@@ -1143,6 +1143,7 @@ int main(int argc, char *argv[]) {
     size_t numTargs = 10000;
     float theta = 2.75;
     double treetime = 0.0;
+    double ttreetime = 0.0;
 
     for (int i=1; i<argc; i++) {
         if (strncmp(argv[i], "-n=", 3) == 0) {
@@ -1235,6 +1236,7 @@ int main(int argc, char *argv[]) {
     printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
+    ttreetime += elapsed_seconds.count();
 
     // split this node and recurse
     start = std::chrono::system_clock::now();
@@ -1244,6 +1246,7 @@ int main(int argc, char *argv[]) {
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
+    ttreetime += elapsed_seconds.count();
 
     //ttree.print(300);
 
@@ -1254,6 +1257,7 @@ int main(int argc, char *argv[]) {
     printf("  need %ld particles\n", eqtargs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
+    ttreetime += elapsed_seconds.count();
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     start = std::chrono::system_clock::now();
@@ -1263,12 +1267,14 @@ int main(int argc, char *argv[]) {
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
+    ttreetime += elapsed_seconds.count();
 
     // then, march through arrays merging pairs as you go up
     start = std::chrono::system_clock::now();
     (void) calcEquivalents(targs, eqtargs, ttree, 1);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    ttreetime += elapsed_seconds.count();
 
     if (just_build_trees) exit(0);
 
@@ -1373,7 +1379,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 2.75f);
+                              1, source_boxes, theta);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
@@ -1381,6 +1387,7 @@ int main(int argc, char *argv[]) {
         minFast = std::min(minFast, dt);
     }
     printf("[onbody fast]:\t\t\t[%.4f] seconds\n", minFast);
+    printf("[fast total]:\t\t\t[%.4f] seconds\n", treetime + ttreetime + minFast);
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g %g\n",i,targs.u[i],targs.v[i],targs.w[i]);
     // save the results for comparison
