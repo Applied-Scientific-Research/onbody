@@ -24,8 +24,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
                                                const float* ss, const float* sr,
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {
-
-    float flops = -1.0;
+    float flops = 0.0;
 
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
@@ -98,7 +97,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     //
     printf("\nRun the treecode O(NlogN) with equivalent particles\n");
     start = std::chrono::system_clock::now();
-    nbody_treecode2(srcs, eqsrcs, stree, targs, 1.3f);
+    flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 1.3f);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     double dt = elapsed_seconds.count();
     printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);

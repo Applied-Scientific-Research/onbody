@@ -19,6 +19,8 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+
+// the basic unit of direct sum work is blockSize by blockSize
 const size_t blockSize = 64;
 
 //
@@ -30,7 +32,6 @@ static inline uint32_t log_2(const uint32_t x) {
     return (31 - __builtin_clz (x));
 }
 
-
 //
 // A set of particles, can be sources or targets
 //
@@ -41,8 +42,6 @@ class Parts {
 public:
     Parts(size_t);
     void resize(size_t);
-    void random_in_cube();
-    void smooth_strengths();
 
     size_t n;
     // state
@@ -81,21 +80,6 @@ void Parts<S,A>::resize(size_t _num) {
     ftemp.resize(n);
 }
 
-template <class S, class A>
-void Parts<S,A>::random_in_cube() {
-    for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
-    for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
-    for (auto& _r : r) { _r = 1.0f / std::sqrt((S)n); }
-    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / std::sqrt((S)n); }
-}
-
-template <class S, class A>
-void Parts<S,A>::smooth_strengths() {
-    const S factor = 1.0 / (S)n;
-    for (size_t i = 0; i < n; i++) {
-        m[i] = factor * (x[i] - y[i]);
-    }
-}
 
 //
 // A tree, made of a structure of arrays
@@ -178,13 +162,13 @@ static inline void nbody_kernel(const S sx, const S sy,
                                 const S sr, const S sm,
                                 const S tx, const S ty,
                                 A& __restrict__ tax, A& __restrict__ tay) {
-    // 13 flops
-    const S dx = sx - tx;
-    const S dy = sy - ty;
+    // 12 flops
+    const S dx = tx - sx;
+    const S dy = ty - sy;
     S r2 = dx*dx + dy*dy + sr*sr;
     r2 = sm/r2;
-    tax += r2 * dy;
-    tay -= r2 * dx;
+    tax -= r2 * dy;
+    tay += r2 * dx;
 }
 
 //
@@ -312,8 +296,8 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
 // Caller for the better (equivalent particle) O(NlogN) kernel
 //
 template <class S, class A>
-void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
-                     const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
+float nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
+                      const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
 
     struct treecode2_stats stats = {0, 0};
 
@@ -341,6 +325,8 @@ void nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
     printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
            targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
+
+    return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
 }
 
 
