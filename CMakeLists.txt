@@ -58,6 +58,7 @@ INCLUDE_DIRECTORIES ( "src" )
 
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
+ADD_EXECUTABLE ( "barneshut" "src/barneshut.cpp" )
 
 #TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
 
