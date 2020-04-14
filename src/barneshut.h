@@ -122,11 +122,11 @@ template <class S>
 Tree<S>::Tree(size_t _num) {
     // _num is number of elements this tree needs to store
     uint32_t numLeaf = 1 + ((_num-1)/blockSize);
-    printf("  %d nodes at leaf level\n", numLeaf);
+    //printf("  %d nodes at leaf level\n", numLeaf);
     levels = 1 + log_2(2*numLeaf-1);
-    printf("  makes %d levels in tree\n", levels);
+    //printf("  makes %d levels in tree\n", levels);
     numnodes = 1 << levels;
-    printf("  and %d total nodes in tree\n", numnodes);
+    //printf("  and %d total nodes in tree\n", numnodes);
     resize(numnodes);
 }
 
@@ -322,8 +322,8 @@ float nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
         }
     }
 
-    printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
-           targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
+    //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
+    //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
     return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;

@@ -50,8 +50,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("Running %s with %ld sources and %ld targets\n\n", progname, numSrcs, numTargs);
+    printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
     auto start = std::chrono::system_clock::now();
+
+    // set up the problem
 
     std::vector<float> sx(numSrcs);
     std::vector<float> sy(numSrcs);
@@ -70,15 +72,23 @@ int main(int argc, char *argv[]) {
     for (auto& _y : ty) { _y = (float)rand()/(float)RAND_MAX; }
     for (auto& _u : tu) { _u = 0.0f; }
     for (auto& _v : tv) { _v = 0.0f; }
-
-    int ns = numSrcs;
-    int nt = numTargs;
-    float flops = external_vel_solver_f(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
-                                        &nt, tx.data(), ty.data(), tu.data(), tv.data());
-
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    const float gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
+    float flops = (float)numSrcs*12.f + (float)numTargs*4.f;
+    float gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
+    printf("    problem setup:\t\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
+
+    // and call the solver
+
+    start = std::chrono::system_clock::now();
+    int ns = numSrcs;
+    int nt = numTargs;
+    flops = external_vel_solver_f(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                  &nt, tx.data(), ty.data(), tu.data(), tv.data());
+
+    end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
     printf("    external_vel_solver_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
 
 
