@@ -21,7 +21,7 @@
 
 
 // the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 64;
+const size_t blockSize = 16;
 
 //
 // Find index of msb of uint32
