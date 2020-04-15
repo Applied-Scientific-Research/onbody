@@ -248,6 +248,15 @@ N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
 1000000  |  0.2042  |    0.0475   |  236.83 |   8.1706 | 14.556
 10000000 |  3.5744  |    0.4113   |  21307. |   127.70 | 164.02
 
+#### Current treecode performance
+Using the `bhmain` driver for Barnes-Hut interactions in 2D on a i7-7500U, with GCC 9.2.1 compiling the code with `-O2 -march=native -ffast-math -ftree-vectorize -ftree-loop-vectorize` flags, and using theta of 1.3, we have the following times reported from chrono (best out of 3).
+
+N        |block=16|   32   |   64   |   128    
+---------|--------|--------|--------|--------
+10000    | 0.0431 | 0.0427 | 0.0461 | 0.0477
+100000   | 0.1393 | 0.1748 | 0.1921 | 0.2316
+1000000  | 2.3903 | 2.6985 | 3.3061 | 4.1958
+
 
 ## To Do
 
@@ -260,31 +269,5 @@ N        | src tree | calc equivs |  O(N^2) | O(NlogN) | O(N)
 * Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
-
-* Tweak box-opening criterion and see if it improves accuracy per time - DONE
-* Update ongrav3d to the same state as onvort2d - DONE
-* Use the std::chrono instead of counting mcycles - DONE
-* Build with CMake - DONE
-* For very large tree-builds (or sorts where there are not many threads yet, modify sortIndexesSection function to use as many threads as allowable (like, 8 when it's first level, 4 for 2nd level, 2 for 3rd level) and sort only portions of the whole array, then recursively zipper the portions together. This will allow tree-build to approach true parallel efficiency! - DONE
-* Add SSE2 vectorization - DONE
-* Try gcc 6.3.0 to see if it vectorizes - DONE
-* Compare stats to fast method - DONE
-* Start comparing accuracy of treecode and report it  - DONE
-* Find out why tree-build is O(N^2) - DONE
-* Why is error not zero for n=129 ? - DONE
-* Write recursive equivalent-particle-finding routine - DONE
-* Run with equivalent particles and compare performance and error - DONE
-* Begin building target trees - DONE
-* Work on O(N) method - DONE
-* Write O(N^2) method in double-precision to allow more fair error comparisons
-  but only run it on the first 100 or 1000 target particles - DONE
-* Get clang or g++ to vectorize the innermost loops - DONE for g++
-* Turn Particles (done) and Tree (done) into classes - DONE
-* Specialize or Templatize the Particle class to allow it to be used efficiently for sources or targets - DONE
-* Calculate stats (leaf boxes, non-leaf boxes) for equiv particle treecode - DONE
-* Compare performance vs. various block sizes - while 64 is probably ideal for GPUs, is less best for CPU?
-  make sure to add tree-build times to the performance figures - DONE
-* See if I can get gcc to vectorize the inner loops - we need to speed this up - DONE
-* Enable OpenMP parallelization for the tree-build part - DONE
 
 
