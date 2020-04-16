@@ -266,8 +266,7 @@ N        |block=16|   32   |   64   |   128
 * Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box; but that uses non-local information!
 * Pull in Eigen to assemble and solve the matrix equation for the prolongation - we need more moments taken into consideration to raise the accuracy, I believe
 * Use smarter or faster data structures in the O(N) list-building system
-* Make the x,y,z particle coordinates into an array of axes, this might make it possible to use the same data structures for 2D or 4D tree codes, as well as more cleverly automating the tree split axis selection - YES! Need this.
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
-
+* Support different core functions; right now we only use the Rosenhead-Moore kernel
 
