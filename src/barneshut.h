@@ -688,9 +688,9 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S str1 = std::abs(ep.m[ip-1]);
-                S str2 = std::abs(ep.m[ip]);
-                S pairm = 1.0 / (str1 + str2);
+                const S str1 = std::abs(ep.m[ip-1]);
+                const S str2 = std::abs(ep.m[ip]);
+                const S pairm = 1.0 / (str1 + str2);
                 ep.x[iep] = (ep.x[ip-1]*str1 + ep.x[ip]*str2) * pairm;
                 ep.y[iep] = (ep.y[ip-1]*str1 + ep.y[ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(ep.r[ip-1],2)*str1 + std::pow(ep.r[ip],2)*str2) * pairm);
@@ -721,9 +721,9 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                S str1 = std::abs(p.m[ip-1]);
-                S str2 = std::abs(p.m[ip]);
-                S pairm = 1.0 / (str1 + str2);
+                const S str1 = std::abs(p.m[ip-1]);
+                const S str2 = std::abs(p.m[ip]);
+                const S pairm = 1.0 / (str1 + str2);
                 ep.x[iep] = (p.x[ip-1]*str1 + p.x[ip]*str2) * pairm;
                 ep.y[iep] = (p.y[ip-1]*str1 + p.y[ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(p.r[ip-1],2)*str1 + std::pow(p.r[ip],2)*str2) * pairm);
