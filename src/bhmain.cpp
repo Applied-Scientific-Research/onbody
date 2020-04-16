@@ -18,7 +18,14 @@
 #include <iostream>
 #include <chrono>
 
+// the fast solver
 extern float external_vel_solver_f (const int*, const float*, const float*,
+                                                const float*, const float*,
+                                    const int*, const float*, const float*,
+                                                      float*,       float*);
+
+// the direct solver
+extern float external_vel_direct_f (const int*, const float*, const float*,
                                                 const float*, const float*,
                                     const int*, const float*, const float*,
                                                       float*,       float*);
@@ -40,6 +47,7 @@ int main(int argc, char *argv[]) {
 
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
+    bool compareToDirect = true;
 
     if (argc > 1) {
         if (strncmp(argv[1], "-n=", 3) == 0) {
@@ -91,6 +99,42 @@ int main(int argc, char *argv[]) {
     gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
     printf("    external_vel_solver_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
 
+    // compare results to a direct solve
+
+    if (compareToDirect) {
+        // run a subset direct solve
+        size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+        int ntn = numTargs / ntskip;
+        std::vector<float> txn(ntn);
+        std::vector<float> tyn(ntn);
+        std::vector<float> tun(ntn);
+        std::vector<float> tvn(ntn);
+        for (size_t i=0; i<(size_t)ntn; ++i) {
+            const size_t ifast = i * ntskip;
+            txn[i] = tx[ifast];
+            tyn[i] = ty[ifast];
+            tun[i] = 0.0f;
+            tvn[i] = 0.0f;
+        }
+        start = std::chrono::system_clock::now();
+        flops = external_vel_direct_f(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                      &ntn, txn.data(), tyn.data(), tun.data(), tvn.data());
+        end = std::chrono::system_clock::now();
+        elapsed_seconds = end-start;
+        gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
+        printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
+        // compute the error
+        float errsum = 0.0;
+        float errcnt = 0.0;
+        for (size_t i=0; i<(size_t)ntn; ++i) {
+            const size_t ifast = i * ntskip;
+            float thiserr = tu[ifast]-tun[i];
+            if (i<4) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            errsum += thiserr*thiserr;
+            errcnt += tun[i]*tun[i];
+        }
+        printf("    rms error in fast solver:\t%g\n", std::sqrt(errsum/errcnt));
+    }
 
     return 0;
 }

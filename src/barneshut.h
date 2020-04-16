@@ -35,13 +35,15 @@ static inline uint32_t log_2(const uint32_t x) {
 //
 // A set of particles, can be sources or targets
 //
-// templatized on storage and accumulator types
+// templatized on (S)torage and (A)ccumulator types, and space (D)imensions
 //
-template <class S, class A>
+template <class S, class A, int D>
 class Parts {
 public:
     Parts(size_t);
     void resize(size_t);
+    void random_in_cube();
+    void smooth_strengths();
 
     size_t n;
     // state
@@ -62,13 +64,13 @@ public:
     //typename A::value_type accumulator_type;
 };
 
-template <class S, class A>
-Parts<S,A>::Parts(size_t _num) {
+template <class S, class A, int D>
+Parts<S,A,D>::Parts(size_t _num) {
     resize(_num);
 }
 
-template <class S, class A>
-void Parts<S,A>::resize(size_t _num) {
+template <class S, class A, int D>
+void Parts<S,A,D>::resize(size_t _num) {
     n = _num;
     x.resize(n);
     y.resize(n);
@@ -80,6 +82,21 @@ void Parts<S,A>::resize(size_t _num) {
     ftemp.resize(n);
 }
 
+template <class S, class A, int D>
+void Parts<S,A,D>::random_in_cube() {
+    for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
+    for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
+    for (auto& _r : r) { _r = 1.0f / std::sqrt((S)n); }
+    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / std::sqrt((S)n); }
+}
+
+template <class S, class A, int D>
+void Parts<S,A,D>::smooth_strengths() {
+    const S factor = 1.0 / (S)n;
+    for (size_t i = 0; i < n; i++) {
+        m[i] = factor * (x[i] - y[i]);
+    }
+}
 
 //
 // A tree, made of a structure of arrays
@@ -88,7 +105,7 @@ void Parts<S,A>::resize(size_t _num) {
 // arrays always have 2^levels boxes allocated, even if some are not used
 // this way, node i children are 2*i and 2*i+1
 //
-template <class S>
+template <class S, int D>
 class Tree {
 public:
     Tree(size_t);
@@ -118,8 +135,8 @@ public:
     alignas(32) std::vector<size_t> epnum;
 };
 
-template <class S>
-Tree<S>::Tree(size_t _num) {
+template <class S, int D>
+Tree<S,D>::Tree(size_t _num) {
     // _num is number of elements this tree needs to store
     uint32_t numLeaf = 1 + ((_num-1)/blockSize);
     //printf("  %d nodes at leaf level\n", numLeaf);
@@ -130,8 +147,8 @@ Tree<S>::Tree(size_t _num) {
     resize(numnodes);
 }
 
-template <class S>
-void Tree<S>::resize(size_t _num) {
+template <class S, int D>
+void Tree<S,D>::resize(size_t _num) {
     numnodes = _num;
     x.resize(numnodes);
     y.resize(numnodes);
@@ -145,9 +162,9 @@ void Tree<S>::resize(size_t _num) {
     epnum.resize(numnodes);
 }
 
-template <class S>
-void Tree<S>::print(size_t _num) {
-    printf("\nTree with %d levels\n",levels);
+template <class S, int D>
+void Tree<S,D>::print(size_t _num) {
+    printf("\n%dD tree with %d levels\n", D, levels);
     for(size_t i=1; i<numnodes && i<_num; ++i) {
         printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
     }
@@ -179,8 +196,8 @@ static inline void nbody_kernel(const S sx, const S sy,
 //
 // Caller for the O(N^2) kernel
 //
-template <class S, class A>
-void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ targs, const size_t tskip) {
+template <class S, class A, int D>
+float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i+=tskip) {
         targs.u[i] = 0.0;
@@ -192,13 +209,14 @@ void nbody_naive(const Parts<S,A>& __restrict__ srcs, Parts<S,A>& __restrict__ t
                          targs.u[i], targs.v[i]);
         }
     }
+    return (float)targs.n * (float)srcs.n * 12.f;
 }
 
 //
 // Recursive kernel for the treecode using 1st order box approximations
 //
-template <class S, class A>
-void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode, const float theta,
+template <class S, class A, int D>
+void treecode1_block(const Parts<S,A,D>& sp, const Tree<S,D>& st, const size_t tnode, const float theta,
                      const S tx, const S ty,
                      A& tax, A& tay) {
 
@@ -232,8 +250,8 @@ void treecode1_block(const Parts<S,A>& sp, const Tree<S>& st, const size_t tnode
 //
 // Caller for the simple O(NlogN) kernel
 //
-template <class S, class A>
-void nbody_treecode1(const Parts<S,A>& srcs, const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
+template <class S, class A, int D>
+void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i++) {
         targs.u[i] = 0.0;
@@ -254,9 +272,9 @@ struct treecode2_stats {
 //
 // Recursive kernel for the treecode using equivalent particles
 //
-template <class S, class A>
-void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
-                     const Tree<S>& st, const size_t tnode, const float theta,
+template <class S, class A, int D>
+void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
+                     const Tree<S,D>& st, const size_t tnode, const float theta,
                      const S tx, const S ty,
                      A& tax, A& tay,
                      struct treecode2_stats& stats) {
@@ -295,9 +313,9 @@ void treecode2_block(const Parts<S,A>& sp, const Parts<S,A>& ep,
 //
 // Caller for the better (equivalent particle) O(NlogN) kernel
 //
-template <class S, class A>
-float nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
-                      const Tree<S>& stree, Parts<S,A>& targs, const float theta) {
+template <class S, class A, int D>
+float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
+                      const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
 
     struct treecode2_stats stats = {0, 0};
 
@@ -322,8 +340,8 @@ float nbody_treecode2(const Parts<S,A>& srcs, const Parts<S,A>& eqsrcs,
         }
     }
 
-    //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
-    //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
+    printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
+           targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
     return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
@@ -461,8 +479,8 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
-template <class S, class A>
-void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tnode) {
+template <class S, class A, int D>
+void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_t tnode) {
 
     //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
     //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
@@ -568,8 +586,8 @@ void splitNode(Parts<S,A>& p, size_t pfirst, size_t plast, Tree<S>& t, size_t tn
 // Recursively refine leaf node's particles until they are hierarchically nearby
 // Code is borrowed from splitNode above
 //
-template <class S, class A>
-void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
+template <class S, class A, int D>
+void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
 
     // if there are 1 or 2 particles, then they are already in "order"
     if (plast-pfirst < 3) return;
@@ -611,8 +629,8 @@ void refineLeaf(Parts<S,A>& p, Tree<S>& t, size_t pfirst, size_t plast) {
 //
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
-template <class S, class A>
-void refineTree(Parts<S,A>& p, Tree<S>& t, size_t tnode) {
+template <class S, class A, int D>
+void refineTree(Parts<S,A,D>& p, Tree<S,D>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
@@ -636,8 +654,8 @@ void refineTree(Parts<S,A>& p, Tree<S>& t, size_t tnode) {
 //       another: we are a non-leaf node taking eq parts from two non-leaf nodes
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
-template <class S, class A>
-void calcEquivalents(Parts<S,A>& p, Parts<S,A>& ep, Tree<S>& t, size_t tnode) {
+template <class S, class A, int D>
+void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
 
     t.epoffset[tnode] = tnode * blockSize;

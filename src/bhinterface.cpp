@@ -31,14 +31,14 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double> srcs(*nsrc);
+    Parts<float,double,2> srcs(*nsrc);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.y[i] = sy[i];
     for (int i=0; i<*nsrc; ++i) srcs.m[i] = ss[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double> targs(*ntarg);
+    Parts<float,double,2> targs(*ntarg);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
@@ -53,7 +53,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     // allocate and initialize tree
     if (!silent) printf("\nBuilding the source tree\n");
     start = std::chrono::system_clock::now();
-    Tree<float> stree(*nsrc);
+    Tree<float,2> stree(*nsrc);
     if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -70,7 +70,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<float,double,2> eqsrcs((stree.numnodes/2) * blockSize);
     if (!silent) printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -96,12 +96,64 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     //
     if (!silent) printf("\nRun the treecode O(NlogN) with equivalent particles\n");
     start = std::chrono::system_clock::now();
-    flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 1.5f);
+    flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 4.0f);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     double dt = elapsed_seconds.count();
     if (!silent) printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);
 
-    // save the results for comparison
+    // save the results out
+    for (int i=0; i<*ntarg; ++i) {
+      tu[i] = targs.u[i];
+      tv[i] = targs.v[i];
+    }
+
+    return flops;
+}
+
+
+//
+// same, but direct solver
+//
+float external_vel_direct_f (const int* nsrc,  const float* sx, const float* sy,
+                                               const float* ss, const float* sr,
+                             const int* ntarg, const float* tx, const float* ty,
+                                                     float* tu,       float* tv) {
+    float flops = 0.0;
+    bool silent = true;
+
+    if (!silent) printf("Allocate and initialize\n");
+    auto start = std::chrono::system_clock::now();
+
+    // allocate space for sources and targets
+    Parts<float,double,2> srcs(*nsrc);
+    // initialize particle data
+    for (int i=0; i<*nsrc; ++i) srcs.x[i] = sx[i];
+    for (int i=0; i<*nsrc; ++i) srcs.y[i] = sy[i];
+    for (int i=0; i<*nsrc; ++i) srcs.m[i] = ss[i];
+    for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
+
+    Parts<float,double,2> targs(*ntarg);
+    // initialize particle data
+    for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
+    for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
+    for (auto& m : targs.m) { m = 1.0f; }
+    for (int i=0; i<*ntarg; ++i) targs.u[i] = tu[i];
+    for (int i=0; i<*ntarg; ++i) targs.v[i] = tv[i];
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    //
+    // Run a naive O(N^2) summation
+    //
+    if (!silent) printf("\nRun the direct O(N^2) summation\n");
+    start = std::chrono::system_clock::now();
+    flops += nbody_naive(srcs, targs, 1);
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    double dt = elapsed_seconds.count();
+    if (!silent) printf("  direct summations:\t\t[%.4f] seconds\n\n", dt);
+
+    // save the results out
     for (int i=0; i<*ntarg; ++i) {
       tu[i] = targs.u[i];
       tv[i] = targs.v[i];
