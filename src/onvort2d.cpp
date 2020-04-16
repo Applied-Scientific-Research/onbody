@@ -98,8 +98,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
     if (targetIsLeaf) {
         stats.tlc++;
         // zero the velocities
-        std::fill_n(&(targs.u[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
-        std::fill_n(&(targs.v[ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        std::fill_n(&(targs.u[0][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        std::fill_n(&(targs.u[1][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
@@ -122,14 +122,14 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    targs.u[idest] = least_squares_val(targs.x[idest], targs.y[idest],
-                                                       eqtargs.x, eqtargs.y, eqtargs.u, istart, iend);
-                    targs.v[idest] = least_squares_val(targs.x[idest], targs.y[idest],
-                                                       eqtargs.x, eqtargs.y, eqtargs.v, istart, iend);
+                    targs.u[0][idest] = least_squares_val(targs.x[idest], targs.y[idest],
+                                                          eqtargs.x, eqtargs.y, eqtargs.u[0], istart, iend);
+                    targs.u[1][idest] = least_squares_val(targs.x[idest], targs.y[idest],
+                                                          eqtargs.x, eqtargs.y, eqtargs.u[1], istart, iend);
                 } else {
                     // as a first take, simply copy the result to the children
-                    targs.u[idest] = eqtargs.u[iorig];
-                    targs.v[idest] = eqtargs.v[iorig];
+                    targs.u[0][idest] = eqtargs.u[0][iorig];
+                    targs.u[1][idest] = eqtargs.u[1][iorig];
                 }
             }
             stats.lpc++;
@@ -137,8 +137,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
 
     } else {
         // zero the equivalent particle velocities
-        std::fill_n(&(eqtargs.u[ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
-        std::fill_n(&(eqtargs.v[ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        std::fill_n(&(eqtargs.u[0][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        std::fill_n(&(eqtargs.u[1][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
@@ -167,14 +167,14 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    eqtargs.u[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
-                                                         eqtargs.x, eqtargs.y, eqtargs.u, istart, iend);
-                    eqtargs.v[idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
-                                                         eqtargs.x, eqtargs.y, eqtargs.v, istart, iend);
+                    eqtargs.u[0][idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
+                                                            eqtargs.x, eqtargs.y, eqtargs.u[0], istart, iend);
+                    eqtargs.u[1][idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
+                                                            eqtargs.x, eqtargs.y, eqtargs.u[1], istart, iend);
                 } else {
                     // as a first take, simply copy the result to the children
-                    eqtargs.u[idest] = eqtargs.u[iorig];
-                    eqtargs.v[idest] = eqtargs.v[iorig];
+                    eqtargs.u[0][idest] = eqtargs.u[0][iorig];
+                    eqtargs.u[1][idest] = eqtargs.u[1][iorig];
                 }
             }
             stats.bpc++;
@@ -208,7 +208,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
             for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
                 nbody_kernel(srcs.x[j],  srcs.y[j], srcs.r[j], srcs.m[j],
                              targs.x[i], targs.y[i],
-                             targs.u[i], targs.v[i]);
+                             targs.u[0][i], targs.u[1][i]);
             }
             }
             stats.sltl++;
@@ -233,7 +233,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
                     nbody_kernel(srcs.x[j],    srcs.y[j],  srcs.r[j], srcs.m[j],
                                  eqtargs.x[i], eqtargs.y[i],
-                                 eqtargs.u[i], eqtargs.v[i]);
+                                 eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }
                 stats.sltb++;
@@ -244,7 +244,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
                     nbody_kernel(eqsrcs.x[j], eqsrcs.y[j], eqsrcs.r[j], eqsrcs.m[j],
                                  targs.x[i],  targs.y[i],
-                                 targs.u[i],  targs.v[i]);
+                                 targs.u[0][i], targs.u[1][i]);
                 }
                 }
                 stats.sbtl++;
@@ -255,7 +255,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
                     nbody_kernel(eqsrcs.x[j],  eqsrcs.y[j],  eqsrcs.r[j], eqsrcs.m[j],
                                  eqtargs.x[i], eqtargs.y[i],
-                                 eqtargs.u[i], eqtargs.v[i]);
+                                 eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }
                 stats.sbtb++;
@@ -492,8 +492,8 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[i],targs.v[i]);
-    std::vector<float> naiveu(targs.u.begin(), targs.u.end());
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    std::vector<float> naiveu(targs.u[0].begin(), targs.u[0].end());
 
     float errsum = 0.0;
     float errcnt = 0.0;
@@ -514,14 +514,14 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode]:\t\t[%.4f] seconds\n", minTreecode);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[i],targs.v[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> treecodeu(targs.u.begin(), targs.u.end());
+    std::vector<float> treecodeu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i<numTargs; i+=ntskip) {
         float thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
@@ -546,14 +546,14 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody treecode2]:\t\t[%.4f] seconds\n", minTreecode2);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[i],targs.v[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> treecodeu2(targs.u.begin(), targs.u.end());
+    std::vector<float> treecodeu2(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i<numTargs; i+=ntskip) {
         float thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
@@ -585,14 +585,14 @@ int main(int argc, char *argv[]) {
     }
     printf("[onbody fast]:\t\t\t[%.4f] seconds\n", minFast);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[i],targs.v[i]);
+    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> fastu(targs.u.begin(), targs.u.end());
+    std::vector<float> fastu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
-    for (size_t i=0; i< targs.u.size(); i+=ntskip) {
+    for (size_t i=0; i<numTargs; i+=ntskip) {
         float thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];

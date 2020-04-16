@@ -43,8 +43,8 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
     for (auto& m : targs.m) { m = 1.0f; }
-    for (int i=0; i<*ntarg; ++i) targs.u[i] = tu[i];
-    for (int i=0; i<*ntarg; ++i) targs.v[i] = tv[i];
+    for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
+    for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -102,10 +102,8 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     if (!silent) printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);
 
     // save the results out
-    for (int i=0; i<*ntarg; ++i) {
-      tu[i] = targs.u[i];
-      tv[i] = targs.v[i];
-    }
+    for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
+    for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
 
     return flops;
 }
@@ -137,8 +135,8 @@ float external_vel_direct_f (const int* nsrc,  const float* sx, const float* sy,
     for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
     for (auto& m : targs.m) { m = 1.0f; }
-    for (int i=0; i<*ntarg; ++i) targs.u[i] = tu[i];
-    for (int i=0; i<*ntarg; ++i) targs.v[i] = tv[i];
+    for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
+    for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -154,10 +152,8 @@ float external_vel_direct_f (const int* nsrc,  const float* sx, const float* sy,
     if (!silent) printf("  direct summations:\t\t[%.4f] seconds\n\n", dt);
 
     // save the results out
-    for (int i=0; i<*ntarg; ++i) {
-      tu[i] = targs.u[i];
-      tv[i] = targs.v[i];
-    }
+    for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
+    for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
 
     return flops;
 }

@@ -54,8 +54,7 @@ public:
     // actuator (needed by sources)
     alignas(32) std::vector<S> m;
     // results (needed by targets)
-    alignas(32) std::vector<A> u;
-    alignas(32) std::vector<A> v;
+    alignas(32) std::array<std::vector<A>, D> u;
     // temporary
     alignas(32) std::vector<size_t> itemp;
     alignas(32) std::vector<S> ftemp;
@@ -77,8 +76,7 @@ void Parts<S,A,D>::resize(size_t _num) {
     y.resize(n);
     r.resize(n);
     m.resize(n);
-    u.resize(n);
-    v.resize(n);
+    for (int dim=0; dim<D; ++dim) u[dim].resize(n);
     itemp.resize(n);
     ftemp.resize(n);
 }
@@ -127,7 +125,7 @@ public:
     // number of nodes in the tree (always 2^l)
     int numnodes;
 
-    // tree node centers (of mass?)
+    // tree node centers of mass
     alignas(32) std::vector<S> x;
     alignas(32) std::vector<S> y;
     // node size
@@ -210,13 +208,13 @@ template <class S, class A, int D>
 float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i+=tskip) {
-        targs.u[i] = 0.0;
-        targs.v[i] = 0.0;
+        targs.u[0][i] = 0.0;
+        targs.u[1][i] = 0.0;
         //#pragma clang loop vectorize(enable) interleave(enable)
         for (size_t j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[j], srcs.y[j], srcs.r[j], srcs.m[j],
                          targs.x[i], targs.y[i],
-                         targs.u[i], targs.v[i]);
+                         targs.u[0][i], targs.u[1][i]);
         }
     }
     return (float)targs.n * (float)srcs.n * 12.f;
@@ -264,11 +262,11 @@ template <class S, class A, int D>
 void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i++) {
-        targs.u[i] = 0.0;
-        targs.v[i] = 0.0;
+        targs.u[0][i] = 0.0;
+        targs.u[1][i] = 0.0;
         treecode1_block(srcs, stree, 1, theta,
                         targs.x[i], targs.y[i],
-                        targs.u[i], targs.v[i]);
+                        targs.u[0][i], targs.u[1][i]);
     }
 }
 
@@ -335,11 +333,11 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
 
         #pragma omp for
         for (size_t i = 0; i < targs.n; i++) {
-            targs.u[i] = 0.0;
-            targs.v[i] = 0.0;
+            targs.u[0][i] = 0.0;
+            targs.u[1][i] = 0.0;
             treecode2_block(srcs, eqsrcs, stree, 1, theta,
                             targs.x[i], targs.y[i],
-                            targs.u[i], targs.v[i],
+                            targs.u[0][i], targs.u[1][i],
                             threadstats);
         }
 
