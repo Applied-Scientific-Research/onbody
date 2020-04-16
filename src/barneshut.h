@@ -44,6 +44,7 @@ public:
     void resize(size_t);
     void random_in_cube();
     void smooth_strengths();
+    void wave_strengths();
 
     size_t n;
     // state
@@ -95,6 +96,15 @@ void Parts<S,A,D>::smooth_strengths() {
     const S factor = 1.0 / (S)n;
     for (size_t i = 0; i < n; i++) {
         m[i] = factor * (x[i] - y[i]);
+    }
+}
+
+template <class S, class A, int D>
+void Parts<S,A,D>::wave_strengths() {
+    const S factor = 1.0 / std::sqrt((S)n);
+    for (size_t i = 0; i < n; i++) {
+        const S dist = std::sqrt(std::pow(x[i]-0.5,2)+std::pow(y[i]-0.5,2));
+        m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
     }
 }
 
@@ -340,8 +350,8 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
         }
     }
 
-    printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
-           targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
+    //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
+    //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
     return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;

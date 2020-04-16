@@ -69,8 +69,17 @@ int main(int argc, char *argv[]) {
     std::vector<float> sr(numSrcs);
     for (auto& _x : sx) { _x = (float)rand()/(float)RAND_MAX; }
     for (auto& _y : sy) { _y = (float)rand()/(float)RAND_MAX; }
-    for (auto& _m : ss) { _m = (-1.0f + 2.0f*(float)rand()/(float)RAND_MAX) / std::sqrt((float)numSrcs); }
     for (auto& _r : sr) { _r = 1.0f / std::sqrt(numSrcs); }
+    // totally random (unrealistic, but worst-case)
+    //for (auto& _m : ss) { _m = (-1.0f + 2.0f*(float)rand()/(float)RAND_MAX) / std::sqrt((float)numSrcs); }
+    // more realistic
+    //const float factor = 1.0 / std::sqrt((float)numSrcs);
+    const float factor = 1.0 / (float)numSrcs;
+    for (size_t i=0; i<numSrcs; i++) {
+        const float dist = std::sqrt(std::pow(sx[i]-0.5,2)+std::pow(sy[i]-0.5,2));
+        ss[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
+        ss[i] *= 0.75 + 0.5*(float)rand()/(float)RAND_MAX;
+    }
 
     std::vector<float> tx(numTargs);
     std::vector<float> ty(numTargs);
@@ -122,7 +131,7 @@ int main(int argc, char *argv[]) {
         end = std::chrono::system_clock::now();
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
-        printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
+        printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)ntskip*(float)elapsed_seconds.count(), gflops);
         // compute the error
         float errsum = 0.0;
         float errcnt = 0.0;

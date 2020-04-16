@@ -379,6 +379,7 @@ int main(int argc, char *argv[]) {
     // initialize particle data
     srcs.random_in_cube();
     //srcs.smooth_strengths();
+    srcs.wave_strengths();
 
     Parts<float,double,2> targs(numTargs);
     // initialize particle data
