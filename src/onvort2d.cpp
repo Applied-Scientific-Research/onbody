@@ -122,10 +122,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    targs.u[0][idest] = least_squares_val(targs.x[idest], targs.y[idest],
-                                                          eqtargs.x, eqtargs.y, eqtargs.u[0], istart, iend);
-                    targs.u[1][idest] = least_squares_val(targs.x[idest], targs.y[idest],
-                                                          eqtargs.x, eqtargs.y, eqtargs.u[1], istart, iend);
+                    targs.u[0][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest],
+                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.u[0], istart, iend);
+                    targs.u[1][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest],
+                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.u[1], istart, iend);
                 } else {
                     // as a first take, simply copy the result to the children
                     targs.u[0][idest] = eqtargs.u[0][iorig];
@@ -167,10 +167,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
                     //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    eqtargs.u[0][idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
-                                                            eqtargs.x, eqtargs.y, eqtargs.u[0], istart, iend);
-                    eqtargs.u[1][idest] = least_squares_val(eqtargs.x[idest], eqtargs.y[idest],
-                                                            eqtargs.x, eqtargs.y, eqtargs.u[1], istart, iend);
+                    eqtargs.u[0][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest],
+                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.u[0], istart, iend);
+                    eqtargs.u[1][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest],
+                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.u[1], istart, iend);
                 } else {
                     // as a first take, simply copy the result to the children
                     eqtargs.u[0][idest] = eqtargs.u[0][iorig];
@@ -206,8 +206,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
             // compute all-on-all direct influence
             for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
             for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
-                nbody_kernel(srcs.x[j],  srcs.y[j], srcs.r[j], srcs.m[j],
-                             targs.x[i], targs.y[i],
+                nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+                             targs.x[0][i], targs.x[1][i],
                              targs.u[0][i], targs.u[1][i]);
             }
             }
@@ -216,10 +216,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
         }
 
         // distance from box center of mass to target point
-        const S dx = stree.x[sn] - ttree.x[ittn];
-        const S dy = stree.y[sn] - ttree.y[ittn];
+        S dist = 0.0;
+        for (int d=0; d<D; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
+        dist = std::sqrt(dist);
         const S diag = stree.s[sn] + ttree.s[ittn];
-        const S dist = std::sqrt(dx*dx + dy*dy);
         //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
@@ -231,8 +231,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute real source particles on equivalent target points
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
-                    nbody_kernel(srcs.x[j],    srcs.y[j],  srcs.r[j], srcs.m[j],
-                                 eqtargs.x[i], eqtargs.y[i],
+                    nbody_kernel(srcs.x[0][j],    srcs.x[1][j],  srcs.r[j], srcs.m[j],
+                                 eqtargs.x[0][i], eqtargs.x[1][i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }
@@ -242,8 +242,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute equivalent source particles on real target points
                 for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
-                    nbody_kernel(eqsrcs.x[j], eqsrcs.y[j], eqsrcs.r[j], eqsrcs.m[j],
-                                 targs.x[i],  targs.y[i],
+                    nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.r[j], eqsrcs.m[j],
+                                 targs.x[0][i],  targs.x[1][i],
                                  targs.u[0][i], targs.u[1][i]);
                 }
                 }
@@ -253,8 +253,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute equivalent source particles on equivalent target points
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
-                    nbody_kernel(eqsrcs.x[j],  eqsrcs.y[j],  eqsrcs.r[j], eqsrcs.m[j],
-                                 eqtargs.x[i], eqtargs.y[i],
+                    nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.r[j], eqsrcs.m[j],
+                                 eqtargs.x[0][i], eqtargs.x[1][i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }

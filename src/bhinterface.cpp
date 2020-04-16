@@ -33,16 +33,16 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     // allocate space for sources and targets
     Parts<float,double,2> srcs(*nsrc);
     // initialize particle data
-    for (int i=0; i<*nsrc; ++i) srcs.x[i] = sx[i];
-    for (int i=0; i<*nsrc; ++i) srcs.y[i] = sy[i];
+    for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
+    for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
     for (int i=0; i<*nsrc; ++i) srcs.m[i] = ss[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
     Parts<float,double,2> targs(*ntarg);
     // initialize particle data
-    for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
-    for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
-    for (auto& m : targs.m) { m = 1.0f; }
+    for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
+    for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
+    for (auto& m : targs.m) { m = 1.0f/(float)(*ntarg); }
     for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
     for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
     auto end = std::chrono::system_clock::now();
@@ -125,16 +125,16 @@ float external_vel_direct_f (const int* nsrc,  const float* sx, const float* sy,
     // allocate space for sources and targets
     Parts<float,double,2> srcs(*nsrc);
     // initialize particle data
-    for (int i=0; i<*nsrc; ++i) srcs.x[i] = sx[i];
-    for (int i=0; i<*nsrc; ++i) srcs.y[i] = sy[i];
+    for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
+    for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
     for (int i=0; i<*nsrc; ++i) srcs.m[i] = ss[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
     Parts<float,double,2> targs(*ntarg);
     // initialize particle data
-    for (int i=0; i<*ntarg; ++i) targs.x[i] = tx[i];
-    for (int i=0; i<*ntarg; ++i) targs.y[i] = ty[i];
-    for (auto& m : targs.m) { m = 1.0f; }
+    for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
+    for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
+    for (auto& m : targs.m) { m = 1.0f/(float)(*ntarg); }
     for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
     for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
     auto end = std::chrono::system_clock::now();

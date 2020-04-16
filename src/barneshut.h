@@ -48,8 +48,7 @@ public:
 
     size_t n;
     // state
-    alignas(32) std::vector<S> x;
-    alignas(32) std::vector<S> y;
+    alignas(32) std::array<std::vector<S>, D> x;
     alignas(32) std::vector<S> r;
     // actuator (needed by sources)
     alignas(32) std::vector<S> m;
@@ -72,19 +71,17 @@ Parts<S,A,D>::Parts(size_t _num) {
 template <class S, class A, int D>
 void Parts<S,A,D>::resize(size_t _num) {
     n = _num;
-    x.resize(n);
-    y.resize(n);
+    for (int d=0; d<D; ++d) x[d].resize(n);
     r.resize(n);
     m.resize(n);
-    for (int dim=0; dim<D; ++dim) u[dim].resize(n);
+    for (int d=0; d<D; ++d) u[d].resize(n);
     itemp.resize(n);
     ftemp.resize(n);
 }
 
 template <class S, class A, int D>
 void Parts<S,A,D>::random_in_cube() {
-    for (auto& _x : x) { _x = (S)rand()/(S)RAND_MAX; }
-    for (auto& _y : y) { _y = (S)rand()/(S)RAND_MAX; }
+    for (int d=0; d<D; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
     for (auto& _r : r) { _r = 1.0f / std::sqrt((S)n); }
     for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / std::sqrt((S)n); }
 }
@@ -92,16 +89,16 @@ void Parts<S,A,D>::random_in_cube() {
 template <class S, class A, int D>
 void Parts<S,A,D>::smooth_strengths() {
     const S factor = 1.0 / (S)n;
-    for (size_t i = 0; i < n; i++) {
-        m[i] = factor * (x[i] - y[i]);
+    for (size_t i=0; i<n; i++) {
+        m[i] = factor * (x[0][i] - x[1][i]);
     }
 }
 
 template <class S, class A, int D>
 void Parts<S,A,D>::wave_strengths() {
     const S factor = 1.0 / (S)n;
-    for (size_t i = 0; i < n; i++) {
-        const S dist = std::sqrt(std::pow(x[i]-0.5,2)+std::pow(y[i]-0.5,2));
+    for (size_t i=0; i<n; i++) {
+        const S dist = std::sqrt(std::pow(x[0][i]-0.5,2)+std::pow(x[1][i]-0.5,2));
         m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
     }
 }
@@ -126,8 +123,7 @@ public:
     int numnodes;
 
     // tree node centers of mass
-    alignas(32) std::vector<S> x;
-    alignas(32) std::vector<S> y;
+    alignas(32) std::array<std::vector<S>, D> x;
     // node size
     alignas(32) std::vector<S> s;
     // node particle radius
@@ -158,8 +154,7 @@ Tree<S,D>::Tree(size_t _num) {
 template <class S, int D>
 void Tree<S,D>::resize(size_t _num) {
     numnodes = _num;
-    x.resize(numnodes);
-    y.resize(numnodes);
+    for (int d=0; d<D; ++d) x[d].resize(numnodes);
     s.resize(numnodes);
     r.resize(numnodes);
     m.resize(numnodes);
@@ -212,8 +207,8 @@ float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restric
         targs.u[1][i] = 0.0;
         //#pragma clang loop vectorize(enable) interleave(enable)
         for (size_t j = 0; j < srcs.n; j++) {
-            nbody_kernel(srcs.x[j], srcs.y[j], srcs.r[j], srcs.m[j],
-                         targs.x[i], targs.y[i],
+            nbody_kernel(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.m[j],
+                         targs.x[0][i], targs.x[1][i],
                          targs.u[0][i], targs.u[1][i]);
         }
     }
@@ -225,33 +220,32 @@ float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restric
 //
 template <class S, class A, int D>
 void treecode1_block(const Parts<S,A,D>& sp, const Tree<S,D>& st, const size_t tnode, const float theta,
-                     const S tx, const S ty,
-                     A& tax, A& tay) {
+                     const std::array<S,D> tx, std::array<A,D>& tax) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
         for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
-            nbody_kernel(sp.x[j], sp.y[j], sp.r[j], sp.m[j],
-                         tx, ty, tax, tay);
+            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
+                         tx[0], tx[1], tax[0], tax[1]);
         }
         return;
     }
 
     // distance from box center of mass to target point
-    const S dx = st.x[tnode] - tx;
-    const S dy = st.y[tnode] - ty;
-    const S dist = std::sqrt(dx*dx + dy*dy);
+    S dist = 0.0;
+    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
+    dist = std::sqrt(dist);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
         // box is far enough removed, approximate its influence
-        nbody_kernel(st.x[tnode], st.y[tnode], 0.0f, st.m[tnode],
-                     tx, ty, tax, tay);
+        nbody_kernel(st.x[0][tnode], st.x[1][tnode], 0.0f, st.m[tnode],
+                     tx[0], tx[1], tax[0], tax[1]);
     } else {
         // box is too close, open up its children
-        (void) treecode1_block(sp, st, 2*tnode,   theta, tx, ty, tax, tay);
-        (void) treecode1_block(sp, st, 2*tnode+1, theta, tx, ty, tax, tay);
+        (void) treecode1_block<S,A,D>(sp, st, 2*tnode,   theta, tx, tax);
+        (void) treecode1_block<S,A,D>(sp, st, 2*tnode+1, theta, tx, tax);
     }
 }
 
@@ -262,11 +256,12 @@ template <class S, class A, int D>
 void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i++) {
-        targs.u[0][i] = 0.0;
-        targs.u[1][i] = 0.0;
-        treecode1_block(srcs, stree, 1, theta,
-                        targs.x[i], targs.y[i],
-                        targs.u[0][i], targs.u[1][i]);
+        std::array<S,D> x;
+        std::array<A,D> u;
+        for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
+        for (int d=0; d<D; ++d) u[d] = 0.0;
+        treecode1_block<S,A,D>(srcs, stree, (size_t)1, theta, x, u);
+        for (int d=0; d<D; ++d) targs.u[d][i] = u[d];
     }
 }
 
@@ -283,38 +278,37 @@ struct treecode2_stats {
 template <class S, class A, int D>
 void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
                      const Tree<S,D>& st, const size_t tnode, const float theta,
-                     const S tx, const S ty,
-                     A& tax, A& tay,
+                     const std::array<S,D>& tx, std::array<A,D>& tax,
                      struct treecode2_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[tnode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
         for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
-            nbody_kernel(sp.x[j], sp.y[j], sp.r[j], sp.m[j],
-                         tx, ty, tax, tay);
+            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
+                         tx[0], tx[1], tax[0], tax[1]);
         }
         stats.sltp++;
         return;
     }
 
     // distance from box center of mass to target point
-    const S dx = st.x[tnode] - tx;
-    const S dy = st.y[tnode] - ty;
-    const S dist = std::sqrt(dx*dx + dy*dy);
+    S dist = 0.0;
+    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
+    dist = std::sqrt(dist);
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
         // this version uses equivalent points instead!
         for (size_t j = st.epoffset[tnode]; j < st.epoffset[tnode] + st.epnum[tnode]; j++) {
-            nbody_kernel(ep.x[j], ep.y[j], ep.r[j], ep.m[j],
-                         tx, ty, tax, tay);
+            nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
+                         tx[0], tx[1], tax[0], tax[1]);
         }
         stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode2_block(sp, ep, st, 2*tnode,   theta, tx, ty, tax, tay, stats);
-        (void) treecode2_block(sp, ep, st, 2*tnode+1, theta, tx, ty, tax, tay, stats);
+        (void) treecode2_block<S,A,D>(sp, ep, st, 2*tnode,   theta, tx, tax, stats);
+        (void) treecode2_block<S,A,D>(sp, ep, st, 2*tnode+1, theta, tx, tax, stats);
     }
 }
 
@@ -333,12 +327,12 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
 
         #pragma omp for
         for (size_t i = 0; i < targs.n; i++) {
-            targs.u[0][i] = 0.0;
-            targs.u[1][i] = 0.0;
-            treecode2_block(srcs, eqsrcs, stree, 1, theta,
-                            targs.x[i], targs.y[i],
-                            targs.u[0][i], targs.u[1][i],
-                            threadstats);
+            std::array<S,D> x;
+            std::array<A,D> u;
+            for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
+            for (int d=0; d<D; ++d) u[d] = 0.0;
+            treecode2_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, theta, x, u, threadstats);
+            for (int d=0; d<D; ++d) targs.u[d][i] = u[d];
         }
 
         #pragma omp critical
@@ -509,14 +503,11 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     #endif
 
     // find the min/max of the three axes
-    //if (pfirst == 0) reset_and_start_timer();
-    std::vector<S> boxsizes(2);
-    auto minmax = minMaxValue(p.x, pfirst, plast);
-    boxsizes[0] = minmax.second - minmax.first;
-    //printf("  node x min/max %g %g\n", minmax.first, minmax.second);
-    minmax = minMaxValue(p.y, pfirst, plast);
-    boxsizes[1] = minmax.second - minmax.first;
-    //printf("       y min/max %g %g\n", minmax.first, minmax.second);
+    std::array<S,D> boxsizes;
+    for (int d=0; d<D; ++d) {
+        auto minmax = minMaxValue(p.x[d], pfirst, plast);
+        boxsizes[d] = minmax.second - minmax.first;
+    }
 
     // find total mass and center of mass - old way
     // copy strength vector
@@ -527,8 +518,9 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     // sum of abs of strengths
     t.m[tnode] = std::accumulate(absstr.begin(), absstr.end(), 0.0);
 
-    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
-    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
+    for (int d=0; d<D; ++d) {
+        t.x[d][tnode] = std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
+    }
     //printf("  abs mass %g and cm %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode]);
 
     // new way: compute the sum of the absolute values of the point "masses" - slower!
@@ -552,7 +544,9 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     // find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
-    t.s[tnode] = 0.5 * std::sqrt(std::pow(boxsizes[0],2) + std::pow(boxsizes[1],2));
+    S bsss = 0.0;
+    for (int d=0; d<D; ++d) bsss += std::pow(boxsizes[d],2);
+    t.s[tnode] = 0.5 * std::sqrt(bsss);
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // no need to split or compute further
@@ -565,20 +559,14 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     // sort this portion of the array along the big axis
     //printf("sort\n");
     //if (pfirst == 0) reset_and_start_timer();
-    if (maxaxis == 0) {
-        (void) sortIndexesSection(sort_recursion, p.x, p.itemp, pfirst, plast);
-        //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
-    } else if (maxaxis == 1) {
-        (void) sortIndexesSection(sort_recursion, p.y, p.itemp, pfirst, plast);
-        //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.y[p.itemp[i]]);
-    }
+    (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.itemp, pfirst, plast);
+    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
     //if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
-    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
+    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.itemp, pfirst, plast);
     reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
@@ -616,25 +604,20 @@ void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
     //printf("    refining particles %ld to %ld\n", pfirst, plast);
 
     // find the min/max of the three axes
-    std::vector<S> boxsizes(2);
-    auto minmax = minMaxValue(p.x, pfirst, plast);
-    boxsizes[0] = minmax.second - minmax.first;
-    minmax = minMaxValue(p.y, pfirst, plast);
-    boxsizes[1] = minmax.second - minmax.first;
+    std::array<S,D> boxsizes;
+    for (int d=0; d<D; ++d) {
+        auto minmax = minMaxValue(p.x[d], pfirst, plast);
+        boxsizes[d] = minmax.second - minmax.first;
+    }
 
     // find longest box edge
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
 
     // sort this portion of the array along the big axis
-    if (maxaxis == 0) {
-        (void) sortIndexesSection(0, p.x, p.itemp, pfirst, plast);
-    } else if (maxaxis == 1) {
-        (void) sortIndexesSection(0, p.y, p.itemp, pfirst, plast);
-    }
+    (void) sortIndexesSection(0, p.x[maxaxis], p.itemp, pfirst, plast);
 
     // rearrange the elements
-    reorder(p.x, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.y, p.ftemp, p.itemp, pfirst, plast);
+    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.itemp, pfirst, plast);
     reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
     reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
 
@@ -711,16 +694,14 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
                 const S str1 = std::abs(ep.m[ip-1]);
                 const S str2 = std::abs(ep.m[ip]);
                 const S pairm = 1.0 / (str1 + str2);
-                ep.x[iep] = (ep.x[ip-1]*str1 + ep.x[ip]*str2) * pairm;
-                ep.y[iep] = (ep.y[ip-1]*str1 + ep.y[ip]*str2) * pairm;
+                for (int d=0; d<D; ++d) ep.x[d][iep] = (ep.x[d][ip-1]*str1 + ep.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(ep.r[ip-1],2)*str1 + std::pow(ep.r[ip],2)*str2) * pairm);
                 ep.m[iep] = ep.m[ip-1] + ep.m[ip];
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.epoffset[ichild]+t.epnum[ichild]) {
                 //printf("    passing %d up into %d\n", ip-1,iep);
-                ep.x[iep] = ep.x[ip-1];
-                ep.y[iep] = ep.y[ip-1];
+                for (int d=0; d<D; ++d) ep.x[d][iep] = ep.x[d][ip-1];
                 ep.r[iep] = ep.r[ip-1];
                 ep.m[iep] = ep.m[ip-1];
             }
@@ -744,16 +725,14 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
                 const S str1 = std::abs(p.m[ip-1]);
                 const S str2 = std::abs(p.m[ip]);
                 const S pairm = 1.0 / (str1 + str2);
-                ep.x[iep] = (p.x[ip-1]*str1 + p.x[ip]*str2) * pairm;
-                ep.y[iep] = (p.y[ip-1]*str1 + p.y[ip]*str2) * pairm;
+                for (int d=0; d<D; ++d) ep.x[d][iep] = (p.x[d][ip-1]*str1 + p.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(p.r[ip-1],2)*str1 + std::pow(p.r[ip],2)*str2) * pairm);
                 ep.m[iep] = p.m[ip-1] + p.m[ip];
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.ioffset[ichild]+t.num[ichild]) {
                 //printf("    passing %d up into %d\n", ip-1,iep);
-                ep.x[iep] = p.x[ip-1];
-                ep.y[iep] = p.y[ip-1];
+                for (int d=0; d<D; ++d) ep.x[d][iep] = p.x[d][ip-1];
                 ep.r[iep] = p.r[ip-1];
                 ep.m[iep] = p.m[ip-1];
             }
