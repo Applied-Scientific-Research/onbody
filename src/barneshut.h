@@ -101,7 +101,7 @@ void Parts<S,A,D>::smooth_strengths() {
 
 template <class S, class A, int D>
 void Parts<S,A,D>::wave_strengths() {
-    const S factor = 1.0 / std::sqrt((S)n);
+    const S factor = 1.0 / (S)n;
     for (size_t i = 0; i < n; i++) {
         const S dist = std::sqrt(std::pow(x[i]-0.5,2)+std::pow(y[i]-0.5,2));
         m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
@@ -520,22 +520,31 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     boxsizes[1] = minmax.second - minmax.first;
     //printf("       y min/max %g %g\n", minmax.first, minmax.second);
 
-    // find total mass and center of mass
-    //printf("find mass/cm\n");
-    //if (pfirst == 0) reset_and_start_timer();
-    t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
-
+    // find total mass and center of mass - old way
     // copy strength vector
     alignas(32) decltype(p.m) absstr(p.m.begin()+pfirst, p.m.begin()+plast);
     // find abs() of each entry using a lambda
     std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
 
     // sum of abs of strengths
-    auto nodestr = std::accumulate(absstr.begin(), absstr.end(), 0.0);
+    t.m[tnode] = std::accumulate(absstr.begin(), absstr.end(), 0.0);
 
-    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, absstr.begin(), 0.0) / nodestr;
-    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, absstr.begin(), 0.0) / nodestr;
-    //printf("  total mass %g abs mass %g and cm %g %g\n", t.m[tnode], nodestr, t.x[tnode], t.y[tnode]);
+    t.x[tnode] = std::inner_product(p.x.begin()+pfirst, p.x.begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
+    t.y[tnode] = std::inner_product(p.y.begin()+pfirst, p.y.begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
+    //printf("  abs mass %g and cm %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode]);
+
+    // new way: compute the sum of the absolute values of the point "masses" - slower!
+    //t.m[tnode] = 0.0;
+    //t.x[tnode] = 0.0;
+    //t.y[tnode] = 0.0;
+    //for (size_t i=pfirst; i<plast; ++i) {
+    //    const S thisabs = std::abs(p.m[i]);
+    //    t.m[tnode] += thisabs;
+    //    t.x[tnode] += p.x[i] * thisabs;
+    //    t.y[tnode] += p.y[i] * thisabs;
+    //}
+    //t.x[tnode] /= t.m[tnode];
+    //t.y[tnode] /= t.m[tnode];
 
     // write all this data to the tree node
     t.ioffset[tnode] = pfirst;
@@ -586,6 +595,9 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
     #pragma omp task shared(p,t)
     (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
+
+    // we don't need a taskwait directive here, because we don't use an upward pass, though it may
+    //   seem like that would be a better way to compute the tree node's mass and cm, it's slower
 
     if (tnode == 1) {
         // this is executed on the final call
