@@ -118,14 +118,8 @@ void Parts<S,A,D>::reorder_idx(const size_t pfirst, const size_t plast) {
     // copy the original global index vector gidx into a temporary vector
     std::copy(gidx.begin()+pfirst, gidx.begin()+plast, itemp.begin()+pfirst);
 
-    //printf("  before reorder_idx: gidx, lidx\n");
-    //for (size_t i=pfirst; i<plast; ++i) printf("    %ld  %ld  %ld\n", i, gidx[i], lidx[i]);
-
     // scatter values from the temp vector back into the original vector
     for (size_t i=pfirst; i<plast; ++i) gidx[i] = itemp[lidx[i]];
-
-    //printf("  after reorder_idx: gidx, lidx\n");
-    //for (size_t i=pfirst; i<plast; ++i) printf("    %ld  %ld  %ld\n", i, gidx[i], lidx[i]);
 }
 
 
