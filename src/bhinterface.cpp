@@ -25,7 +25,8 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {
     float flops = 0.0;
-    bool silent = true;
+    bool silent = false;
+    bool createTargTree = true;
 
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
@@ -91,6 +92,26 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
+    if (createTargTree) {
+        printf("\nBuilding the target tree\n");
+        printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
+
+        start = std::chrono::system_clock::now();
+        Tree<float,2> ttree(*ntarg);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+        // split this node and recurse
+        start = std::chrono::system_clock::now();
+        #pragma omp parallel
+        #pragma omp single
+        (void) splitNode(targs, 0, targs.n, ttree, 1);
+        #pragma omp taskwait
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
+
+
     //
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
@@ -101,9 +122,17 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     double dt = elapsed_seconds.count();
     if (!silent) printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);
 
-    // save the results out
-    for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
-    for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
+
+    // pull results from the object
+    if (createTargTree) {
+        // need to rearrange the results back in original order
+        for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] = targs.u[0][i];
+        for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] = targs.u[1][i];
+    } else {
+        // pull them out directly
+        for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
+        for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
+    }
 
     return flops;
 }

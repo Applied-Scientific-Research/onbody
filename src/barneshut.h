@@ -45,16 +45,19 @@ public:
     void random_in_cube();
     void smooth_strengths();
     void wave_strengths();
+    void reorder_idx(const size_t, const size_t);
 
     size_t n;
     // state
     alignas(32) std::array<std::vector<S>, D> x;
-    alignas(32) std::vector<S> r;
     // actuator (needed by sources)
     alignas(32) std::vector<S> m;
+    alignas(32) std::vector<S> r;
     // results (needed by targets)
     alignas(32) std::array<std::vector<A>, D> u;
+    alignas(32) std::vector<size_t> gidx;
     // temporary
+    alignas(32) std::vector<size_t> lidx;
     alignas(32) std::vector<size_t> itemp;
     alignas(32) std::vector<S> ftemp;
 
@@ -75,6 +78,9 @@ void Parts<S,A,D>::resize(size_t _num) {
     r.resize(n);
     m.resize(n);
     for (int d=0; d<D; ++d) u[d].resize(n);
+    gidx.resize(n);
+    std::iota(gidx.begin(), gidx.end(), 0);
+    lidx.resize(n);
     itemp.resize(n);
     ftemp.resize(n);
 }
@@ -102,6 +108,26 @@ void Parts<S,A,D>::wave_strengths() {
         m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
     }
 }
+
+//
+// Helper function to reorder the reordering indexes
+//
+template <class S, class A, int D>
+void Parts<S,A,D>::reorder_idx(const size_t pfirst, const size_t plast) {
+
+    // copy the original global index vector gidx into a temporary vector
+    std::copy(gidx.begin()+pfirst, gidx.begin()+plast, itemp.begin()+pfirst);
+
+    //printf("  before reorder_idx: gidx, lidx\n");
+    //for (size_t i=pfirst; i<plast; ++i) printf("    %ld  %ld  %ld\n", i, gidx[i], lidx[i]);
+
+    // scatter values from the temp vector back into the original vector
+    for (size_t i=pfirst; i<plast; ++i) gidx[i] = itemp[lidx[i]];
+
+    //printf("  after reorder_idx: gidx, lidx\n");
+    //for (size_t i=pfirst; i<plast; ++i) printf("    %ld  %ld  %ld\n", i, gidx[i], lidx[i]);
+}
+
 
 //
 // A tree, made of a structure of arrays
@@ -559,16 +585,15 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     // sort this portion of the array along the big axis
     //printf("sort\n");
     //if (pfirst == 0) reset_and_start_timer();
-    (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.itemp, pfirst, plast);
-    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, p.itemp[i], p.x[p.itemp[i]]);
-    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %ld %g\n", i, idx[i], p.x[idx[i]]);
+    (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.lidx, pfirst, plast);
     //if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
     // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
-    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
+    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    reorder(p.m, p.ftemp, p.lidx, pfirst, plast);
+    reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
+    p.reorder_idx(pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
     //if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
 
@@ -614,12 +639,13 @@ void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
     auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
 
     // sort this portion of the array along the big axis
-    (void) sortIndexesSection(0, p.x[maxaxis], p.itemp, pfirst, plast);
+    (void) sortIndexesSection(0, p.x[maxaxis], p.lidx, pfirst, plast);
 
     // rearrange the elements
-    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.m, p.ftemp, p.itemp, pfirst, plast);
-    reorder(p.r, p.ftemp, p.itemp, pfirst, plast);
+    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    reorder(p.m, p.ftemp, p.lidx, pfirst, plast);
+    reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
+    p.reorder_idx(pfirst, plast);
 
     // determine where the split should be
     size_t pmiddle = pfirst + (1 << log_2(plast-pfirst-1));
