@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     if (compareToDirect) {
 
         // run a subset direct solve
-        size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+        size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/1.e+10));
         int ntn = numTargs / ntskip;
         std::vector<float> txn(ntn);
         std::vector<float> tyn(ntn);
