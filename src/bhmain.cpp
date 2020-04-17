@@ -111,6 +111,7 @@ int main(int argc, char *argv[]) {
     // compare results to a direct solve
 
     if (compareToDirect) {
+
         // run a subset direct solve
         size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
         int ntn = numTargs / ntskip;
@@ -132,17 +133,22 @@ int main(int argc, char *argv[]) {
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
         printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)ntskip*(float)elapsed_seconds.count(), gflops);
+
         // compute the error
         float errsum = 0.0;
         float errcnt = 0.0;
+        float maxerr = 0.0;
         for (size_t i=0; i<(size_t)ntn; ++i) {
             const size_t ifast = i * ntskip;
             float thiserr = tu[ifast]-tun[i];
-            if (i<4) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //if (i<4) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
             errsum += thiserr*thiserr;
+            //if (thiserr*thiserr > maxerr) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
             errcnt += tun[i]*tun[i];
         }
         printf("    rms error in fast solver:\t%g\n", std::sqrt(errsum/errcnt));
+        printf("    max error in fast solver:\t%g\n", std::sqrt(maxerr/(errcnt/(float)ntn)));
     }
 
     return 0;
