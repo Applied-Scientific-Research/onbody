@@ -21,7 +21,7 @@
 
 
 // the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 16;
+const size_t blockSize = 32;
 
 //
 // Find index of msb of uint32
@@ -321,7 +321,7 @@ void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
     // distance from box center of mass to target point
     S dist = 0.0;
     for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
-    dist = std::sqrt(dist);
+    dist = std::sqrt(dist) - 4.0*st.r[tnode];
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -549,6 +549,10 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     }
     //printf("  abs mass %g and cm %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode]);
 
+    // fine average particle radius
+    S radsum = std::accumulate(p.r.begin()+pfirst, p.r.begin()+plast, 0.0);
+    t.r[tnode] = radsum / (S)(plast-pfirst);
+
     // new way: compute the sum of the absolute values of the point "masses" - slower!
     //t.m[tnode] = 0.0;
     //t.x[tnode] = 0.0;
@@ -574,6 +578,7 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     for (int d=0; d<D; ++d) bsss += std::pow(boxsizes[d],2);
     t.s[tnode] = 0.5 * std::sqrt(bsss);
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
+    //printf("  box %ld size %g and rad %g\n", tnode, t.s[tnode], t.r[tnode]);
 
     // no need to split or compute further
     if (t.num[tnode] <= blockSize) {
