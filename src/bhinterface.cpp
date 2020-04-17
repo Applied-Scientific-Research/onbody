@@ -20,7 +20,7 @@
 //
 // call this function from an external program
 //
-float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
+extern "C" float external_vel_solver_f_ (const int* nsrc,  const float* sx, const float* sy,
                                                const float* ss, const float* sr,
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {
@@ -149,7 +149,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
 //
 // same, but direct solver
 //
-float external_vel_direct_f (const int* nsrc,  const float* sx, const float* sy,
+extern "C" float external_vel_direct_f_ (const int* nsrc,  const float* sx, const float* sy,
                                                const float* ss, const float* sr,
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {

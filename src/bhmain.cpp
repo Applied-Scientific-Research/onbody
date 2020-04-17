@@ -19,13 +19,13 @@
 #include <chrono>
 
 // the fast solver
-extern float external_vel_solver_f (const int*, const float*, const float*,
+extern "C" float external_vel_solver_f_ (const int*, const float*, const float*,
                                                 const float*, const float*,
                                     const int*, const float*, const float*,
                                                       float*,       float*);
 
 // the direct solver
-extern float external_vel_direct_f (const int*, const float*, const float*,
+extern "C" float external_vel_direct_f_ (const int*, const float*, const float*,
                                                 const float*, const float*,
                                     const int*, const float*, const float*,
                                                       float*,       float*);
@@ -100,8 +100,8 @@ int main(int argc, char *argv[]) {
     start = std::chrono::system_clock::now();
     int ns = numSrcs;
     int nt = numTargs;
-    flops = external_vel_solver_f(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
-                                  &nt, tx.data(), ty.data(), tu.data(), tv.data());
+    flops = external_vel_solver_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                   &nt, tx.data(), ty.data(), tu.data(), tv.data());
 
     end = std::chrono::system_clock::now();
     elapsed_seconds = end-start;
@@ -127,8 +127,8 @@ int main(int argc, char *argv[]) {
             tvn[i] = 0.0f;
         }
         start = std::chrono::system_clock::now();
-        flops = external_vel_direct_f(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
-                                      &ntn, txn.data(), tyn.data(), tun.data(), tvn.data());
+        flops = external_vel_direct_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                       &ntn, txn.data(), tyn.data(), tun.data(), tvn.data());
         end = std::chrono::system_clock::now();
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
