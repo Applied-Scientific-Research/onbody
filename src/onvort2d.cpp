@@ -1,7 +1,7 @@
 /*
  * onvort2d - testbed for an O(N) 2d vortex solver
  *
- * Copyright (c) 2017, Mark J Stock
+ * Copyright (c) 2017-20, Mark J Stock
  */
 
 #include <cstdlib>
@@ -356,13 +356,20 @@ int main(int argc, char *argv[]) {
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
+    float theta = 4.0;
+    //double treetime = 0.0;
+    //double ttreetime = 0.0;
 
-    if (argc > 1) {
-        if (strncmp(argv[1], "-n=", 3) == 0) {
-            size_t num = atof(argv[1] + 3);
+    for (int i=1; i<argc; i++) {
+        if (strncmp(argv[i], "-n=", 3) == 0) {
+            size_t num = atoi(argv[i]+3);
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
+        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+            float testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta = testtheta;
         }
     }
 
@@ -538,7 +545,7 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         start = std::chrono::system_clock::now();
-        nbody_treecode2(srcs, eqsrcs, stree, targs, 4.0f);
+        nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
