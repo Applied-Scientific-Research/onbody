@@ -142,8 +142,9 @@ int main(int argc, char *argv[]) {
             const size_t ifast = i * ntskip;
             float thiserr = tu[ifast]-tun[i];
             //if (i<4) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
             errsum += thiserr*thiserr;
-            //if (thiserr*thiserr > maxerr) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //if (thiserr*thiserr > maxerr) printf("      %ld %ld  %g %g   %g %g  new max\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
             if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
             errcnt += tun[i]*tun[i];
         }

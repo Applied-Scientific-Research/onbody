@@ -321,7 +321,7 @@ void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
     // distance from box center of mass to target point
     S dist = 0.0;
     for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
-    dist = std::sqrt(dist) - 4.0*st.r[tnode];
+    dist = std::sqrt(dist) - 2.0*st.r[tnode];
 
     // is source tree node far enough away?
     if (dist / st.s[tnode] > theta) {
@@ -373,6 +373,98 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
     return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
+}
+
+
+//
+// Recursive kernel for the boxwise treecode using equivalent particles
+//
+template <class S, class A, int D>
+void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
+                     const Tree<S,D>& st, const size_t snode,
+                     Parts<S,A,D>& tp,
+                     const Tree<S,D>& tt, const size_t tnode,
+                     //const std::array<S,D>& tx, std::array<A,D>& tax,
+                     const float theta,
+                     struct treecode2_stats& stats) {
+
+    //printf("    vs src box %ld with %ld parts starting at %ld\n", snode, st.num[snode], st.ioffset[snode]);
+
+    // if box is a leaf node, just compute the influence and return
+    if (st.num[snode] <= blockSize) {
+        // box is too close and is a leaf node, look at individual particles
+        for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
+        for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
+            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
+                         tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+        }
+        }
+        stats.sltp++;
+        return;
+    }
+
+    // distance from box center of mass to target point
+    S dist = 0.0;
+    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tt.x[d][tnode], 2);
+    dist = std::sqrt(dist) - 1.0*st.r[snode] - 1.0*tt.r[tnode];
+
+    // is source tree node far enough away?
+    if (dist / (st.s[snode]+tt.s[tnode]) > theta) {
+        // this version uses equivalent points instead!
+        for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
+        for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
+            nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
+                         tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+        }
+        }
+        stats.sbtp++;
+    } else {
+        // box is too close, open up its children
+        (void) treecode3_block<S,A,D>(sp, ep, st, 2*snode,   tp, tt, tnode, theta, stats);
+        (void) treecode3_block<S,A,D>(sp, ep, st, 2*snode+1, tp, tt, tnode, theta, stats);
+    }
+}
+
+//
+// Caller for the equivalent particle O(NlogN) kernel, but interaction lists by tree
+//
+template <class S, class A, int D>
+float nbody_treecode3(const Parts<S,A,D>& srcs,
+                      const Parts<S,A,D>& eqsrcs,
+                      const Tree<S,D>& stree,
+                      Parts<S,A,D>& targs,
+                      const Tree<S,D>& ttree,
+                      const float theta) {
+
+    struct treecode2_stats stats = {0, 0};
+
+    #pragma omp parallel
+    {
+        struct treecode2_stats threadstats = {0, 0};
+
+        #pragma omp for
+        for (size_t ib=0; ib<(size_t)ttree.numnodes; ++ib) {
+            if (ttree.num[ib] <= blockSize and ttree.num[ib] > 0) {
+                //printf("  targ box %ld has %ld parts starting at %ld\n", ib, ttree.num[ib], ttree.ioffset[ib]);
+                for (size_t ip=ttree.ioffset[ib]; ip<ttree.ioffset[ib]+ttree.num[ib]; ++ip) {
+                    for (int d=0; d<D; ++d) targs.u[d][ip] = 0.0;
+                }
+                treecode3_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, targs, ttree, ib, theta, threadstats);
+            }
+        }
+
+        #pragma omp critical
+        {
+            stats.sltp += threadstats.sltp;
+            stats.sbtp += threadstats.sbtp;
+        }
+    }
+
+    //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
+    //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
+    //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
+
+    return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize * (float)blockSize;
 }
 
 
@@ -510,8 +602,8 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
 template <class S, class A, int D>
 void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_t tnode) {
 
-    //printf("\nsplitNode %d  %ld %ld\n", tnode, pfirst, plast);
-    //printf("splitNode %d  %ld %ld\n", tnode, pfirst, plast);
+    //printf("splitNode %ld  %ld %ld\n", tnode, pfirst, plast);
+
     const int thislev = log_2(tnode);
     #ifdef _OPENMP
     const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);

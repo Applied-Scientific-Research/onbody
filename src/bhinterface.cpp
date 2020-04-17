@@ -25,8 +25,9 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {
     float flops = 0.0;
-    bool silent = false;
-    bool createTargTree = true;
+    const bool silent = false;
+    const bool createTargTree = true;
+    const bool blockwise = true;
 
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
@@ -53,9 +54,9 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
 
     // allocate and initialize tree
     if (!silent) printf("\nBuilding the source tree\n");
+    if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
     start = std::chrono::system_clock::now();
     Tree<float,2> stree(*nsrc);
-    if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -92,14 +93,15 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
-    if (createTargTree) {
-        printf("\nBuilding the target tree\n");
-        printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
+    Tree<float,2> ttree(0);
+    if (createTargTree or blockwise) {
+        if (!silent) printf("\nBuilding the target tree\n");
+        if (!silent) printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
 
         start = std::chrono::system_clock::now();
-        Tree<float,2> ttree(*ntarg);
+        ttree = Tree<float,2>(*ntarg);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
+        if (!silent) printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
 
         // split this node and recurse
         start = std::chrono::system_clock::now();
@@ -108,7 +110,7 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
         (void) splitNode(targs, 0, targs.n, ttree, 1);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
+        if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
     }
 
 
@@ -117,7 +119,13 @@ float external_vel_solver_f (const int* nsrc,  const float* sx, const float* sy,
     //
     if (!silent) printf("\nRun the treecode O(NlogN) with equivalent particles\n");
     start = std::chrono::system_clock::now();
-    flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 4.0f);
+
+    if (blockwise) {
+        flops += nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, 4.0f);
+    } else {
+        flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 4.0f);
+    }
+
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     double dt = elapsed_seconds.count();
     if (!silent) printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);
