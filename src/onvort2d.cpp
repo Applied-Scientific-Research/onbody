@@ -23,6 +23,9 @@
 //#include "Polynomial.hh"
 #include "wlspoly.hpp"
 
+#define STORE float
+#define ACCUM double
+
 const char* progname = "onvort2d";
 
 //
@@ -382,13 +385,13 @@ int main(int argc, char *argv[]) {
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,2> srcs(numSrcs);
+    Parts<STORE,ACCUM,2> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
     //srcs.smooth_strengths();
     srcs.wave_strengths();
 
-    Parts<float,double,2> targs(numTargs);
+    Parts<STORE,ACCUM,2> targs(numTargs);
     // initialize particle data
     targs.random_in_cube();
     for (auto& m : targs.m) { m = 1.0f; }
@@ -400,7 +403,7 @@ int main(int argc, char *argv[]) {
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
     start = std::chrono::system_clock::now();
-    Tree<float,2> stree(numSrcs);
+    Tree<STORE,2> stree(numSrcs);
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -417,7 +420,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double,2> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM,2> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -443,7 +446,7 @@ int main(int argc, char *argv[]) {
     // don't need the target tree for treecode, but will for fast code
     printf("\nBuilding the target tree\n");
     start = std::chrono::system_clock::now();
-    Tree<float,2> ttree(numTargs);
+    Tree<STORE,2> ttree(numTargs);
     printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -462,7 +465,7 @@ int main(int argc, char *argv[]) {
     // find equivalent points
     printf("\nCalculating equivalent targ points\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double,2> eqtargs((ttree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM,2> eqtargs((ttree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqtargs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -500,10 +503,10 @@ int main(int argc, char *argv[]) {
     printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive);
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
-    std::vector<float> naiveu(targs.u[0].begin(), targs.u[0].end());
+    std::vector<ACCUM> naiveu(targs.u[0].begin(), targs.u[0].end());
 
-    float errsum = 0.0;
-    float errcnt = 0.0;
+    ACCUM errsum = 0.0;
+    ACCUM errcnt = 0.0;
 
     //
     // Run a simple O(NlogN) treecode - boxes approximate as particles
@@ -523,13 +526,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> treecodeu(targs.u[0].begin(), targs.u[0].end());
+    std::vector<ACCUM> treecodeu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
-        float thiserr = treecodeu[i]-naiveu[i];
+        ACCUM thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
@@ -555,13 +558,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> treecodeu2(targs.u[0].begin(), targs.u[0].end());
+    std::vector<ACCUM> treecodeu2(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
-        float thiserr = treecodeu2[i]-naiveu[i];
+        ACCUM thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
@@ -594,13 +597,13 @@ int main(int argc, char *argv[]) {
     // write sample results
     for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("   particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
-    std::vector<float> fastu(targs.u[0].begin(), targs.u[0].end());
+    std::vector<ACCUM> fastu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
     errsum = 0.0;
     errcnt = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
-        float thiserr = fastu[i]-naiveu[i];
+        ACCUM thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
