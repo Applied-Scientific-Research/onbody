@@ -345,7 +345,7 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
     {
         struct treecode2_stats threadstats = {0, 0};
 
-        #pragma omp for
+        #pragma omp for schedule(dynamic,2*blockSize)
         for (size_t i = 0; i < targs.n; i++) {
             std::array<S,D> x;
             std::array<A,D> u;
