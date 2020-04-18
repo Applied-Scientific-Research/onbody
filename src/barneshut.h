@@ -223,8 +223,8 @@ template <class S, class A, int D>
 float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i+=tskip) {
-        targs.u[0][i] = 0.0;
-        targs.u[1][i] = 0.0;
+        //targs.u[0][i] = 0.0;
+        //targs.u[1][i] = 0.0;
         //#pragma clang loop vectorize(enable) interleave(enable)
         for (size_t j = 0; j < srcs.n; j++) {
             nbody_kernel(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.m[j],
@@ -281,7 +281,7 @@ void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A
         for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
         for (int d=0; d<D; ++d) u[d] = 0.0;
         treecode1_block<S,A,D>(srcs, stree, (size_t)1, theta, x, u);
-        for (int d=0; d<D; ++d) targs.u[d][i] = u[d];
+        for (int d=0; d<D; ++d) targs.u[d][i] += u[d];
     }
 }
 
@@ -352,7 +352,7 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
             for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
             for (int d=0; d<D; ++d) u[d] = 0.0;
             treecode2_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, theta, x, u, threadstats);
-            for (int d=0; d<D; ++d) targs.u[d][i] = u[d];
+            for (int d=0; d<D; ++d) targs.u[d][i] += u[d];
         }
 
         #pragma omp critical
@@ -388,10 +388,21 @@ void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
     if (st.num[snode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
         for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
-        for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
-            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
-                         tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-        }
+            //if (tp.u[0][i] != tp.u[0][i]) {
+            //    printf("detected nan at i=%ld before summations\n", i);
+            //}
+            for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
+                nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
+                             tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+            }
+            //if (tp.u[0][i] != tp.u[0][i]) {
+            //    printf("detected nan at i=%ld, j=%ld to %ld\n", i, st.ioffset[snode], st.ioffset[snode] + st.num[snode]);
+            //    printf("  trg pos= %g %g  vel= %g %g\n", tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+            //    for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
+            //        printf("  src pos= %g %g  rad= %g  str= %g\n", sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j]);
+            //    }
+            //    exit(0);
+            //}
         }
         stats.sltp++;
         return;
@@ -406,10 +417,21 @@ void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
     if (dist / (st.s[snode]+tt.s[tnode]) > theta) {
         // this version uses equivalent points instead!
         for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
-        for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
-            nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
-                         tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-        }
+            //if (tp.u[0][i] != tp.u[0][i]) {
+            //    printf("detected nan at i=%ld before summations\n", i);
+            //}
+            for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
+                nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
+                             tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+            }
+            //if (tp.u[0][i] != tp.u[0][i]) {
+            //    printf("detected nan at i=%ld, ep j=%ld to %ld\n", i, st.epoffset[snode], st.epoffset[snode] + st.epnum[snode]);
+            //    printf("  trg pos= %g %g  vel= %g %g\n", tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
+            //    for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
+            //        printf("  eqv pos= %g %g  rad= %g  str= %g\n", ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j]);
+            //    }
+            //    exit(0);
+            //}
         }
         stats.sbtp++;
     } else {
@@ -440,9 +462,9 @@ float nbody_treecode3(const Parts<S,A,D>& srcs,
         for (size_t ib=0; ib<(size_t)ttree.numnodes; ++ib) {
             if (ttree.num[ib] <= blockSize and ttree.num[ib] > 0) {
                 //printf("  targ box %ld has %ld parts starting at %ld\n", ib, ttree.num[ib], ttree.ioffset[ib]);
-                for (size_t ip=ttree.ioffset[ib]; ip<ttree.ioffset[ib]+ttree.num[ib]; ++ip) {
-                    for (int d=0; d<D; ++d) targs.u[d][ip] = 0.0;
-                }
+                //for (size_t ip=ttree.ioffset[ib]; ip<ttree.ioffset[ib]+ttree.num[ib]; ++ip) {
+                //    for (int d=0; d<D; ++d) targs.u[d][ip] = 0.0;
+                //}
                 treecode3_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, targs, ttree, ib, theta, threadstats);
             }
         }
@@ -808,8 +830,8 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                const S str1 = std::abs(ep.m[ip-1]);
-                const S str2 = std::abs(ep.m[ip]);
+                const S str1 = std::max((S)1.e-20, std::abs(ep.m[ip-1]));
+                const S str2 = std::max((S)1.e-20, std::abs(ep.m[ip]));
                 const S pairm = 1.0 / (str1 + str2);
                 for (int d=0; d<D; ++d) ep.x[d][iep] = (ep.x[d][ip-1]*str1 + ep.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(ep.r[ip-1],2)*str1 + std::pow(ep.r[ip],2)*str2) * pairm);
@@ -839,12 +861,17 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                const S str1 = std::abs(p.m[ip-1]);
-                const S str2 = std::abs(p.m[ip]);
+                const S str1 = std::max((S)1.e-20, std::abs(p.m[ip-1]));
+                const S str2 = std::max((S)1.e-20, std::abs(p.m[ip]));
                 const S pairm = 1.0 / (str1 + str2);
                 for (int d=0; d<D; ++d) ep.x[d][iep] = (p.x[d][ip-1]*str1 + p.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(p.r[ip-1],2)*str1 + std::pow(p.r[ip],2)*str2) * pairm);
                 ep.m[iep] = p.m[ip-1] + p.m[ip];
+                //if (ep.r[iep] != ep.r[iep]) {
+                //    printf("nan detected at ep %ld\n", iep);
+                //    printf("  pos %g %g and %g %g\n", p.x[0][ip-1], p.x[1][ip-1], p.x[0][ip], p.x[1][ip]);
+                //    printf("  str %g %g and rads %g %g\n", p.m[ip-1], p.m[ip], p.r[ip-1], p.r[ip]);
+                //}
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.ioffset[ichild]+t.num[ichild]) {
