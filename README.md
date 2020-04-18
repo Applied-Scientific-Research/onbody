@@ -257,6 +257,15 @@ N        |block=16|   32   |   64   |   128
 100000   | 0.1393 | 0.1748 | 0.1921 | 0.2316
 1000000  | 2.3903 | 2.6985 | 3.3061 | 4.1958
 
+New compilation options are `-O3 -march=native -ffast-math`, also theta=4.0, blockSize=32, and forcing dynamic scheduling for the treecodes.
+
+N        | omp 2p | omp 8p |
+---------|--------|--------|
+1000     | 0.0044 | 0.0068 |
+10000    | 0.0502 | 0.0099 |
+100000   | 0.4514 | 0.2198 |
+1000000  | 6.6784 | 2.6844 |
+10000000 | 95.302 | 38.737 |
 
 ## To Do
 
