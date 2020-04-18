@@ -458,7 +458,7 @@ float nbody_treecode3(const Parts<S,A,D>& srcs,
     {
         struct treecode2_stats threadstats = {0, 0};
 
-        #pragma omp for
+        #pragma omp for schedule(dynamic,8)
         for (size_t ib=0; ib<(size_t)ttree.numnodes; ++ib) {
             if (ttree.num[ib] <= blockSize and ttree.num[ib] > 0) {
                 //printf("  targ box %ld has %ld parts starting at %ld\n", ib, ttree.num[ib], ttree.ioffset[ib]);
