@@ -45,8 +45,8 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,  const float* sx, cons
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
     for (auto& m : targs.m) { m = 1.0f/(float)(*ntarg); }
-    for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
-    for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
+    for (auto& u : targs.u[0]) { u = 0.0f; }
+    for (auto& u : targs.u[1]) { u = 0.0f; }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -134,12 +134,13 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,  const float* sx, cons
     // pull results from the object
     if (createTargTree) {
         // need to rearrange the results back in original order
-        for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] = targs.u[0][i];
-        for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] = targs.u[1][i];
+        for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] += targs.u[0][i];
+        for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] += targs.u[1][i];
+        //for (int i=0; i<*ntarg; ++i) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
     } else {
         // pull them out directly
-        for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
-        for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
+        for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
+        for (int i=0; i<*ntarg; ++i) tv[i] += targs.u[1][i];
     }
 
     return flops;
@@ -172,8 +173,8 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,  const float* sx, cons
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
     for (auto& m : targs.m) { m = 1.0f/(float)(*ntarg); }
-    for (int i=0; i<*ntarg; ++i) targs.u[0][i] = tu[i];
-    for (int i=0; i<*ntarg; ++i) targs.u[1][i] = tv[i];
+    for (auto& u : targs.u[0]) { u = 0.0f; }
+    for (auto& u : targs.u[1]) { u = 0.0f; }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -189,8 +190,8 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,  const float* sx, cons
     if (!silent) printf("  direct summations:\t\t[%.4f] seconds\n\n", dt);
 
     // save the results out
-    for (int i=0; i<*ntarg; ++i) tu[i] = targs.u[0][i];
-    for (int i=0; i<*ntarg; ++i) tv[i] = targs.u[1][i];
+    for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
+    for (int i=0; i<*ntarg; ++i) tv[i] += targs.u[1][i];
 
     return flops;
 }
