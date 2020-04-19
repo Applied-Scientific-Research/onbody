@@ -257,15 +257,17 @@ N        |block=16|   32   |   64   |   128
 100000   | 0.1393 | 0.1748 | 0.1921 | 0.2316
 1000000  | 2.3903 | 2.6985 | 3.3061 | 4.1958
 
-New compilation options are `-O3 -march=native -ffast-math`, also theta=4.0, blockSize=32, and forcing dynamic scheduling for the treecodes.
+New compilation options are `-O3 -march=native -ffast-math`, also theta=4.0, blockSize=32, and forcing dynamic scheduling for the treecodes. The 2p machine is the above i7-7500U, the 8p is an i7-5960X running Fedora 29, compiled with GCC 8.3.0.
 
-N        | omp 2p | omp 8p |
----------|--------|--------|
+N        | omp 2p | omp 8p | memory
+---------|--------|--------|--------
 1000     | 0.0044 | 0.0068 |
 10000    | 0.0502 | 0.0099 |
 100000   | 0.4514 | 0.2198 |
-1000000  | 6.6784 | 2.6844 |
-10000000 | 95.302 | 38.737 |
+1000000  | 6.6784 | 2.684  |
+10000000 | 95.302 | 38.74  | 2.6 GB
+20000000 |        | 88.96  | 5.1 GB
+50000000 |        | 232.1  | 11.6 GB
 
 ## To Do
 
