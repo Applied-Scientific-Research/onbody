@@ -25,7 +25,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,  const float* sx, cons
                              const int* ntarg, const float* tx, const float* ty,
                                                      float* tu,       float* tv) {
     float flops = 0.0;
-    const bool silent = false;
+    const bool silent = true;
     const bool createTargTree = true;
     const bool blockwise = true;
 
