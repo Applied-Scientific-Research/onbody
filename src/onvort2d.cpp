@@ -19,7 +19,6 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
-#include "barneshut.h"
 //#include "Polynomial.hh"
 #include "wlspoly.hpp"
 
@@ -27,6 +26,58 @@
 #define ACCUM double
 
 const char* progname = "onvort2d";
+
+//
+// The inner, scalar kernel
+//
+template <class S, class A>
+static inline void nbody_kernel(const S sx, const S sy,
+                                const S sr, const S sm,
+                                const S tx, const S ty,
+                                A& __restrict__ tax, A& __restrict__ tay) {
+    // 12 flops
+    const S dx = tx - sx;
+    const S dy = ty - sy;
+    S r2 = dx*dx + dy*dy + sr*sr;
+    r2 = sm/r2;
+    tax -= r2 * dy;
+    tay += r2 * dx;
+}
+
+static inline int nbody_kernel_flops() { return 12; }
+
+template <class S, class A, int D> class Parts;
+
+template <class S, class A, int D>
+void ppinter(const Parts<S,A,D>& __restrict__ srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,D>& __restrict__ targs, const size_t i) {
+    //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+    for (size_t j=jstart; j<jend; ++j) {
+        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+                     targs.x[0][i], targs.x[1][i],
+                     targs.u[0][i], targs.u[1][i]);
+    }
+}
+
+template <class S, class A, int D>
+void ppinter(const Parts<S,A,D>& __restrict__ srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,D>& __restrict__ targs, const size_t istart, const size_t iend) {
+    //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
+    for (size_t i=istart; i<iend; ++i) {
+        for (size_t j=jstart; j<jend; ++j) {
+            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+                         targs.x[0][i], targs.x[1][i],
+                         targs.u[0][i], targs.u[1][i]);
+    }
+    }
+}
+
+//
+// Now we can include the tree-building and recursion code
+//
+#include "barneshut.h"
+//
+//
 
 //
 // Approximate a spatial derivative from a number of irregularly-spaced points
@@ -355,7 +406,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 0, 1, 1, 0};
+    static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
@@ -524,7 +575,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < test_iterations[1]; ++i) {
         targs.zero_vels();
         start = std::chrono::system_clock::now();
-        nbody_treecode1(srcs, stree, targs, 8.0f);
+        nbody_treecode1(srcs, stree, targs, theta);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);

@@ -201,77 +201,49 @@ void Tree<S,D>::print(size_t _num) {
 
 
 //
-// The inner, scalar kernel
-//
-template <class S, class A>
-static inline void nbody_kernel(const S sx, const S sy,
-                                const S sr, const S sm,
-                                const S tx, const S ty,
-                                A& __restrict__ tax, A& __restrict__ tay) {
-    // 12 flops
-    const S dx = tx - sx;
-    const S dy = ty - sy;
-    S r2 = dx*dx + dy*dy + sr*sr;
-    r2 = sm/r2;
-    tax -= r2 * dy;
-    tay += r2 * dx;
-}
-
-//
-// A blocked kernel
-//
-//static inline void nbody_src_block(const float sx, const float sy, const float sz,
-
-//
 // Caller for the O(N^2) kernel
 //
 template <class S, class A, int D>
 float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i = 0; i < targs.n; i+=tskip) {
-        //targs.u[0][i] = 0.0;
-        //targs.u[1][i] = 0.0;
-        //#pragma clang loop vectorize(enable) interleave(enable)
-        for (size_t j = 0; j < srcs.n; j++) {
-            nbody_kernel(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.m[j],
-                         targs.x[0][i], targs.x[1][i],
-                         targs.u[0][i], targs.u[1][i]);
-        }
+        (void) ppinter(srcs, 0, srcs.n, targs, i);
     }
-    return (float)targs.n * (float)srcs.n * 12.f;
+    return (float)targs.n * (float)srcs.n * (float)nbody_kernel_flops();
 }
 
 //
 // Recursive kernel for the treecode using 1st order box approximations
 //
 template <class S, class A, int D>
-void treecode1_block(const Parts<S,A,D>& sp, const Tree<S,D>& st, const size_t tnode, const float theta,
-                     const std::array<S,D> tx, std::array<A,D>& tax) {
+void treecode1_block(const Parts<S,A,D>& sp,
+                     const Tree<S,D>& st,
+                     const size_t snode,
+                     Parts<S,A,D>& tp,
+                     const size_t ip,
+                     const float theta) {
 
     // if box is a leaf node, just compute the influence and return
-    if (st.num[tnode] <= blockSize) {
+    if (st.num[snode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
-        for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
-            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
-                         tx[0], tx[1], tax[0], tax[1]);
-        }
+        (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode], tp, ip);
         return;
     }
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
+    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
     dist = std::sqrt(dist);
 
     // is source tree node far enough away?
-    if (dist / st.s[tnode] > theta) {
+    if (dist / st.s[snode] > theta) {
         // box is far enough removed, approximate its influence
-        nbody_kernel(st.x[0][tnode], st.x[1][tnode], 0.0f, st.m[tnode],
-                     tx[0], tx[1], tax[0], tax[1]);
+        nbody_kernel(st.x[0][snode], st.x[1][snode], st.r[snode], st.m[snode],
+                     tp.x[0][ip], tp.x[1][ip], tp.u[0][ip], tp.u[1][ip]);
     } else {
         // box is too close, open up its children
-        (void) treecode1_block<S,A,D>(sp, st, 2*tnode,   theta, tx, tax);
-        (void) treecode1_block<S,A,D>(sp, st, 2*tnode+1, theta, tx, tax);
+        (void) treecode1_block<S,A,D>(sp, st, 2*snode,   tp, ip, theta);
+        (void) treecode1_block<S,A,D>(sp, st, 2*snode+1, tp, ip, theta);
     }
 }
 
@@ -280,14 +252,9 @@ void treecode1_block(const Parts<S,A,D>& sp, const Tree<S,D>& st, const size_t t
 //
 template <class S, class A, int D>
 void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
-    #pragma omp parallel for
-    for (size_t i = 0; i < targs.n; i++) {
-        std::array<S,D> x;
-        std::array<A,D> u;
-        for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
-        for (int d=0; d<D; ++d) u[d] = 0.0;
-        treecode1_block<S,A,D>(srcs, stree, (size_t)1, theta, x, u);
-        for (int d=0; d<D; ++d) targs.u[d][i] += u[d];
+    #pragma omp parallel for schedule(dynamic,2*blockSize)
+    for (size_t i=0; i<targs.n; ++i) {
+        treecode1_block<S,A,D>(srcs, stree, (size_t)1, targs, i, theta);
     }
 }
 
@@ -302,39 +269,37 @@ struct treecode2_stats {
 // Recursive kernel for the treecode using equivalent particles
 //
 template <class S, class A, int D>
-void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
-                     const Tree<S,D>& st, const size_t tnode, const float theta,
-                     const std::array<S,D>& tx, std::array<A,D>& tax,
+void treecode2_block(const Parts<S,A,D>& sp,
+                     const Parts<S,A,D>& ep,
+                     const Tree<S,D>& st,
+                     const size_t snode,
+                     Parts<S,A,D>& tp,
+                     const size_t ip,
+                     const float theta,
                      struct treecode2_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
-    if (st.num[tnode] <= blockSize) {
+    if (st.num[snode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
-        for (size_t j = st.ioffset[tnode]; j < st.ioffset[tnode] + st.num[tnode]; j++) {
-            nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
-                         tx[0], tx[1], tax[0], tax[1]);
-        }
+        (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode], tp, ip);
         stats.sltp++;
         return;
     }
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][tnode] - tx[d], 2);
-    dist = std::sqrt(dist) - 2.0*st.r[tnode];
+    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    dist = std::sqrt(dist) - 2.0*st.r[snode];
 
     // is source tree node far enough away?
-    if (dist / st.s[tnode] > theta) {
+    if (dist / st.s[snode] > theta) {
         // this version uses equivalent points instead!
-        for (size_t j = st.epoffset[tnode]; j < st.epoffset[tnode] + st.epnum[tnode]; j++) {
-            nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
-                         tx[0], tx[1], tax[0], tax[1]);
-        }
+        (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode], tp, ip);
         stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode2_block<S,A,D>(sp, ep, st, 2*tnode,   theta, tx, tax, stats);
-        (void) treecode2_block<S,A,D>(sp, ep, st, 2*tnode+1, theta, tx, tax, stats);
+        (void) treecode2_block<S,A,D>(sp, ep, st, 2*snode,   tp, ip, theta, stats);
+        (void) treecode2_block<S,A,D>(sp, ep, st, 2*snode+1, tp, ip, theta, stats);
     }
 }
 
@@ -342,8 +307,11 @@ void treecode2_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
 // Caller for the better (equivalent particle) O(NlogN) kernel
 //
 template <class S, class A, int D>
-float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
-                      const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
+float nbody_treecode2(const Parts<S,A,D>& srcs,
+                      const Parts<S,A,D>& eqsrcs,
+                      const Tree<S,D>& stree,
+                      Parts<S,A,D>& targs,
+                      const float theta) {
 
     struct treecode2_stats stats = {0, 0};
 
@@ -352,13 +320,8 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
         struct treecode2_stats threadstats = {0, 0};
 
         #pragma omp for schedule(dynamic,2*blockSize)
-        for (size_t i = 0; i < targs.n; i++) {
-            std::array<S,D> x;
-            std::array<A,D> u;
-            for (int d=0; d<D; ++d) x[d] = targs.x[d][i];
-            for (int d=0; d<D; ++d) u[d] = 0.0;
-            treecode2_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, theta, x, u, threadstats);
-            for (int d=0; d<D; ++d) targs.u[d][i] += u[d];
+        for (size_t i=0; i<targs.n; ++i) {
+            treecode2_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, targs, i, theta, threadstats);
         }
 
         #pragma omp critical
@@ -372,7 +335,7 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
     //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
-    return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
+    return (float)nbody_kernel_flops() * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
 }
 
 
@@ -380,11 +343,13 @@ float nbody_treecode2(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs,
 // Recursive kernel for the boxwise treecode using equivalent particles
 //
 template <class S, class A, int D>
-void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
-                     const Tree<S,D>& st, const size_t snode,
+void treecode3_block(const Parts<S,A,D>& sp,
+                     const Parts<S,A,D>& ep,
+                     const Tree<S,D>& st,
+                     const size_t snode,
                      Parts<S,A,D>& tp,
-                     const Tree<S,D>& tt, const size_t tnode,
-                     //const std::array<S,D>& tx, std::array<A,D>& tax,
+                     const Tree<S,D>& tt,
+                     const size_t tnode,
                      const float theta,
                      struct treecode2_stats& stats) {
 
@@ -392,24 +357,8 @@ void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[snode] <= blockSize) {
-        // box is too close and is a leaf node, look at individual particles
-        for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
-            //if (tp.u[0][i] != tp.u[0][i]) {
-            //    printf("detected nan at i=%ld before summations\n", i);
-            //}
-            for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
-                nbody_kernel(sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j],
-                             tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-            }
-            //if (tp.u[0][i] != tp.u[0][i]) {
-            //    printf("detected nan at i=%ld, j=%ld to %ld\n", i, st.ioffset[snode], st.ioffset[snode] + st.num[snode]);
-            //    printf("  trg pos= %g %g  vel= %g %g\n", tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-            //    for (size_t j = st.ioffset[snode]; j < st.ioffset[snode] + st.num[snode]; ++j) {
-            //        printf("  src pos= %g %g  rad= %g  str= %g\n", sp.x[0][j], sp.x[1][j], sp.r[j], sp.m[j]);
-            //    }
-            //    exit(0);
-            //}
-        }
+        (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode],
+                       tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
         stats.sltp++;
         return;
     }
@@ -422,23 +371,8 @@ void treecode3_block(const Parts<S,A,D>& sp, const Parts<S,A,D>& ep,
     // is source tree node far enough away?
     if (dist / (st.s[snode]+tt.s[tnode]) > theta) {
         // this version uses equivalent points instead!
-        for (size_t i = tt.ioffset[tnode]; i < tt.ioffset[tnode] + tt.num[tnode]; ++i) {
-            //if (tp.u[0][i] != tp.u[0][i]) {
-            //    printf("detected nan at i=%ld before summations\n", i);
-            //}
-            for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
-                nbody_kernel(ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j],
-                             tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-            }
-            //if (tp.u[0][i] != tp.u[0][i]) {
-            //    printf("detected nan at i=%ld, ep j=%ld to %ld\n", i, st.epoffset[snode], st.epoffset[snode] + st.epnum[snode]);
-            //    printf("  trg pos= %g %g  vel= %g %g\n", tp.x[0][i], tp.x[1][i], tp.u[0][i], tp.u[1][i]);
-            //    for (size_t j = st.epoffset[snode]; j < st.epoffset[snode] + st.epnum[snode]; ++j) {
-            //        printf("  eqv pos= %g %g  rad= %g  str= %g\n", ep.x[0][j], ep.x[1][j], ep.r[j], ep.m[j]);
-            //    }
-            //    exit(0);
-            //}
-        }
+        (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode],
+                       tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
         stats.sbtp++;
     } else {
         // box is too close, open up its children
@@ -486,7 +420,7 @@ float nbody_treecode3(const Parts<S,A,D>& srcs,
     //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
 
-    return 12.f * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize * (float)blockSize;
+    return (float)nbody_kernel_flops() * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize * (float)blockSize;
 }
 
 
@@ -656,12 +590,15 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
 
     // sum of abs of strengths
-    t.m[tnode] = std::accumulate(absstr.begin(), absstr.end(), 0.0);
+    S ooass = (S)1.0 / std::accumulate(absstr.begin(), absstr.end(), 0.0);
 
     for (int d=0; d<D; ++d) {
-        t.x[d][tnode] = std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0) / t.m[tnode];
+        t.x[d][tnode] = ooass * std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0);
     }
     //printf("  abs mass %g and cm %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode]);
+
+    // sum of vectorial strengths
+    t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
 
     // fine average particle radius
     S radsum = std::accumulate(p.r.begin()+pfirst, p.r.begin()+plast, 0.0);
