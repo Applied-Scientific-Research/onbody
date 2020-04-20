@@ -45,6 +45,7 @@ public:
     void random_in_cube();
     void smooth_strengths();
     void wave_strengths();
+    void zero_vels();
     void reorder_idx(const size_t, const size_t);
 
     size_t n;
@@ -107,6 +108,11 @@ void Parts<S,A,D>::wave_strengths() {
         const S dist = std::sqrt(std::pow(x[0][i]-0.5,2)+std::pow(x[1][i]-0.5,2));
         m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
     }
+}
+
+template <class S, class A, int D>
+void Parts<S,A,D>::zero_vels() {
+    for (int d=0; d<D; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
 }
 
 //
