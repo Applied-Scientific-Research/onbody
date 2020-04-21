@@ -89,8 +89,8 @@ void Parts<S,A,D>::resize(size_t _num) {
 template <class S, class A, int D>
 void Parts<S,A,D>::random_in_cube() {
     for (int d=0; d<D; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
-    for (auto& _r : r) { _r = 1.0f / std::sqrt((S)n); }
-    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / std::sqrt((S)n); }
+    for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)D); }
+    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) * std::pow((S)n, -1.0/(S)D); }
 }
 
 template <class S, class A, int D>
