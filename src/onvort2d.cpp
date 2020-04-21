@@ -50,39 +50,39 @@ static inline void nbody_kernel(const S sx, const S sy,
 
 static inline int nbody_kernel_flops() { return 12; }
 
-template <class S, class A, int D> class Parts;
+template <class S, class A, int PD, int SD, int OD> class Parts;
 
-template <class S, class A, int D>
-void ppinter(const Parts<S,A,D>& __restrict__ srcs,  const size_t jstart, const size_t jend,
-                   Parts<S,A,D>& __restrict__ targs, const size_t i) {
+template <class S, class A, int PD, int SD, int OD>
+void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                      targs.x[0][i], targs.x[1][i],
                      targs.u[0][i], targs.u[1][i]);
     }
 }
 
-template <class S, class A, int D>
-void ppinter(const Parts<S,A,D>& __restrict__ srcs,  const size_t jstart, const size_t jend,
-                   Parts<S,A,D>& __restrict__ targs, const size_t istart, const size_t iend) {
+template <class S, class A, int PD, int SD, int OD>
+void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i],
                          targs.u[0][i], targs.u[1][i]);
     }
     }
 }
 
-template <class S, int D> class Tree;
+template <class S, int PD, int SD> class Tree;
 
-template <class S, class A, int D>
-void tpinter(const Tree<S,D>& __restrict__ stree, const size_t j,
-                   Parts<S,A,D>& __restrict__ targs, const size_t i) {
+template <class S, class A, int PD, int SD, int OD>
+void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
+                   Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
-    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.r[j], stree.m[j],
+    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.pr[j], stree.s[0][j],
                  targs.x[0][i], targs.x[1][i],
                  targs.u[0][i], targs.u[1][i]);
 }
@@ -149,9 +149,9 @@ struct fastsumm_stats {
 //
 // We will change u,v,w for the targs points and the eqtargs equivalent points
 //
-template <class S, class A, int D>
-struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D>& eqsrcs, const Tree<S,D>& stree,
-                    Parts<S,A,D>& targs, Parts<S,A,D>& eqtargs, const Tree<S,D>& ttree,
+template <class S, class A, int PD, int SD, int OD>
+struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Parts<S,A,PD,SD,OD>& eqsrcs, const Tree<S,PD,SD>& stree,
+                    Parts<S,A,PD,SD,OD>& targs, Parts<S,A,PD,SD,OD>& eqtargs, const Tree<S,PD,SD>& ttree,
                     const size_t ittn, std::vector<size_t> istv_in, const float theta) {
 
     // start counters
@@ -275,7 +275,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
             // compute all-on-all direct influence
             for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
             for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
-                nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.m[j],
+                nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                              targs.x[0][i], targs.x[1][i],
                              targs.u[0][i], targs.u[1][i]);
             }
@@ -286,9 +286,9 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
 
         // distance from box center of mass to target point
         S dist = 0.0;
-        for (int d=0; d<D; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
+        for (int d=0; d<PD; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
         dist = std::sqrt(dist);
-        const S diag = stree.s[sn] + ttree.s[ittn];
+        const S diag = stree.nr[sn] + ttree.nr[ittn];
         //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
@@ -300,7 +300,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute real source particles on equivalent target points
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
-                    nbody_kernel(srcs.x[0][j],    srcs.x[1][j],  srcs.r[j], srcs.m[j],
+                    nbody_kernel(srcs.x[0][j],    srcs.x[1][j],  srcs.r[j], srcs.s[0][j],
                                  eqtargs.x[0][i], eqtargs.x[1][i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
@@ -311,7 +311,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute equivalent source particles on real target points
                 for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
-                    nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.r[j], eqsrcs.m[j],
+                    nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.r[j], eqsrcs.s[0][j],
                                  targs.x[0][i],  targs.x[1][i],
                                  targs.u[0][i], targs.u[1][i]);
                 }
@@ -322,7 +322,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 // compute equivalent source particles on equivalent target points
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
-                    nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.r[j], eqsrcs.m[j],
+                    nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.r[j], eqsrcs.s[0][j],
                                  eqtargs.x[0][i], eqtargs.x[1][i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
@@ -330,7 +330,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,D>& srcs, const Parts<S,A,D
                 stats.sbtb++;
             }
 
-        } else if (ttree.s[ittn] > 0.7*stree.s[sn]) {
+        } else if (ttree.nr[ittn] > 0.7*stree.nr[sn]) {
         //} else if (true) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
@@ -451,16 +451,16 @@ int main(int argc, char *argv[]) {
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<STORE,ACCUM,2> srcs(numSrcs);
+    Parts<STORE,ACCUM,2,1,2> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
     //srcs.smooth_strengths();
     srcs.wave_strengths();
 
-    Parts<STORE,ACCUM,2> targs(numTargs);
+    Parts<STORE,ACCUM,2,1,2> targs(numTargs);
     // initialize particle data
     targs.random_in_cube();
-    for (auto& m : targs.m) { m = 1.0f; }
+    //for (auto& m : targs.m) { m = 1.0f; }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -469,7 +469,7 @@ int main(int argc, char *argv[]) {
     // allocate and initialize tree
     printf("\nBuilding the source tree\n");
     start = std::chrono::system_clock::now();
-    Tree<STORE,2> stree(numSrcs);
+    Tree<STORE,2,1> stree(numSrcs);
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -486,7 +486,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<STORE,ACCUM,2> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM,2,1,2> eqsrcs((stree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -510,11 +510,11 @@ int main(int argc, char *argv[]) {
 
 
     // don't need the target tree for treecode, but will for fast code
-    Tree<STORE,2> ttree(0);
+    Tree<STORE,2,1> ttree(0);
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");
         start = std::chrono::system_clock::now();
-        ttree = Tree<STORE,2>(numTargs);
+        ttree = Tree<STORE,2,1>(numTargs);
         printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -532,11 +532,11 @@ int main(int argc, char *argv[]) {
     }
 
     // find equivalent points
-    Parts<STORE,ACCUM,2> eqtargs(0);
+    Parts<STORE,ACCUM,2,1,2> eqtargs(0);
     if (test_iterations[4] > 0) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::system_clock::now();
-        eqtargs = Parts<STORE,ACCUM,2>((ttree.numnodes/2) * blockSize);
+        eqtargs = Parts<STORE,ACCUM,2,1,2>((ttree.numnodes/2) * blockSize);
         printf("  need %ld particles\n", eqtargs.n);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -695,7 +695,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, 1.0f);
+                              1, source_boxes, theta);
         #pragma omp taskwait
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();

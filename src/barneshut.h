@@ -35,9 +35,10 @@ static inline uint32_t log_2(const uint32_t x) {
 //
 // A set of particles, can be sources or targets
 //
-// templatized on (S)torage and (A)ccumulator types, and space (D)imensions
+// templatized on (S)torage and (A)ccumulator types, and
+//   (P)osition (D)imensions, (S)trength (D)ims, (O)utput (D)ims
 //
-template <class S, class A, int D>
+template <class S, class A, int PD, int SD, int OD>
 class Parts {
 public:
     Parts(size_t);
@@ -50,12 +51,12 @@ public:
 
     size_t n;
     // state
-    alignas(32) std::array<std::vector<S>, D> x;
+    alignas(32) std::array<std::vector<S>, PD> x;
     // actuator (needed by sources)
-    alignas(32) std::vector<S> m;
+    alignas(32) std::array<std::vector<S>, SD> s;
     alignas(32) std::vector<S> r;
     // results (needed by targets)
-    alignas(32) std::array<std::vector<A>, D> u;
+    alignas(32) std::array<std::vector<A>, OD> u;
     alignas(32) std::vector<size_t> gidx;
     // temporary
     alignas(32) std::vector<size_t> lidx;
@@ -67,18 +68,18 @@ public:
     //typename A::value_type accumulator_type;
 };
 
-template <class S, class A, int D>
-Parts<S,A,D>::Parts(size_t _num) {
+template <class S, class A, int PD, int SD, int OD>
+Parts<S,A,PD,SD,OD>::Parts(size_t _num) {
     resize(_num);
 }
 
-template <class S, class A, int D>
-void Parts<S,A,D>::resize(size_t _num) {
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::resize(size_t _num) {
     n = _num;
-    for (int d=0; d<D; ++d) x[d].resize(n);
+    for (int d=0; d<PD; ++d) x[d].resize(n);
+    for (int d=0; d<SD; ++d) s[d].resize(n);
     r.resize(n);
-    m.resize(n);
-    for (int d=0; d<D; ++d) u[d].resize(n);
+    for (int d=0; d<OD; ++d) u[d].resize(n);
     gidx.resize(n);
     std::iota(gidx.begin(), gidx.end(), 0);
     lidx.resize(n);
@@ -86,40 +87,44 @@ void Parts<S,A,D>::resize(size_t _num) {
     ftemp.resize(n);
 }
 
-template <class S, class A, int D>
-void Parts<S,A,D>::random_in_cube() {
-    for (int d=0; d<D; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
-    for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)D); }
-    for (auto& _m : m) { _m = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::random_in_cube() {
+    for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
+    for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
+    for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)PD); }
 }
 
-template <class S, class A, int D>
-void Parts<S,A,D>::smooth_strengths() {
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::smooth_strengths() {
     const S factor = 1.0 / (S)n;
-    for (size_t i=0; i<n; i++) {
-        m[i] = factor * (x[0][i] - x[1][i]);
+    for (int d=0; d<SD; ++d) {
+        for (size_t i=0; i<n; i++) {
+            s[d][i] = factor * (x[0][i] - x[1][i]);
+        }
     }
 }
 
-template <class S, class A, int D>
-void Parts<S,A,D>::wave_strengths() {
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::wave_strengths() {
     const S factor = 1.0 / (S)n;
     for (size_t i=0; i<n; i++) {
-        const S dist = std::sqrt(std::pow(x[0][i]-0.5,2)+std::pow(x[1][i]-0.5,2));
-        m[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
+        S dist = 0.0;
+        for (int d=0; d<PD; ++d) dist += std::pow(x[d][i]-0.5,2);
+        dist = std::sqrt(dist);
+        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
     }
 }
 
-template <class S, class A, int D>
-void Parts<S,A,D>::zero_vels() {
-    for (int d=0; d<D; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::zero_vels() {
+    for (int d=0; d<OD; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
 }
 
 //
 // Helper function to reorder the reordering indexes
 //
-template <class S, class A, int D>
-void Parts<S,A,D>::reorder_idx(const size_t pfirst, const size_t plast) {
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::reorder_idx(const size_t pfirst, const size_t plast) {
 
     // copy the original global index vector gidx into a temporary vector
     std::copy(gidx.begin()+pfirst, gidx.begin()+plast, itemp.begin()+pfirst);
@@ -136,7 +141,7 @@ void Parts<S,A,D>::reorder_idx(const size_t pfirst, const size_t plast) {
 // arrays always have 2^levels boxes allocated, even if some are not used
 // this way, node i children are 2*i and 2*i+1
 //
-template <class S, int D>
+template <class S, int PD, int SD>
 class Tree {
 public:
     Tree(size_t);
@@ -149,13 +154,13 @@ public:
     int numnodes;
 
     // tree node centers of mass
-    alignas(32) std::array<std::vector<S>, D> x;
+    alignas(32) std::array<std::vector<S>, PD> x;
     // node size
-    alignas(32) std::vector<S> s;
+    alignas(32) std::vector<S> nr;
     // node particle radius
-    alignas(32) std::vector<S> r;
-    // node masses
-    alignas(32) std::vector<S> m;
+    alignas(32) std::vector<S> pr;
+    // node strengths
+    alignas(32) std::array<std::vector<S>, SD> s;
 
     // real point offset and count
     alignas(32) std::vector<size_t> ioffset;		// is this redundant?
@@ -165,8 +170,8 @@ public:
     alignas(32) std::vector<size_t> epnum;
 };
 
-template <class S, int D>
-Tree<S,D>::Tree(size_t _num) {
+template <class S, int PD, int SD>
+Tree<S,PD,SD>::Tree(size_t _num) {
     // _num is number of elements this tree needs to store
     uint32_t numLeaf = 1 + ((_num-1)/blockSize);
     //printf("  %d nodes at leaf level\n", numLeaf);
@@ -177,13 +182,13 @@ Tree<S,D>::Tree(size_t _num) {
     resize(numnodes);
 }
 
-template <class S, int D>
-void Tree<S,D>::resize(size_t _num) {
+template <class S, int PD, int SD>
+void Tree<S,PD,SD>::resize(size_t _num) {
     numnodes = _num;
-    for (int d=0; d<D; ++d) x[d].resize(numnodes);
-    s.resize(numnodes);
-    r.resize(numnodes);
-    m.resize(numnodes);
+    for (int d=0; d<PD; ++d) x[d].resize(numnodes);
+    nr.resize(numnodes);
+    pr.resize(numnodes);
+    for (int d=0; d<SD; ++d) s[d].resize(numnodes);
     ioffset.resize(numnodes);
     num.resize(numnodes);
     std::fill(num.begin(), num.end(), 0);
@@ -191,9 +196,9 @@ void Tree<S,D>::resize(size_t _num) {
     epnum.resize(numnodes);
 }
 
-template <class S, int D>
-void Tree<S,D>::print(size_t _num) {
-    printf("\n%dD tree with %d levels\n", D, levels);
+template <class S, int PD, int SD>
+void Tree<S,PD,SD>::print(size_t _num) {
+    printf("\n%dD tree with %d levels\n", PD, levels);
     for(size_t i=1; i<numnodes && i<_num; ++i) {
         printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
     }
@@ -203,10 +208,10 @@ void Tree<S,D>::print(size_t _num) {
 //
 // Caller for the O(N^2) kernel
 //
-template <class S, class A, int D>
-float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restrict__ targs, const size_t tskip) {
+template <class S, class A, int PD, int SD, int OD>
+float nbody_naive(const Parts<S,A,PD,SD,OD>& __restrict__ srcs, Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t tskip) {
     #pragma omp parallel for
-    for (size_t i = 0; i < targs.n; i+=tskip) {
+    for (size_t i=0; i<targs.n; i+=tskip) {
         (void) ppinter(srcs, 0, srcs.n, targs, i);
     }
     return (float)targs.n * (float)srcs.n * (float)nbody_kernel_flops();
@@ -215,11 +220,11 @@ float nbody_naive(const Parts<S,A,D>& __restrict__ srcs, Parts<S,A,D>& __restric
 //
 // Recursive kernel for the treecode using 1st order box approximations
 //
-template <class S, class A, int D>
-void treecode1_block(const Parts<S,A,D>& sp,
-                     const Tree<S,D>& st,
+template <class S, class A, int PD, int SD, int OD>
+void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
+                     const Tree<S,PD,SD>& st,
                      const size_t snode,
-                     Parts<S,A,D>& tp,
+                     Parts<S,A,PD,SD,OD>& tp,
                      const size_t ip,
                      const float theta) {
 
@@ -232,28 +237,28 @@ void treecode1_block(const Parts<S,A,D>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
     dist = std::sqrt(dist);
 
     // is source tree node far enough away?
-    if (dist / st.s[snode] > theta) {
+    if (dist / st.nr[snode] > theta) {
         // box is far enough removed, approximate its influence
         (void) tpinter(st, snode, tp, ip);
     } else {
         // box is too close, open up its children
-        (void) treecode1_block<S,A,D>(sp, st, 2*snode,   tp, ip, theta);
-        (void) treecode1_block<S,A,D>(sp, st, 2*snode+1, tp, ip, theta);
+        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode,   tp, ip, theta);
+        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode+1, tp, ip, theta);
     }
 }
 
 //
 // Caller for the simple O(NlogN) kernel
 //
-template <class S, class A, int D>
-void nbody_treecode1(const Parts<S,A,D>& srcs, const Tree<S,D>& stree, Parts<S,A,D>& targs, const float theta) {
+template <class S, class A, int PD, int SD, int OD>
+void nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs, const Tree<S,PD,SD>& stree, Parts<S,A,PD,SD,OD>& targs, const float theta) {
     #pragma omp parallel for schedule(dynamic,2*blockSize)
     for (size_t i=0; i<targs.n; ++i) {
-        treecode1_block<S,A,D>(srcs, stree, (size_t)1, targs, i, theta);
+        treecode1_block<S,A,PD,SD,OD>(srcs, stree, (size_t)1, targs, i, theta);
     }
 }
 
@@ -267,12 +272,12 @@ struct treecode2_stats {
 //
 // Recursive kernel for the treecode using equivalent particles
 //
-template <class S, class A, int D>
-void treecode2_block(const Parts<S,A,D>& sp,
-                     const Parts<S,A,D>& ep,
-                     const Tree<S,D>& st,
+template <class S, class A, int PD, int SD, int OD>
+void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
+                     const Parts<S,A,PD,SD,OD>& ep,
+                     const Tree<S,PD,SD>& st,
                      const size_t snode,
-                     Parts<S,A,D>& tp,
+                     Parts<S,A,PD,SD,OD>& tp,
                      const size_t ip,
                      const float theta,
                      struct treecode2_stats& stats) {
@@ -287,29 +292,29 @@ void treecode2_block(const Parts<S,A,D>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    dist = std::sqrt(dist) - 2.0*st.r[snode];
+    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    dist = std::sqrt(dist) - 2.0*st.pr[snode];
 
     // is source tree node far enough away?
-    if (dist / st.s[snode] > theta) {
+    if (dist / st.nr[snode] > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode], tp, ip);
         stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode2_block<S,A,D>(sp, ep, st, 2*snode,   tp, ip, theta, stats);
-        (void) treecode2_block<S,A,D>(sp, ep, st, 2*snode+1, tp, ip, theta, stats);
+        (void) treecode2_block<S,A,PD,SD,OD>(sp, ep, st, 2*snode,   tp, ip, theta, stats);
+        (void) treecode2_block<S,A,PD,SD,OD>(sp, ep, st, 2*snode+1, tp, ip, theta, stats);
     }
 }
 
 //
 // Caller for the better (equivalent particle) O(NlogN) kernel
 //
-template <class S, class A, int D>
-float nbody_treecode2(const Parts<S,A,D>& srcs,
-                      const Parts<S,A,D>& eqsrcs,
-                      const Tree<S,D>& stree,
-                      Parts<S,A,D>& targs,
+template <class S, class A, int PD, int SD, int OD>
+float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
+                      const Parts<S,A,PD,SD,OD>& eqsrcs,
+                      const Tree<S,PD,SD>& stree,
+                      Parts<S,A,PD,SD,OD>& targs,
                       const float theta) {
 
     struct treecode2_stats stats = {0, 0};
@@ -320,7 +325,7 @@ float nbody_treecode2(const Parts<S,A,D>& srcs,
 
         #pragma omp for schedule(dynamic,2*blockSize)
         for (size_t i=0; i<targs.n; ++i) {
-            treecode2_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, targs, i, theta, threadstats);
+            treecode2_block<S,A,PD,SD,OD>(srcs, eqsrcs, stree, (size_t)1, targs, i, theta, threadstats);
         }
 
         #pragma omp critical
@@ -341,13 +346,13 @@ float nbody_treecode2(const Parts<S,A,D>& srcs,
 //
 // Recursive kernel for the boxwise treecode using equivalent particles
 //
-template <class S, class A, int D>
-void treecode3_block(const Parts<S,A,D>& sp,
-                     const Parts<S,A,D>& ep,
-                     const Tree<S,D>& st,
+template <class S, class A, int PD, int SD, int OD>
+void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
+                     const Parts<S,A,PD,SD,OD>& ep,
+                     const Tree<S,PD,SD>& st,
                      const size_t snode,
-                     Parts<S,A,D>& tp,
-                     const Tree<S,D>& tt,
+                     Parts<S,A,PD,SD,OD>& tp,
+                     const Tree<S,PD,SD>& tt,
                      const size_t tnode,
                      const float theta,
                      struct treecode2_stats& stats) {
@@ -364,31 +369,31 @@ void treecode3_block(const Parts<S,A,D>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<D; ++d) dist += std::pow(st.x[d][snode] - tt.x[d][tnode], 2);
-    dist = std::sqrt(dist) - 1.0*st.r[snode] - 1.0*tt.r[tnode];
+    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tt.x[d][tnode], 2);
+    dist = std::sqrt(dist) - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
 
     // is source tree node far enough away?
-    if (dist / (st.s[snode]+tt.s[tnode]) > theta) {
+    if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode],
                        tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
         stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode3_block<S,A,D>(sp, ep, st, 2*snode,   tp, tt, tnode, theta, stats);
-        (void) treecode3_block<S,A,D>(sp, ep, st, 2*snode+1, tp, tt, tnode, theta, stats);
+        (void) treecode3_block<S,A,PD,SD,OD>(sp, ep, st, 2*snode,   tp, tt, tnode, theta, stats);
+        (void) treecode3_block<S,A,PD,SD,OD>(sp, ep, st, 2*snode+1, tp, tt, tnode, theta, stats);
     }
 }
 
 //
 // Caller for the equivalent particle O(NlogN) kernel, but interaction lists by tree
 //
-template <class S, class A, int D>
-float nbody_treecode3(const Parts<S,A,D>& srcs,
-                      const Parts<S,A,D>& eqsrcs,
-                      const Tree<S,D>& stree,
-                      Parts<S,A,D>& targs,
-                      const Tree<S,D>& ttree,
+template <class S, class A, int PD, int SD, int OD>
+float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
+                      const Parts<S,A,PD,SD,OD>& eqsrcs,
+                      const Tree<S,PD,SD>& stree,
+                      Parts<S,A,PD,SD,OD>& targs,
+                      const Tree<S,PD,SD>& ttree,
                       const float theta) {
 
     struct treecode2_stats stats = {0, 0};
@@ -402,9 +407,9 @@ float nbody_treecode3(const Parts<S,A,D>& srcs,
             if (ttree.num[ib] <= blockSize and ttree.num[ib] > 0) {
                 //printf("  targ box %ld has %ld parts starting at %ld\n", ib, ttree.num[ib], ttree.ioffset[ib]);
                 //for (size_t ip=ttree.ioffset[ib]; ip<ttree.ioffset[ib]+ttree.num[ib]; ++ip) {
-                //    for (int d=0; d<D; ++d) targs.u[d][ip] = 0.0;
+                //    for (int d=0; d<OD; ++d) targs.u[d][ip] = 0.0;
                 //}
-                treecode3_block<S,A,D>(srcs, eqsrcs, stree, (size_t)1, targs, ttree, ib, theta, threadstats);
+                treecode3_block<S,A,PD,SD,OD>(srcs, eqsrcs, stree, (size_t)1, targs, ttree, ib, theta, threadstats);
             }
         }
 
@@ -554,13 +559,13 @@ void reorder(std::vector<S> &x, std::vector<S> &t,
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
-template <class S, class A, int D>
-void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_t tnode) {
+template <class S, class A, int PD, int SD, int OD>
+void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD>& t, size_t tnode) {
 
     //printf("splitNode %ld  %ld %ld\n", tnode, pfirst, plast);
 
-    const int thislev = log_2(tnode);
     #ifdef _OPENMP
+    const int thislev = log_2(tnode);
     const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
     #else
     const int sort_recursion = 0;
@@ -576,32 +581,48 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     #endif
 
     // find the min/max of the three axes
-    std::array<S,D> boxsizes;
-    for (int d=0; d<D; ++d) {
+    std::array<S,PD> boxsizes;
+    for (int d=0; d<PD; ++d) {
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
         boxsizes[d] = minmax.second - minmax.first;
     }
 
     // find total mass and center of mass - old way
     // copy strength vector
-    alignas(32) decltype(p.m) absstr(p.m.begin()+pfirst, p.m.begin()+plast);
-    // find abs() of each entry using a lambda
-    std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
+    alignas(32) std::vector<S> absstr(plast-pfirst);
+    //absstr.resize(plastpfirst-plast);
+
+    if (SD == 1) {
+        // find abs() of each entry using a lambda
+        absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
+        std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
+    } else {
+        // find abs() of each entry with a loop and sqrt
+        std::fill(absstr.begin(), absstr.end(), (S)0.0);
+        for (int d=0; d<SD; ++d) {
+            for (size_t i=pfirst; i<plast; ++i) {
+                absstr[i-pfirst] += std::pow(p.s[d][i], 2);
+            }
+        }
+        std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::sqrt(str); });
+    }
 
     // sum of abs of strengths
     S ooass = (S)1.0 / std::accumulate(absstr.begin(), absstr.end(), 0.0);
 
-    for (int d=0; d<D; ++d) {
+    for (int d=0; d<PD; ++d) {
         t.x[d][tnode] = ooass * std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0);
     }
-    //printf("  abs mass %g and cm %g %g\n", t.m[tnode], t.x[tnode], t.y[tnode]);
+    //printf("  abs mass %g and cm %g %g\n", t.s[0][tnode], t.x[tnode], t.y[tnode]);
 
     // sum of vectorial strengths
-    t.m[tnode] = std::accumulate(p.m.begin()+pfirst, p.m.begin()+plast, 0.0);
+    for (int d=0; d<SD; ++d) {
+        t.s[d][tnode] = std::accumulate(p.s[d].begin()+pfirst, p.s[d].begin()+plast, 0.0);
+    }
 
     // fine average particle radius
     S radsum = std::accumulate(p.r.begin()+pfirst, p.r.begin()+plast, 0.0);
-    t.r[tnode] = radsum / (S)(plast-pfirst);
+    t.pr[tnode] = radsum / (S)(plast-pfirst);
 
     // new way: compute the sum of the absolute values of the point "masses" - slower!
     //t.m[tnode] = 0.0;
@@ -621,12 +642,10 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
     t.num[tnode] = plast - pfirst;
     //printf("  tree node has offset %d and num %d\n", t.ioffset[tnode], t.num[tnode]);
 
-    // find longest box edge
-    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
-    //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
+    // find box/node radius
     S bsss = 0.0;
-    for (int d=0; d<D; ++d) bsss += std::pow(boxsizes[d],2);
-    t.s[tnode] = 0.5 * std::sqrt(bsss);
+    for (int d=0; d<PD; ++d) bsss += std::pow(boxsizes[d],2);
+    t.nr[tnode] = 0.5 * std::sqrt(bsss);
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
     //printf("  box %ld size %g and rad %g\n", tnode, t.s[tnode], t.r[tnode]);
 
@@ -637,6 +656,10 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
         return;
     }
 
+    // find longest box edge
+    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+    //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
+
     // sort this portion of the array along the big axis
     //printf("sort\n");
     //if (pfirst == 0) reset_and_start_timer();
@@ -645,8 +668,8 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
 
     // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
-    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
-    reorder(p.m, p.ftemp, p.lidx, pfirst, plast);
+    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
     reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
     p.reorder_idx(pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
@@ -674,8 +697,8 @@ void splitNode(Parts<S,A,D>& p, size_t pfirst, size_t plast, Tree<S,D>& t, size_
 // Recursively refine leaf node's particles until they are hierarchically nearby
 // Code is borrowed from splitNode above
 //
-template <class S, class A, int D>
-void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
+template <class S, class A, int PD, int SD, int OD>
+void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t pfirst, size_t plast) {
 
     // if there are 1 or 2 particles, then they are already in "order"
     if (plast-pfirst < 3) return;
@@ -684,8 +707,8 @@ void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
     //printf("    refining particles %ld to %ld\n", pfirst, plast);
 
     // find the min/max of the three axes
-    std::array<S,D> boxsizes;
-    for (int d=0; d<D; ++d) {
+    std::array<S,PD> boxsizes;
+    for (int d=0; d<PD; ++d) {
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
         boxsizes[d] = minmax.second - minmax.first;
     }
@@ -697,8 +720,8 @@ void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
     (void) sortIndexesSection(0, p.x[maxaxis], p.lidx, pfirst, plast);
 
     // rearrange the elements
-    for (int d=0; d<D; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
-    reorder(p.m, p.ftemp, p.lidx, pfirst, plast);
+    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
     reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
     p.reorder_idx(pfirst, plast);
 
@@ -713,8 +736,8 @@ void refineLeaf(Parts<S,A,D>& p, Tree<S,D>& t, size_t pfirst, size_t plast) {
 //
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
-template <class S, class A, int D>
-void refineTree(Parts<S,A,D>& p, Tree<S,D>& t, size_t tnode) {
+template <class S, class A, int PD, int SD, int OD>
+void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
@@ -738,8 +761,8 @@ void refineTree(Parts<S,A,D>& p, Tree<S,D>& t, size_t tnode) {
 //       another: we are a non-leaf node taking eq parts from two non-leaf nodes
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
-template <class S, class A, int D>
-void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tnode) {
+template <class S, class A, int PD, int SD, int OD>
+void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
 
     t.epoffset[tnode] = tnode * blockSize;
@@ -772,19 +795,29 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                const S str1 = std::max((S)1.e-20, std::abs(ep.m[ip-1]));
-                const S str2 = std::max((S)1.e-20, std::abs(ep.m[ip]));
+                S str1, str2;
+                if (SD == 1) {
+                    str1 = std::max((S)1.e-20, std::abs(ep.s[0][ip-1]));
+                    str2 = std::max((S)1.e-20, std::abs(ep.s[0][ip]));
+                } else {
+                    str1 = (S)0.0;
+                    for (int d=0; d<SD; ++d) str1 += std::pow(ep.s[d][ip-1], 2);
+                    str1 = std::max((S)1.e-20, std::sqrt(str1));
+                    str2 = (S)0.0;
+                    for (int d=0; d<SD; ++d) str2 += std::pow(ep.s[d][ip], 2);
+                    str2 = std::max((S)1.e-20, std::sqrt(str2));
+                }
                 const S pairm = 1.0 / (str1 + str2);
-                for (int d=0; d<D; ++d) ep.x[d][iep] = (ep.x[d][ip-1]*str1 + ep.x[d][ip]*str2) * pairm;
+                for (int d=0; d<PD; ++d) ep.x[d][iep] = (ep.x[d][ip-1]*str1 + ep.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(ep.r[ip-1],2)*str1 + std::pow(ep.r[ip],2)*str2) * pairm);
-                ep.m[iep] = ep.m[ip-1] + ep.m[ip];
+                for (int d=0; d<SD; ++d) ep.s[d][iep] = ep.s[d][ip-1] + ep.s[d][ip];
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.epoffset[ichild]+t.epnum[ichild]) {
                 //printf("    passing %d up into %d\n", ip-1,iep);
-                for (int d=0; d<D; ++d) ep.x[d][iep] = ep.x[d][ip-1];
+                for (int d=0; d<PD; ++d) ep.x[d][iep] = ep.x[d][ip-1];
+                for (int d=0; d<SD; ++d) ep.s[d][iep] = ep.s[d][ip-1];
                 ep.r[iep] = ep.r[ip-1];
-                ep.m[iep] = ep.m[ip-1];
             }
             t.epnum[tnode] += numEqps;
         } else {
@@ -803,12 +836,22 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
                 //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
-                const S str1 = std::max((S)1.e-20, std::abs(p.m[ip-1]));
-                const S str2 = std::max((S)1.e-20, std::abs(p.m[ip]));
+                S str1, str2;
+                if (SD == 1) {
+                    str1 = std::max((S)1.e-20, std::abs(p.s[0][ip-1]));
+                    str2 = std::max((S)1.e-20, std::abs(p.s[0][ip]));
+                } else {
+                    str1 = (S)0.0;
+                    for (int d=0; d<SD; ++d) str1 += std::pow(p.s[d][ip-1], 2);
+                    str1 = std::max((S)1.e-20, std::sqrt(str1));
+                    str2 = (S)0.0;
+                    for (int d=0; d<SD; ++d) str2 += std::pow(p.s[d][ip], 2);
+                    str2 = std::max((S)1.e-20, std::sqrt(str2));
+                }
                 const S pairm = 1.0 / (str1 + str2);
-                for (int d=0; d<D; ++d) ep.x[d][iep] = (p.x[d][ip-1]*str1 + p.x[d][ip]*str2) * pairm;
+                for (int d=0; d<PD; ++d) ep.x[d][iep] = (p.x[d][ip-1]*str1 + p.x[d][ip]*str2) * pairm;
                 ep.r[iep] = std::sqrt((std::pow(p.r[ip-1],2)*str1 + std::pow(p.r[ip],2)*str2) * pairm);
-                ep.m[iep] = p.m[ip-1] + p.m[ip];
+                for (int d=0; d<SD; ++d) ep.s[d][iep] = p.s[d][ip-1] + p.s[d][ip];
                 //if (ep.r[iep] != ep.r[iep]) {
                 //    printf("nan detected at ep %ld\n", iep);
                 //    printf("  pos %g %g and %g %g\n", p.x[0][ip-1], p.x[1][ip-1], p.x[0][ip], p.x[1][ip]);
@@ -818,9 +861,9 @@ void calcEquivalents(Parts<S,A,D>& p, Parts<S,A,D>& ep, Tree<S,D>& t, size_t tno
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.ioffset[ichild]+t.num[ichild]) {
                 //printf("    passing %d up into %d\n", ip-1,iep);
-                for (int d=0; d<D; ++d) ep.x[d][iep] = p.x[d][ip-1];
+                for (int d=0; d<PD; ++d) ep.x[d][iep] = p.x[d][ip-1];
                 ep.r[iep] = p.r[ip-1];
-                ep.m[iep] = p.m[ip-1];
+                for (int d=0; d<SD; ++d) ep.s[d][iep] = p.s[d][ip-1];
             }
             t.epnum[tnode] += numEqps;
         }
