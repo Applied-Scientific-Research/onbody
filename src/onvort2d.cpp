@@ -38,8 +38,12 @@ static inline void nbody_kernel(const S sx, const S sy,
     // 12 flops
     const S dx = tx - sx;
     const S dy = ty - sy;
+    // Rosenhead-Moore
     S r2 = dx*dx + dy*dy + sr*sr;
     r2 = sm/r2;
+    // Exponential
+    //const S d2 = dx*dx + dy*dy + (S)1.e-14;
+    //S r2 = sm * ((S)1.0 - std::exp(-d2/(sr*sr))) / d2;
     tax -= r2 * dy;
     tay += r2 * dx;
 }
