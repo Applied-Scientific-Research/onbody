@@ -58,6 +58,7 @@ INCLUDE_DIRECTORIES ( "src" )
 
 # original targets
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
+ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
 
 # new targets
