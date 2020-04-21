@@ -238,8 +238,7 @@ void treecode1_block(const Parts<S,A,D>& sp,
     // is source tree node far enough away?
     if (dist / st.s[snode] > theta) {
         // box is far enough removed, approximate its influence
-        nbody_kernel(st.x[0][snode], st.x[1][snode], st.r[snode], st.m[snode],
-                     tp.x[0][ip], tp.x[1][ip], tp.u[0][ip], tp.u[1][ip]);
+        (void) tpinter(st, snode, tp, ip);
     } else {
         // box is too close, open up its children
         (void) treecode1_block<S,A,D>(sp, st, 2*snode,   tp, ip, theta);

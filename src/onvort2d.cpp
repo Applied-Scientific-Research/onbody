@@ -72,6 +72,17 @@ void ppinter(const Parts<S,A,D>& __restrict__ srcs,  const size_t jstart, const 
     }
 }
 
+template <class S, int D> class Tree;
+
+template <class S, class A, int D>
+void tpinter(const Tree<S,D>& __restrict__ stree, const size_t j,
+                   Parts<S,A,D>& __restrict__ targs, const size_t i) {
+    //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.r[j], stree.m[j],
+                 targs.x[0][i], targs.x[1][i],
+                 targs.u[0][i], targs.u[1][i]);
+}
+
 //
 // Now we can include the tree-building and recursion code
 //
