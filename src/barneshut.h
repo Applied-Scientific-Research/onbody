@@ -214,8 +214,15 @@ float nbody_naive(const Parts<S,A,PD,SD,OD>& __restrict__ srcs, Parts<S,A,PD,SD,
     for (size_t i=0; i<targs.n; i+=tskip) {
         (void) ppinter(srcs, 0, srcs.n, targs, i);
     }
-    return (float)targs.n * (float)srcs.n * (float)nbody_kernel_flops();
+    return (float)(targs.n/tskip) * (float)srcs.n * (float)nbody_kernel_flops();
 }
+
+//
+// Data structure for accumulating interaction counts
+//
+struct treecode_stats {
+    size_t sltp, sbtp;
+};
 
 //
 // Recursive kernel for the treecode using 1st order box approximations
@@ -226,12 +233,14 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
                      const size_t snode,
                      Parts<S,A,PD,SD,OD>& tp,
                      const size_t ip,
-                     const float theta) {
+                     const float theta,
+                     struct treecode_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[snode] <= blockSize) {
         // box is too close and is a leaf node, look at individual particles
         (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode], tp, ip);
+        stats.sltp++;
         return;
     }
 
@@ -244,10 +253,11 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
     if (dist / st.nr[snode] > theta) {
         // box is far enough removed, approximate its influence
         (void) tpinter(st, snode, tp, ip);
+        stats.sbtp++;
     } else {
         // box is too close, open up its children
-        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode,   tp, ip, theta);
-        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode+1, tp, ip, theta);
+        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode,   tp, ip, theta, stats);
+        (void) treecode1_block<S,A,PD,SD,OD>(sp, st, 2*snode+1, tp, ip, theta, stats);
     }
 }
 
@@ -255,19 +265,31 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
 // Caller for the simple O(NlogN) kernel
 //
 template <class S, class A, int PD, int SD, int OD>
-void nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs, const Tree<S,PD,SD>& stree, Parts<S,A,PD,SD,OD>& targs, const float theta) {
-    #pragma omp parallel for schedule(dynamic,2*blockSize)
-    for (size_t i=0; i<targs.n; ++i) {
-        treecode1_block<S,A,PD,SD,OD>(srcs, stree, (size_t)1, targs, i, theta);
-    }
-}
+float nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs,
+                      const Tree<S,PD,SD>& stree,
+                      Parts<S,A,PD,SD,OD>& targs,
+                      const float theta) {
 
-//
-// Data structure for accumulating interaction counts
-//
-struct treecode2_stats {
-    size_t sltp, sbtp;
-};
+    struct treecode_stats stats = {0, 0};
+
+    #pragma omp parallel
+    {
+        struct treecode_stats threadstats = {0, 0};
+
+        #pragma omp for schedule(dynamic,2*blockSize)
+        for (size_t i=0; i<targs.n; ++i) {
+            treecode1_block<S,A,PD,SD,OD>(srcs, stree, (size_t)1, targs, i, theta, threadstats);
+        }
+
+        #pragma omp critical
+        {
+            stats.sltp += threadstats.sltp;
+            stats.sbtp += threadstats.sbtp;
+        }
+    }
+
+    return (float)nbody_kernel_flops() * ((float)stats.sbtp + (float)stats.sltp*(float)blockSize);
+}
 
 //
 // Recursive kernel for the treecode using equivalent particles
@@ -280,7 +302,7 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
                      Parts<S,A,PD,SD,OD>& tp,
                      const size_t ip,
                      const float theta,
-                     struct treecode2_stats& stats) {
+                     struct treecode_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
     if (st.num[snode] <= blockSize) {
@@ -317,11 +339,11 @@ float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
                       Parts<S,A,PD,SD,OD>& targs,
                       const float theta) {
 
-    struct treecode2_stats stats = {0, 0};
+    struct treecode_stats stats = {0, 0};
 
     #pragma omp parallel
     {
-        struct treecode2_stats threadstats = {0, 0};
+        struct treecode_stats threadstats = {0, 0};
 
         #pragma omp for schedule(dynamic,2*blockSize)
         for (size_t i=0; i<targs.n; ++i) {
@@ -355,7 +377,7 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
                      const Tree<S,PD,SD>& tt,
                      const size_t tnode,
                      const float theta,
-                     struct treecode2_stats& stats) {
+                     struct treecode_stats& stats) {
 
     //printf("    vs src box %ld with %ld parts starting at %ld\n", snode, st.num[snode], st.ioffset[snode]);
 
@@ -396,11 +418,11 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
                       const Tree<S,PD,SD>& ttree,
                       const float theta) {
 
-    struct treecode2_stats stats = {0, 0};
+    struct treecode_stats stats = {0, 0};
 
     #pragma omp parallel
     {
-        struct treecode2_stats threadstats = {0, 0};
+        struct treecode_stats threadstats = {0, 0};
 
         #pragma omp for schedule(dynamic,8)
         for (size_t ib=0; ib<(size_t)ttree.numnodes; ++ib) {
