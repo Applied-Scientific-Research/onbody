@@ -491,7 +491,7 @@ int main(int argc, char *argv[]) {
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
-    float theta = 2.75;
+    float theta = 4.0;
     double treetime = 0.0;
     double ttreetime = 0.0;
 
