@@ -280,4 +280,5 @@ N        | omp 2p | omp 8p | memory
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
 * Support different core functions; right now we only use the Rosenhead-Moore kernel
+* Speed up tree builds by only reordering on the upward pass (root to leaf), then computing the box bounds, masses, radii, etc. on a new downward pass (leaves to root). Note that we can't do the downward pass with the current organization due to openmp task parallelism limitations.
 
