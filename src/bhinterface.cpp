@@ -20,10 +20,12 @@
 //
 // call this function from an external program
 //
-extern "C" float external_vel_solver_f_ (const int* nsrc,  const float* sx, const float* sy,
-                                               const float* ss, const float* sr,
-                             const int* ntarg, const float* tx, const float* ty,
-                                                     float* tu,       float* tv) {
+extern "C" float external_vel_solver_f_ (const int* nsrc,
+                                         const float* sx, const float* sy,
+                                         const float* ss, const float* sr,
+                                         const int* ntarg,
+                                         const float* tx, const float* ty,
+                                               float* tu,       float* tv) {
     float flops = 0.0;
     const bool silent = true;
     const bool createTargTree = true;
