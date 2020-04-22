@@ -521,6 +521,7 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs);
     // initialize particle data
     srcs.random_in_cube();
+    for (auto& m : srcs.s[0]) { m = std::abs(m); }
 
     Parts<STORE,ACCUM,3,1,3> targs(numTargs);
     // initialize particle data
