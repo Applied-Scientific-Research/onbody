@@ -165,6 +165,8 @@ public:
     // tree node centers of mass
     alignas(32) std::array<std::vector<S>, PD> x;
     // node size
+    alignas(32) std::array<std::vector<S>, PD> ns;
+    // node radius
     alignas(32) std::vector<S> nr;
     // node particle radius
     alignas(32) std::vector<S> pr;
@@ -195,6 +197,7 @@ template <class S, int PD, int SD>
 void Tree<S,PD,SD>::resize(size_t _num) {
     numnodes = _num;
     for (int d=0; d<PD; ++d) x[d].resize(numnodes);
+    for (int d=0; d<PD; ++d) ns[d].resize(numnodes);
     nr.resize(numnodes);
     pr.resize(numnodes);
     for (int d=0; d<SD; ++d) s[d].resize(numnodes);
@@ -256,7 +259,7 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
     // distance from box center of mass to target point
     S dist = 0.0;
     //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.nr[snode]), 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
     dist = std::sqrt(dist);
 
     // is source tree node far enough away?
@@ -326,7 +329,7 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
     // distance from box center of mass to target point
     S dist = 0.0;
     //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.nr[snode]), 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
     //dist = std::sqrt(dist) - 2.0*st.pr[snode];
     dist = std::sqrt(dist);
     // scale the distance in the box-opening criterion?
@@ -408,7 +411,7 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // minimum distance between box corners
     S dist = 0.0;
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.nr[snode]+tt.nr[tnode])), 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.ns[d][snode]+tt.ns[d][tnode])), 2);
     dist = std::sqrt(dist);
 
     // include the box's mean particle size? no, no real benefit
@@ -632,10 +635,9 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     #endif
 
     // find the min/max of the three axes
-    std::array<S,PD> boxsizes;
     for (int d=0; d<PD; ++d) {
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
-        boxsizes[d] = minmax.second - minmax.first;
+        t.ns[d][tnode] = minmax.second - minmax.first;
     }
 
     // find total mass and center of mass - old way
@@ -695,7 +697,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
 
     // find box/node radius
     S bsss = 0.0;
-    for (int d=0; d<PD; ++d) bsss += std::pow(boxsizes[d],2);
+    for (int d=0; d<PD; ++d) bsss += std::pow(t.ns[d][tnode],2);
     t.nr[tnode] = 0.5 * std::sqrt(bsss);
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
     //printf("  box %ld size %g and rad %g\n", tnode, t.s[tnode], t.r[tnode]);
@@ -708,7 +710,15 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     }
 
     // find longest box edge
-    auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+    //auto maxaxis = std::max_element(boxsizes.begin(), boxsizes.end()) - boxsizes.begin();
+    int maxaxis = 0;
+    S maxaxissize = -1.0;
+    for (int d=0; d<PD; ++d) {
+        if (t.ns[d][tnode] > maxaxissize) {
+            maxaxissize = t.ns[d][tnode];
+            maxaxis = d;
+        }
+    }
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
 
     // sort this portion of the array along the big axis
