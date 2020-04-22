@@ -269,6 +269,11 @@ N        | omp 2p | omp 8p | memory
 20000000 |        | 88.96  | 5.1 GB
 50000000 |        | 232.1  | 11.6 GB
 
+After changing the exponent on the distance in the box-opening criterion, the code is now nearly twice as fast. So fast that the truu build dominates the run time. The following command lines go really fast:
+    `OMP_NUM_THREADS=16 ./onvort2d -n=10000000 -t=2.75`
+    `OMP_NUM_THREADS=16 ./ongrav3d -n=10000000 -t=2.0`
+    `OMP_NUM_THREADS=16 ./onvort3d -n=10000000 -t=3.0`
+
 ## To Do
 
 * Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code

@@ -21,7 +21,7 @@
 
 
 // the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 32;
+const size_t blockSize = 64;
 
 //
 // Find index of msb of uint32
@@ -392,9 +392,19 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
     // distance from box center of mass to target point
     S dist = 0.0;
     for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tt.x[d][tnode], 2);
-    dist = std::sqrt(dist) - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
 
-    // is source tree node far enough away?
+    // include the box's mean particle size?
+    //dist = std::sqrt(dist) - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
+    dist = std::sqrt(dist);
+    //dist = std::sqrt(dist) + 1.0*st.pr[snode] + 1.0*tt.pr[tnode];
+
+    // scale the distance in the box-opening criterion?
+    //dist = std::exp(1.5*std::log(dist));
+    if (PD == 2) dist = std::exp(0.75*std::log(dist));
+    else dist = std::exp(0.666667*std::log(dist));
+    //dist = std::sqrt(dist);
+
+    // is source tree node far enough away? (don't weigh the source tree box size more than the target)
     if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode],
