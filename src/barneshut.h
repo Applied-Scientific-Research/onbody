@@ -45,6 +45,7 @@ public:
     void resize(size_t);
     void random_in_cube();
     void smooth_strengths();
+    void central_strengths();
     void wave_strengths();
     void zero_vels();
     void reorder_idx(const size_t, const size_t);
@@ -105,13 +106,21 @@ void Parts<S,A,PD,SD,OD>::smooth_strengths() {
 }
 
 template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::wave_strengths() {
+void Parts<S,A,PD,SD,OD>::central_strengths() {
     const S factor = 1.0 / (S)n;
     for (size_t i=0; i<n; i++) {
         S dist = 0.0;
         for (int d=0; d<PD; ++d) dist += std::pow(x[d][i]-0.5,2);
         dist = std::sqrt(dist);
         for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
+    }
+}
+
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::wave_strengths() {
+    const S factor = 1.0 / (S)n;
+    for (size_t i=0; i<n; i++) {
+        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos(d*10.0*s[d][i]);
     }
 }
 
@@ -246,11 +255,13 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.nr[snode]), 2);
     dist = std::sqrt(dist);
 
     // is source tree node far enough away?
-    if (dist / st.nr[snode] > theta) {
+    //if (dist / st.nr[snode] > theta) {
+    if (dist / (2.0*st.nr[snode]) > theta) {
         // box is far enough removed, approximate its influence
         (void) tpinter(st, snode, tp, ip);
         stats.sbtp++;
@@ -314,7 +325,8 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.nr[snode]), 2);
     //dist = std::sqrt(dist) - 2.0*st.pr[snode];
     dist = std::sqrt(dist);
     // scale the distance in the box-opening criterion?
@@ -322,7 +334,8 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
     else dist = std::exp(0.666667*std::log(dist));
 
     // is source tree node far enough away?
-    if (dist / st.nr[snode] > theta) {
+    //if (dist / st.nr[snode] > theta) {
+    if (dist / (2.0*st.nr[snode]) > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode], tp, ip);
         stats.sbtp++;
@@ -393,23 +406,25 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
         return;
     }
 
-    // distance from box center of mass to target point
+    // minimum distance between box corners
     S dist = 0.0;
-    for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tt.x[d][tnode], 2);
-
-    // include the box's mean particle size?
-    //dist = std::sqrt(dist) - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
+    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.nr[snode]+tt.nr[tnode])), 2);
     dist = std::sqrt(dist);
-    //dist = std::sqrt(dist) + 1.0*st.pr[snode] + 1.0*tt.pr[tnode];
+
+    // include the box's mean particle size? no, no real benefit
+    //dist += - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
+    //dist += + 1.0*st.pr[snode] + 1.0*tt.pr[tnode];
 
     // scale the distance in the box-opening criterion?
-    //dist = std::exp(1.5*std::log(dist));
     if (PD == 2) dist = std::exp(0.75*std::log(dist));
     else dist = std::exp(0.666667*std::log(dist));
+    //dist = std::exp(0.75*std::log(dist));
+    //dist = std::exp(0.666667*std::log(dist));
     //dist = std::sqrt(dist);
 
-    // is source tree node far enough away? (don't weigh the source tree box size more than the target)
-    if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
+    // is source tree node far enough away?
+    //if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
+    if (dist / (2.0*st.nr[snode]) > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode],
                        tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
