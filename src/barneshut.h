@@ -315,7 +315,11 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
     // distance from box center of mass to target point
     S dist = 0.0;
     for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    dist = std::sqrt(dist) - 2.0*st.pr[snode];
+    //dist = std::sqrt(dist) - 2.0*st.pr[snode];
+    dist = std::sqrt(dist);
+    // scale the distance in the box-opening criterion?
+    if (PD == 2) dist = std::exp(0.75*std::log(dist));
+    else dist = std::exp(0.666667*std::log(dist));
 
     // is source tree node far enough away?
     if (dist / st.nr[snode] > theta) {
