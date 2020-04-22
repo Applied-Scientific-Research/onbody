@@ -120,7 +120,7 @@ template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::wave_strengths() {
     const S factor = 1.0 / (S)n;
     for (size_t i=0; i<n; i++) {
-        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos(d*10.0*s[d][i]);
+        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos((d+0.7)*10.0*x[d][i]);
     }
 }
 
@@ -741,7 +741,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         // lastly, the radius
         t.pr[tnode] = oonp * (t.num[child1]*t.pr[child1] + t.num[child2]*t.pr[child2]);
 
-        //printf("box %ld has cm %g %g %g str %g %g %g and rad %g\n", tnode, t.x[d][tnode], t.x[d][tnode], t.x[d][tnode], t.s[d][tnode], t.s[d][tnode], t.s[d][tnode], t.pr[tnode]);
+        //printf("box %ld has cm %g %g %g str %g %g %g and rad %g\n", tnode, t.x[0][tnode], t.x[1][tnode], t.x[2][tnode], t.s[0][tnode], t.s[1][tnode], t.s[2][tnode], t.pr[tnode]);
 
         // total flops: 6 + PD*4 + SD*1
 
@@ -774,7 +774,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         }
 
         // one over the sum of abs of strengths
-        const S ooass = (S)1.0 / std::accumulate(absstr.begin(), absstr.end(), 0.0);
+        const S ooass = (S)1.0 / (1.e-20 + std::accumulate(absstr.begin(), absstr.end(), 0.0));
 
         // compute the node center of "mass"
         for (int d=0; d<PD; ++d) {
