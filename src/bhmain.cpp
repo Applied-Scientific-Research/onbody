@@ -4,8 +4,6 @@
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
-#include <barneshut.h>
-
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
