@@ -62,9 +62,13 @@ ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
 
 # new targets
-ADD_LIBRARY ( "barneshut" STATIC "src/bhinterface.cpp" )
-ADD_EXECUTABLE ( "bhmain" "src/bhmain.cpp" )
-TARGET_LINK_LIBRARIES ( "bhmain" "barneshut" )
+ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" )
+ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
+TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" )
+
+ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
+ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
+TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" )
 
 #TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
 
