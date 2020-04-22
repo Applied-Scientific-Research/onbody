@@ -456,6 +456,7 @@ int main(int argc, char *argv[]) {
     srcs.random_in_cube();
     //srcs.smooth_strengths();
     srcs.wave_strengths();
+    //srcs.central_strengths();
 
     Parts<STORE,ACCUM,2,1,2> targs(numTargs);
     // initialize particle data
@@ -606,6 +607,7 @@ int main(int argc, char *argv[]) {
 
     ACCUM errsum = 0.0;
     ACCUM errcnt = 0.0;
+    ACCUM maxerr = 0.0;
 
     //
     // Run a simple O(NlogN) treecode - boxes approximate as particles
@@ -631,14 +633,14 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
-    errsum = 0.0;
-    errcnt = 0.0;
+    errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode is %g\n", std::sqrt(errsum/errcnt));
+    printf("error in treecode (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
     }
 
 
@@ -666,14 +668,14 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu2(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
-    errsum = 0.0;
-    errcnt = 0.0;
+    errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu2[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode2 is %g\n", std::sqrt(errsum/errcnt));
+    printf("error in treecode2 (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
     }
 
 
@@ -701,14 +703,14 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu3(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
-    errsum = 0.0;
-    errcnt = 0.0;
+    errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu3[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in treecode3 is %g\n", std::sqrt(errsum/errcnt));
+    printf("error in treecode3 (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
     }
 
 
@@ -742,14 +744,14 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> fastu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
-    errsum = 0.0;
-    errcnt = 0.0;
+    errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = fastu[i]-naiveu[i];
         errsum += thiserr*thiserr;
+        if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("RMS error in fastsumm is %g\n", std::sqrt(errsum/errcnt));
+    printf("error in fastsumm (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
     }
 
     printf("\nDone.\n");
