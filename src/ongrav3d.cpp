@@ -532,24 +532,13 @@ int main(int argc, char *argv[]) {
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
-    // allocate and initialize tree
+    // initialize and generate tree
     printf("\nBuilding the source tree\n");
-    start = std::chrono::system_clock::now();
-    Tree<STORE,3,1> stree(numSrcs);
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
-    treetime[1] += elapsed_seconds.count();
-    treetime[2] += elapsed_seconds.count();
-    treetime[3] += elapsed_seconds.count();
-    treetime[4] += elapsed_seconds.count();
-
-    // split this node and recurse
     start = std::chrono::system_clock::now();
-    #pragma omp parallel
-    #pragma omp single
-    (void) splitNode(srcs, 0, srcs.n, stree, 1);
-    #pragma omp taskwait
+    Tree<STORE,3,1> stree(0);
+    // split this node and recurse
+    (void) makeTree(srcs, stree);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[1] += elapsed_seconds.count();
@@ -596,26 +585,14 @@ int main(int argc, char *argv[]) {
     Tree<STORE,3,1> ttree(0);
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");
-        start = std::chrono::system_clock::now();
-        ttree = Tree<STORE,3,1>(numTargs);
         printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
-        treetime[3] += elapsed_seconds.count();
-        treetime[4] += elapsed_seconds.count();
-
-        // split this node and recurse
         start = std::chrono::system_clock::now();
-        #pragma omp parallel
-        #pragma omp single
-        (void) splitNode(targs, 0, targs.n, ttree, 1);
-        #pragma omp taskwait
+        // split this node and recurse
+        (void) makeTree(targs, ttree);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[3] += elapsed_seconds.count();
         treetime[4] += elapsed_seconds.count();
-
-        //ttree.print(300);
     }
 
     // find equivalent points

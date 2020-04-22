@@ -94,7 +94,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          const float* tx, const float* ty,
                                                float* tu,       float* tv) {
     float flops = 0.0;
-    const bool silent = false;
+    const bool silent = true;
     const bool createTargTree = true;
     const bool blockwise = true;
 
@@ -121,20 +121,13 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
-    // allocate and initialize tree
+    // initialize and generate tree
     if (!silent) printf("\nBuilding the source tree\n");
     if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
     start = std::chrono::system_clock::now();
-    Tree<float,2,1> stree(*nsrc);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (!silent) printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
-
+    Tree<float,2,1> stree(0);
     // split this node and recurse
-    start = std::chrono::system_clock::now();
-    #pragma omp parallel
-    #pragma omp single
-    (void) splitNode(srcs, 0, srcs.n, stree, 1);
-    #pragma omp taskwait
+    (void) makeTree(srcs, stree);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -168,16 +161,8 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         if (!silent) printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
 
         start = std::chrono::system_clock::now();
-        ttree = Tree<float,2,1>(*ntarg);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        if (!silent) printf("  allocate and init tree:\t[%.4f] seconds\n", elapsed_seconds.count());
-
         // split this node and recurse
-        start = std::chrono::system_clock::now();
-        #pragma omp parallel
-        #pragma omp single
-        (void) splitNode(targs, 0, targs.n, ttree, 1);
-        #pragma omp taskwait
+        (void) makeTree(targs, ttree);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
     }

@@ -261,6 +261,9 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
     //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
     for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
     dist = std::sqrt(dist);
+    // scale the distance in the box-opening criterion?
+    //if (PD == 2) dist = std::exp(0.75*std::log(dist));
+    //else dist = std::exp(0.666667*std::log(dist));
 
     // is source tree node far enough away?
     //if (dist / st.nr[snode] > theta) {
@@ -640,57 +643,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
         t.ns[d][tnode] = minmax.second - minmax.first;
     }
 
-    // find total mass and center of mass - old way
-    // copy strength vector
-    alignas(32) std::vector<S> absstr(plast-pfirst);
-    //absstr.resize(plastpfirst-plast);
-
-    if (SD == 1) {
-        // find abs() of each entry using a lambda
-        absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
-        std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
-    } else {
-        // find abs() of each entry with a loop and sqrt
-        std::fill(absstr.begin(), absstr.end(), (S)0.0);
-        for (int d=0; d<SD; ++d) {
-            for (size_t i=pfirst; i<plast; ++i) {
-                absstr[i-pfirst] += std::pow(p.s[d][i], 2);
-            }
-        }
-        std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::sqrt(str); });
-    }
-
-    // sum of abs of strengths
-    S ooass = (S)1.0 / std::accumulate(absstr.begin(), absstr.end(), 0.0);
-
-    for (int d=0; d<PD; ++d) {
-        t.x[d][tnode] = ooass * std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0);
-    }
-    //printf("  abs mass %g and cm %g %g\n", t.s[0][tnode], t.x[tnode], t.y[tnode]);
-
-    // sum of vectorial strengths
-    for (int d=0; d<SD; ++d) {
-        t.s[d][tnode] = std::accumulate(p.s[d].begin()+pfirst, p.s[d].begin()+plast, 0.0);
-    }
-
-    // fine average particle radius
-    S radsum = std::accumulate(p.r.begin()+pfirst, p.r.begin()+plast, 0.0);
-    t.pr[tnode] = radsum / (S)(plast-pfirst);
-
-    // new way: compute the sum of the absolute values of the point "masses" - slower!
-    //t.m[tnode] = 0.0;
-    //t.x[tnode] = 0.0;
-    //t.y[tnode] = 0.0;
-    //for (size_t i=pfirst; i<plast; ++i) {
-    //    const S thisabs = std::abs(p.m[i]);
-    //    t.m[tnode] += thisabs;
-    //    t.x[tnode] += p.x[i] * thisabs;
-    //    t.y[tnode] += p.y[i] * thisabs;
-    //}
-    //t.x[tnode] /= t.m[tnode];
-    //t.y[tnode] /= t.m[tnode];
-
-    // write all this data to the tree node
+    // write particle data to the tree node
     t.ioffset[tnode] = pfirst;
     t.num[tnode] = plast - pfirst;
     //printf("  tree node has offset %d and num %d\n", t.ioffset[tnode], t.num[tnode]);
@@ -752,6 +705,130 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     if (tnode == 1) {
         // this is executed on the final call
     }
+}
+
+//
+// Finish up the tree with a downward pass
+//
+template <class S, class A, int PD, int SD, int OD>
+void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
+
+    // if we're not a leaf node...
+    if (t.num[tnode] > blockSize) {
+        const size_t child1 = 2*tnode;
+        const size_t child2 = 2*tnode+1;
+
+        // recursively call this routine for this node's children
+        #pragma omp task shared(p,t)
+        (void) finishTree(p, t, child1);
+        #pragma omp task shared(p,t)
+        (void) finishTree(p, t, child2);
+        #pragma omp taskwait
+
+        // once both children are done, we can merge their data for the parent
+        const S oonp = (S)1.0 / (t.num[child1] + t.num[child2]);
+
+        // first, the center of "mass"
+        for (int d=0; d<PD; ++d) {
+            t.x[d][tnode] = oonp * (t.num[child1]*t.x[d][child1] + t.num[child2]*t.x[d][child2]);
+        }
+
+        // then the vectorial strength of the node
+        for (int d=0; d<SD; ++d) {
+            t.s[d][tnode] = t.s[d][child1] + t.s[d][child2];
+        }
+
+        // lastly, the radius
+        t.pr[tnode] = oonp * (t.num[child1]*t.pr[child1] + t.num[child2]*t.pr[child2]);
+
+        //printf("box %ld has cm %g %g %g str %g %g %g and rad %g\n", tnode, t.x[d][tnode], t.x[d][tnode], t.x[d][tnode], t.s[d][tnode], t.s[d][tnode], t.s[d][tnode], t.pr[tnode]);
+
+        // total flops: 6 + PD*4 + SD*1
+
+    // else we are a leaf node, then compute the box weights, etc.
+    } else {
+
+        const size_t pfirst = t.ioffset[tnode];
+        const size_t plast = pfirst + t.num[tnode];
+
+        // find total mass and center of mass - old way
+        alignas(32) std::vector<S> absstr(plast-pfirst);
+
+        if (SD == 1) {
+            // find abs() of each entry using a lambda
+            absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
+            std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
+            //std::fill(absstr.begin(), absstr.end(), (S)0.0);
+            //for (size_t i=pfirst; i<plast; ++i) {
+            //    absstr[i-pfirst] = std::abs(p.s[0][i]);
+            //}
+        } else {
+            // find abs() of each entry with a loop and sqrt
+            std::fill(absstr.begin(), absstr.end(), (S)0.0);
+            for (int d=0; d<SD; ++d) {
+                for (size_t i=pfirst; i<plast; ++i) {
+                    absstr[i-pfirst] += std::pow(p.s[d][i], 2);
+                }
+            }
+            std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::sqrt(str); });
+        }
+
+        // one over the sum of abs of strengths
+        const S ooass = (S)1.0 / std::accumulate(absstr.begin(), absstr.end(), 0.0);
+
+        // compute the node center of "mass"
+        for (int d=0; d<PD; ++d) {
+            t.x[d][tnode] = ooass * std::inner_product(p.x[d].begin()+pfirst, p.x[d].begin()+plast, absstr.begin(), 0.0);
+        }
+        //printf("  abs mass %g and cm %g %g\n", t.s[0][tnode], t.x[tnode], t.y[tnode]);
+
+        // sum of vectorial strengths
+        for (int d=0; d<SD; ++d) {
+            t.s[d][tnode] = std::accumulate(p.s[d].begin()+pfirst, p.s[d].begin()+plast, 0.0);
+        }
+
+        // fine average particle radius
+        const S radsum = std::accumulate(p.r.begin()+pfirst, p.r.begin()+plast, 0.0);
+        t.pr[tnode] = radsum / (S)t.num[tnode];
+
+        // total flops: t.num[tnode] * (1+1+SD+2*PD+2*SD+1) or (3+2*PD+3*SD)
+
+    // end computation for leaf node
+    }
+}
+
+//
+// Make a VAMsplit k-d tree from this set of particles
+// This uses two passes: one upward to sort and build the tree
+// The second downward to assign properties to the tree
+//
+template <class S, class A, int PD, int SD, int OD>
+void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
+
+    // allocate
+    auto start = std::chrono::system_clock::now();
+    t = Tree<S,PD,SD>(p.n);
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    // upward pass, starting at node 1 (root) and recursing
+    start = std::chrono::system_clock::now();
+    #pragma omp parallel
+    #pragma omp single
+    (void) splitNode(p, 0, p.n, t, 1);
+    #pragma omp taskwait
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    //printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    // downward pass, calculate masses, etc.
+    start = std::chrono::system_clock::now();
+    #pragma omp parallel
+    #pragma omp single
+    (void) finishTree(p, t, 1);
+    #pragma omp taskwait
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 }
 
 //
