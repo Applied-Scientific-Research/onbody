@@ -16,6 +16,49 @@
 #include <chrono>
 
 
+//#define USE_RM_KERNEL
+#define USE_EXPONENTIAL_KERNEL
+
+
+#ifdef USE_RM_KERNEL
+template <class S>
+static inline void core_func (const S distsq, const S sr,
+                              S* const __restrict__ r3, S* const __restrict__ bbb) {
+  const S r2 = distsq + sr*sr;
+  *r3 = S(1.0) / (r2*std::sqrt(r2));
+  *bbb = S(-3.0) * (*r3) / r2;
+}
+int flops_tp_grads () { return 7; }
+#endif
+
+#ifdef USE_EXPONENTIAL_KERNEL
+template <class S>
+static inline void core_func (const S distsq, const S sr,
+                              S* const __restrict__ r3, S* const __restrict__ bbb) {
+  const S dist = std::sqrt(distsq);
+  const S corefac = S(1.0) / std::pow(sr,3);
+  const S d3 = distsq * dist;
+  const S reld3 = d3 * corefac;
+  // 6 flops to here
+  if (reld3 > S(16.0)) {
+    *r3 = S(1.0) / d3;
+    *bbb = S(-3.0) / (d3 * distsq);
+    // this is 4 flops and is most likely
+  } else if (reld3 < S(0.001)) {
+    *r3 = corefac;
+    *bbb = S(-1.5) * dist * corefac * corefac;
+    // this is 5 flops
+  } else {
+    const S expreld3 = std::exp(-reld3);
+    *r3 = (S(1.0) - expreld3) / d3;
+    *bbb = S(3.0) * (corefac*expreld3 - *r3) / distsq;
+    // this is 9 flops
+  }
+}
+int flops_tp_grads () { return 11; }
+#endif
+
+
 //
 // The inner, scalar kernel
 //
@@ -27,13 +70,15 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
                                 A& __restrict__ tux, A& __restrict__ tvx, A& __restrict__ twx,
                                 A& __restrict__ tuy, A& __restrict__ tvy, A& __restrict__ twy,
                                 A& __restrict__ tuz, A& __restrict__ tvz, A& __restrict__ twz) {
-    // 63 flops
+    // 56 flops
     const S dx = tx - sx;
     const S dy = ty - sy;
     const S dz = tz - sz;
-    const S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
-    const S r3 = (S)1.0 / (r2*std::sqrt(r2));
-    const S bbb = S(-3.0) * r3 / r2;
+    //const S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
+    //const S r3 = (S)1.0 / (r2*std::sqrt(r2));
+    //const S bbb = S(-3.0) * r3 / r2;
+    S r3, bbb;
+    (void) core_func<S>(dx*dx + dy*dy + dz*dz, sr, &r3, &bbb);
     S dxxw = dz*ssy - dy*ssz;
     S dyxw = dx*ssz - dz*ssx;
     S dzxw = dy*ssx - dx*ssy;
@@ -54,7 +99,7 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     twz += dz*dzxw;
 }
 
-static inline int nbody_kernel_flops() { return 63; }
+static inline int nbody_kernel_flops() { return 56 + flops_tp_grads(); }
 
 template <class S, class A, int PD, int SD, int OD> class Parts;
 
@@ -138,7 +183,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,3,3,12> srcs(*nsrc);
+    Parts<float,double,3,3,12> srcs(*nsrc,true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
@@ -148,7 +193,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,3,3,12> targs(*ntarg);
+    Parts<float,double,3,3,12> targs(*ntarg,false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
@@ -184,7 +229,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double,3,3,12> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<float,double,3,3,12> eqsrcs((stree.numnodes/2) * blockSize, true);
     if (!silent) printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -291,7 +336,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,3,3,12> srcs(*nsrc);
+    Parts<float,double,3,3,12> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
@@ -301,7 +346,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,3,3,12> targs(*ntarg);
+    Parts<float,double,3,3,12> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
