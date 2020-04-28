@@ -451,14 +451,14 @@ int main(int argc, char *argv[]) {
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<STORE,ACCUM,2,1,2> srcs(numSrcs);
+    Parts<STORE,ACCUM,2,1,2> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
     //srcs.smooth_strengths();
     srcs.wave_strengths();
     //srcs.central_strengths();
 
-    Parts<STORE,ACCUM,2,1,2> targs(numTargs);
+    Parts<STORE,ACCUM,2,1,2> targs(numTargs, false);
     // initialize particle data
     targs.random_in_cube();
     //for (auto& m : targs.m) { m = 1.0f; }
@@ -484,7 +484,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<STORE,ACCUM,2,1,2> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<STORE,ACCUM,2,1,2> eqsrcs((stree.numnodes/2) * blockSize, true);
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -531,11 +531,11 @@ int main(int argc, char *argv[]) {
     }
 
     // find equivalent points
-    Parts<STORE,ACCUM,2,1,2> eqtargs(0);
+    Parts<STORE,ACCUM,2,1,2> eqtargs(0, false);
     if (test_iterations[4] > 0) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::system_clock::now();
-        eqtargs = Parts<STORE,ACCUM,2,1,2>((ttree.numnodes/2) * blockSize);
+        eqtargs = Parts<STORE,ACCUM,2,1,2>((ttree.numnodes/2) * blockSize, false);
         printf("  need %ld particles\n", eqtargs.n);
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());

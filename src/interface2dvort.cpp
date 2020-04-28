@@ -102,18 +102,18 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,2,1,2> srcs(*nsrc);
+    Parts<float,double,2,1,2> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,2,1,2> targs(*ntarg);
+    Parts<float,double,2,1,2> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
-    for (auto& m : targs.s[0]) { m = 1.0f/(float)(*ntarg); }
+    //for (auto& m : targs.s[0]) { m = 1.0f/(float)(*ntarg); }
     for (auto& u : targs.u[0]) { u = 0.0f; }
     for (auto& u : targs.u[1]) { u = 0.0f; }
     auto end = std::chrono::system_clock::now();
@@ -134,7 +134,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double,2,1,2> eqsrcs((stree.numnodes/2) * blockSize);
+    Parts<float,double,2,1,2> eqsrcs((stree.numnodes/2) * blockSize, true);
     if (!silent) printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -215,14 +215,14 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,  const float* sx, cons
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,2,1,2> srcs(*nsrc);
+    Parts<float,double,2,1,2> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,2,1,2> targs(*ntarg);
+    Parts<float,double,2,1,2> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];

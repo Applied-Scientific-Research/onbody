@@ -41,8 +41,8 @@ static inline uint32_t log_2(const uint32_t x) {
 template <class S, class A, int PD, int SD, int OD>
 class Parts {
 public:
-    Parts(size_t);
-    void resize(size_t);
+    Parts(const size_t, const bool);
+    void resize(const size_t);
     void random_in_cube();
     void smooth_strengths();
     void central_strengths();
@@ -50,15 +50,19 @@ public:
     void zero_vels();
     void reorder_idx(const size_t, const size_t);
 
-    size_t n;
     // state
+    bool are_sources;
+    size_t n;
     alignas(32) std::array<std::vector<S>, PD> x;
+
     // actuator (needed by sources)
     alignas(32) std::array<std::vector<S>, SD> s;
     alignas(32) std::vector<S> r;
+
     // results (needed by targets)
     alignas(32) std::array<std::vector<A>, OD> u;
     alignas(32) std::vector<size_t> gidx;
+
     // temporary
     alignas(32) std::vector<size_t> lidx;
     alignas(32) std::vector<size_t> itemp;
@@ -70,33 +74,30 @@ public:
 };
 
 template <class S, class A, int PD, int SD, int OD>
-Parts<S,A,PD,SD,OD>::Parts(size_t _num) {
+Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs) {
+    are_sources = _aresrcs;
     resize(_num);
 }
 
 template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::resize(size_t _num) {
+void Parts<S,A,PD,SD,OD>::resize(const size_t _num) {
     n = _num;
     for (int d=0; d<PD; ++d) x[d].resize(n);
-    for (int d=0; d<SD; ++d) s[d].resize(n);
+    if (are_sources) for (int d=0; d<SD; ++d) s[d].resize(n);
     r.resize(n);
-    for (int d=0; d<OD; ++d) u[d].resize(n);
-    gidx.resize(n);
-    std::iota(gidx.begin(), gidx.end(), 0);
-    lidx.resize(n);
-    itemp.resize(n);
-    ftemp.resize(n);
+    if (not are_sources) for (int d=0; d<OD; ++d) u[d].resize(n);
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::random_in_cube() {
     for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
-    for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
+    if (are_sources) for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
     for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)PD); }
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::smooth_strengths() {
+    if (not are_sources) return;
     const S factor = 1.0 / (S)n;
     for (int d=0; d<SD; ++d) {
         for (size_t i=0; i<n; i++) {
@@ -107,6 +108,7 @@ void Parts<S,A,PD,SD,OD>::smooth_strengths() {
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::central_strengths() {
+    if (not are_sources) return;
     const S factor = 1.0 / (S)n;
     for (size_t i=0; i<n; i++) {
         S dist = 0.0;
@@ -118,6 +120,7 @@ void Parts<S,A,PD,SD,OD>::central_strengths() {
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::wave_strengths() {
+    if (not are_sources) return;
     const S factor = 1.0 / (S)n;
     for (size_t i=0; i<n; i++) {
         for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos((d+0.7)*10.0*x[d][i]);
@@ -126,6 +129,7 @@ void Parts<S,A,PD,SD,OD>::wave_strengths() {
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::zero_vels() {
+    if (are_sources) return;
     for (int d=0; d<OD; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
 }
 
@@ -683,7 +687,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     // rearrange the elements - parallel sections did not make things faster
     //printf("reorder\n");
     for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
-    for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
+    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
     reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
     p.reorder_idx(pfirst, plast);
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
@@ -754,6 +758,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         // find total mass and center of mass - old way
         alignas(32) std::vector<S> absstr(plast-pfirst);
 
+        if (p.are_sources) {
         if (SD == 1) {
             // find abs() of each entry using a lambda
             absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
@@ -772,6 +777,10 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
             }
             std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::sqrt(str); });
         }
+        } else {
+            // Parts are targets
+            std::fill(absstr.begin(), absstr.end(), (S)1.0);
+        }
 
         // one over the sum of abs of strengths
         const S ooass = (S)1.0 / (1.e-20 + std::accumulate(absstr.begin(), absstr.end(), 0.0));
@@ -783,7 +792,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         //printf("  abs mass %g and cm %g %g\n", t.s[0][tnode], t.x[tnode], t.y[tnode]);
 
         // sum of vectorial strengths
-        for (int d=0; d<SD; ++d) {
+        if (p.are_sources) for (int d=0; d<SD; ++d) {
             t.s[d][tnode] = std::accumulate(p.s[d].begin()+pfirst, p.s[d].begin()+plast, 0.0);
         }
 
@@ -804,6 +813,13 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
 //
 template <class S, class A, int PD, int SD, int OD>
 void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
+
+    // allocate temporaries
+    p.lidx.resize(p.n);
+    p.itemp.resize(p.n);
+    p.ftemp.resize(p.n);
+    p.gidx.resize(p.n);
+    std::iota(p.gidx.begin(), p.gidx.end(), 0);
 
     // allocate
     auto start = std::chrono::system_clock::now();
@@ -829,6 +845,12 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    // de-allocate temporaries
+    p.lidx.resize(0);
+    p.itemp.resize(0);
+    p.ftemp.resize(0);
+    if (p.are_sources) p.gidx.resize(0);
 }
 
 //
@@ -859,7 +881,7 @@ void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t pfirst, size_t 
 
     // rearrange the elements
     for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
-    for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
+    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
     reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
     p.reorder_idx(pfirst, plast);
 
@@ -876,6 +898,18 @@ void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t pfirst, size_t 
 //
 template <class S, class A, int PD, int SD, int OD>
 void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
+
+    if (tnode == 1) {
+        // allocate temporaries
+        p.lidx.resize(p.n);
+        p.itemp.resize(p.n);
+        p.ftemp.resize(p.n);
+        if (p.are_sources) {
+            p.gidx.resize(p.n);
+            std::iota(p.gidx.begin(), p.gidx.end(), 0);
+        }
+    }
+
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
@@ -888,6 +922,15 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         (void) refineTree(p, t, 2*tnode);
         #pragma omp task shared(p,t)
         (void) refineTree(p, t, 2*tnode+1);
+    }
+
+    if (tnode == 1) {
+        #pragma omp taskwait
+        // allocate temporaries
+        p.lidx.resize(0);
+        p.itemp.resize(0);
+        p.ftemp.resize(0);
+        if (p.are_sources) p.gidx.resize(0);
     }
 }
 
@@ -902,6 +945,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
 template <class S, class A, int PD, int SD, int OD>
 void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
+    if (not p.are_sources or not ep.are_sources) return;
 
     t.epoffset[tnode] = tnode * blockSize;
     t.epnum[tnode] = 0;
