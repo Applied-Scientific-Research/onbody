@@ -4,6 +4,12 @@
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
+#pragma once
+
+#ifdef USE_VC
+#include <Vc/Vc>
+#endif
+
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
@@ -19,6 +25,11 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+#ifdef USE_VC
+template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+else
+template <class S> using Vector = std::vector<S>;
+#endif
 
 // the basic unit of direct sum work is blockSize by blockSize
 const size_t blockSize = 64;
@@ -762,7 +773,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         if (SD == 1) {
             // find abs() of each entry using a lambda
             absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
-            std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::abs(str); });
+            std::for_each(absstr.begin(), absstr.end(), [](S &str){ str = std::abs(str); });
             //std::fill(absstr.begin(), absstr.end(), (S)0.0);
             //for (size_t i=pfirst; i<plast; ++i) {
             //    absstr[i-pfirst] = std::abs(p.s[0][i]);
@@ -775,7 +786,7 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
                     absstr[i-pfirst] += std::pow(p.s[d][i], 2);
                 }
             }
-            std::for_each(absstr.begin(), absstr.end(), [](float &str){ str = std::sqrt(str); });
+            std::for_each(absstr.begin(), absstr.end(), [](S &str){ str = std::sqrt(str); });
         }
         } else {
             // Parts are targets
