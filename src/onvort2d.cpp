@@ -501,6 +501,7 @@ int main(int argc, char *argv[]) {
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
+    size_t echonum = 1;
     float theta = 4.0;
     std::vector<double> treetime(test_iterations.size(), 0.0);
 
@@ -655,7 +656,7 @@ int main(int argc, char *argv[]) {
     printf("[onbody naive]:\t\t\t[%.4f] seconds\n", minNaive * (float)ntskip);
     printf("  GFlop: %.2f and GFlop/s: %.3f\n", flops*1.e-9*(float)ntskip, flops*1.e-9/minNaive);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     std::vector<ACCUM> naiveu(targs.u[0].begin(), targs.u[0].end());
 
     ACCUM errsum = 0.0;
@@ -681,7 +682,7 @@ int main(int argc, char *argv[]) {
     printf("  GFlop: %.3f and GFlop/s: %.3f\n", flops*1.e-9, flops*1.e-9/minTreecode);
     printf("[treecode total]:\t\t[%.4f] seconds\n", treetime[1] + minTreecode);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
     std::vector<ACCUM> treecodeu(targs.u[0].begin(), targs.u[0].end());
 
@@ -693,7 +694,7 @@ int main(int argc, char *argv[]) {
         if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("error in treecode (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
+    printf("error in treecode (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
 
 
@@ -716,7 +717,7 @@ int main(int argc, char *argv[]) {
     printf("  GFlop: %.3f and GFlop/s: %.3f\n", flops*1.e-9, flops*1.e-9/minTreecode2);
     printf("[treecode2 total]:\t\t[%.4f] seconds\n", treetime[2] + minTreecode2);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
     std::vector<ACCUM> treecodeu2(targs.u[0].begin(), targs.u[0].end());
 
@@ -728,7 +729,7 @@ int main(int argc, char *argv[]) {
         if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("error in treecode2 (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
+    printf("error in treecode2 (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
 
 
@@ -751,7 +752,7 @@ int main(int argc, char *argv[]) {
     printf("  GFlop: %.3f and GFlop/s: %.3f\n", flops*1.e-9, flops*1.e-9/minTreecode3);
     printf("[treecode3 total]:\t\t[%.4f] seconds\n", treetime[3] + minTreecode3);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
     std::vector<ACCUM> treecodeu3(targs.u[0].begin(), targs.u[0].end());
 
@@ -763,7 +764,7 @@ int main(int argc, char *argv[]) {
         if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("error in treecode3 (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
+    printf("error in treecode3 (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
 
 
@@ -792,7 +793,7 @@ int main(int argc, char *argv[]) {
     printf("[onbody fast]:\t\t\t[%.4f] seconds\n", minFast);
     printf("[fast total]:\t\t\t[%.4f] seconds\n", treetime[4] + minFast);
     // write sample results
-    for (size_t i = 0; i < 4*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
+    for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g\n",i,targs.u[0][i],targs.u[1][i]);
     // save the results for comparison
     std::vector<ACCUM> fastu(targs.u[0].begin(), targs.u[0].end());
 
@@ -804,7 +805,7 @@ int main(int argc, char *argv[]) {
         if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
         errcnt += naiveu[i]*naiveu[i];
     }
-    printf("error in fastsumm (RMS/max):\t%g / %g\n", std::sqrt(errsum/errcnt), std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)));
+    printf("error in fastsumm (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
 
     printf("\nDone.\n");
