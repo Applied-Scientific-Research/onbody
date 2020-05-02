@@ -115,11 +115,11 @@ TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )
 # new targets
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" )
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
-TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" )
+TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${VC_LIBS} )
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
-TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" )
+TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${VC_LIBS} )
 
 #TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
 

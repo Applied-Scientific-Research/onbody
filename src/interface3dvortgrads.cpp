@@ -4,6 +4,16 @@
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
+#define STORE float
+#define ACCUM float
+
+#define USE_RM_KERNEL
+//#define USE_EXPONENTIAL_KERNEL
+
+#ifdef USE_VC
+#include <Vc/Vc>
+#endif
+
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
@@ -12,22 +22,47 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include <vector>
 #include <iostream>
 #include <chrono>
 
-
-//#define USE_RM_KERNEL
-#define USE_EXPONENTIAL_KERNEL
-
+#ifdef USE_VC
+template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+#else
+template <class S> using Vector = std::vector<S>;
+#endif
 
 #ifdef USE_RM_KERNEL
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
   const S r2 = distsq + sr*sr;
+#ifdef USE_VC
+  *r3 = Vc::reciprocal(r2*Vc::sqrt(r2));
+  *bbb = S(-3.0) * (*r3) * Vc::reciprocal(r2);
+#else
   *r3 = S(1.0) / (r2*std::sqrt(r2));
   *bbb = S(-3.0) * (*r3) / r2;
+#endif
 }
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline void core_func (const float distsq, const float sr,
+                              float* const __restrict__ r3, float* const __restrict__ bbb) {
+  const float r2 = distsq + sr*sr;
+  *r3 = 1.0f / (r2*std::sqrt(r2));
+  *bbb = -3.0f * (*r3) / r2;
+}
+
+template <>
+inline void core_func (const double distsq, const double sr,
+                              double* const __restrict__ r3, double* const __restrict__ bbb) {
+  const double r2 = distsq + sr*sr;
+  *r3 = 1.0 / (r2*std::sqrt(r2));
+  *bbb = -3.0 * (*r3) / r2;
+}
+
 int flops_tp_grads () { return 7; }
 #endif
 
@@ -35,11 +70,30 @@ int flops_tp_grads () { return 7; }
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
+#ifdef USE_VC
+  const S dist = Vc::sqrt(distsq);
+  const S corefac = Vc::reciprocal(sr*sr*sr);
+#else
   const S dist = std::sqrt(distsq);
   const S corefac = S(1.0) / std::pow(sr,3);
+#endif
+
   const S d3 = distsq * dist;
   const S reld3 = d3 * corefac;
   // 6 flops to here
+
+#ifdef USE_VC
+  S myr3, mybbb;
+  myr3(reld3 > S(16.0)) = Vc::reciprocal(d3);
+  mybbb(reld3 > S(16.0)) = S(-3.0) / (d3 * distsq);
+  const S expreld3 = Vc::exp(-reld3);
+  myr3(reld3 < S(16.0)) = (S(1.0) - expreld3) / d3;
+  mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) / distsq;
+  myr3(reld3 < S(0.001)) = corefac;
+  mybbb(reld3 < S(0.001)) = S(-1.5) * dist * corefac * corefac;
+  *r3 = myr3;
+  *bbb = mybbb;
+#else
   if (reld3 > S(16.0)) {
     *r3 = S(1.0) / d3;
     *bbb = S(-3.0) / (d3 * distsq);
@@ -54,7 +108,9 @@ static inline void core_func (const S distsq, const S sr,
     *bbb = S(3.0) * (corefac*expreld3 - *r3) / distsq;
     // this is 9 flops
   }
+#endif
 }
+
 int flops_tp_grads () { return 11; }
 #endif
 
@@ -74,9 +130,6 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dx = tx - sx;
     const S dy = ty - sy;
     const S dz = tz - sz;
-    //const S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
-    //const S r3 = (S)1.0 / (r2*std::sqrt(r2));
-    //const S bbb = S(-3.0) * r3 / r2;
     S r3, bbb;
     (void) core_func<S>(dx*dx + dy*dy + dz*dz, sr, &r3, &bbb);
     S dxxw = dz*ssy - dy*ssz;
@@ -107,34 +160,154 @@ template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+
+#ifdef USE_VC
+    // this works
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    // but this does not
+    //Vc::simdize<Vector<S>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    // spread this target over a vector
+    const Vc::Vector<S> vtx = targs.x[0][i];
+    const Vc::Vector<S> vty = targs.x[1][i];
+    const Vc::Vector<S> vtz = targs.x[2][i];
+    Vc::Vector<A> vtu0(0.0f);
+    Vc::Vector<A> vtu1(0.0f);
+    Vc::Vector<A> vtu2(0.0f);
+    Vc::Vector<A> vtu3(0.0f);
+    Vc::Vector<A> vtu4(0.0f);
+    Vc::Vector<A> vtu5(0.0f);
+    Vc::Vector<A> vtu6(0.0f);
+    Vc::Vector<A> vtu7(0.0f);
+    Vc::Vector<A> vtu8(0.0f);
+    Vc::Vector<A> vtu9(0.0f);
+    Vc::Vector<A> vtu10(0.0f);
+    Vc::Vector<A> vtu11(0.0f);
+    // reference source data as Vc::Vector<A>
+    sxit = srcs.x[0].begin() + jstart;
+    syit = srcs.x[1].begin() + jstart;
+    szit = srcs.x[2].begin() + jstart;
+    ssxit = srcs.s[0].begin() + jstart;
+    ssyit = srcs.s[1].begin() + jstart;
+    sszit = srcs.s[2].begin() + jstart;
+    srit = srcs.r.begin() + jstart;
+    for (size_t j=0; j<nSrcVec; ++j) {
+        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                     *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
+                     vtx, vty, vtz, vtu0, vtu1, vtu2, vtu3, vtu4,
+                     vtu5, vtu6, vtu7, vtu8, vtu9, vtu10, vtu11);
+        // advance the source iterators
+        ++sxit;
+        ++syit;
+        ++szit;
+        ++ssxit;
+        ++ssyit;
+        ++sszit;
+        ++srit;
+    }
+    // reduce target results to scalar
+    targs.u[0][i] += vtu0.sum();
+    targs.u[1][i] += vtu1.sum();
+    targs.u[2][i] += vtu2.sum();
+    targs.u[3][i] += vtu3.sum();
+    targs.u[4][i] += vtu4.sum();
+    targs.u[5][i] += vtu5.sum();
+    targs.u[6][i] += vtu6.sum();
+    targs.u[7][i] += vtu7.sum();
+    targs.u[8][i] += vtu8.sum();
+    targs.u[9][i] += vtu9.sum();
+    targs.u[10][i] += vtu10.sum();
+    targs.u[11][i] += vtu11.sum();
+
+#else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel(srcs.x[0][j],  srcs.x[1][j],  srcs.x[2][j],
-                     srcs.s[0][j],  srcs.s[1][j],  srcs.s[2][j],
-                     srcs.r[j],
+        nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
+                     srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i],
                      targs.u[3][i], targs.u[4][i], targs.u[5][i],
                      targs.u[6][i], targs.u[7][i], targs.u[8][i],
                      targs.u[9][i], targs.u[10][i],targs.u[11][i]);
     }
+#endif
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
+
+#ifdef USE_VC
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    for (size_t i=istart; i<iend; ++i) {
+        // spread this target over a vector
+        const Vc::Vector<S> vtx = targs.x[0][i];
+        const Vc::Vector<S> vty = targs.x[1][i];
+        const Vc::Vector<S> vtz = targs.x[2][i];
+        Vc::Vector<A> vtu0(0.0f);
+        Vc::Vector<A> vtu1(0.0f);
+        Vc::Vector<A> vtu2(0.0f);
+        Vc::Vector<A> vtu3(0.0f);
+        Vc::Vector<A> vtu4(0.0f);
+        Vc::Vector<A> vtu5(0.0f);
+        Vc::Vector<A> vtu6(0.0f);
+        Vc::Vector<A> vtu7(0.0f);
+        Vc::Vector<A> vtu8(0.0f);
+        Vc::Vector<A> vtu9(0.0f);
+        Vc::Vector<A> vtu10(0.0f);
+        Vc::Vector<A> vtu11(0.0f);
+        // convert source data to Vc::Vector<S>
+        sxit = srcs.x[0].begin() + jstart;
+        syit = srcs.x[1].begin() + jstart;
+        szit = srcs.x[2].begin() + jstart;
+        ssxit = srcs.s[0].begin() + jstart;
+        ssyit = srcs.s[1].begin() + jstart;
+        sszit = srcs.s[2].begin() + jstart;
+        srit = srcs.r.begin() + jstart;
+        for (size_t j=0; j<nSrcVec; ++j) {
+            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                         *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
+                         vtx, vty, vtz, vtu0, vtu1, vtu2, vtu3, vtu4,
+                         vtu5, vtu6, vtu7, vtu8, vtu9, vtu10, vtu11);
+            // advance the source iterators
+            ++sxit;
+            ++syit;
+            ++szit;
+            ++ssxit;
+            ++ssyit;
+            ++sszit;
+            ++srit;
+        }
+        // reduce target results to scalar
+        targs.u[0][i] += vtu0.sum();
+        targs.u[1][i] += vtu1.sum();
+        targs.u[2][i] += vtu2.sum();
+        targs.u[3][i] += vtu3.sum();
+        targs.u[4][i] += vtu4.sum();
+        targs.u[5][i] += vtu5.sum();
+        targs.u[6][i] += vtu6.sum();
+        targs.u[7][i] += vtu7.sum();
+        targs.u[8][i] += vtu8.sum();
+        targs.u[9][i] += vtu9.sum();
+        targs.u[10][i] += vtu10.sum();
+        targs.u[11][i] += vtu11.sum();
+    }
+#else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel(srcs.x[0][j],  srcs.x[1][j],  srcs.x[2][j],
-                     srcs.s[0][j],  srcs.s[1][j],  srcs.s[2][j],
-                     srcs.r[j],
-                     targs.x[0][i], targs.x[1][i], targs.x[2][i],
-                     targs.u[0][i], targs.u[1][i], targs.u[2][i],
-                     targs.u[3][i], targs.u[4][i], targs.u[5][i],
-                     targs.u[6][i], targs.u[7][i], targs.u[8][i],
-                     targs.u[9][i], targs.u[10][i],targs.u[11][i]);
+            nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
+                         srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
+                         targs.x[0][i], targs.x[1][i], targs.x[2][i],
+                         targs.u[0][i], targs.u[1][i], targs.u[2][i],
+                         targs.u[3][i], targs.u[4][i], targs.u[5][i],
+                         targs.u[6][i], targs.u[7][i], targs.u[8][i],
+                         targs.u[9][i], targs.u[10][i],targs.u[11][i]);
+        }
     }
-    }
+#endif
 }
 
 template <class S, int PD, int SD> class Tree;
@@ -143,14 +316,13 @@ template <class S, class A, int PD, int SD, int OD>
 void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
-    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.x[2][j],
-                     stree.s[0][j], stree.s[1][j], stree.s[2][j],
-                     stree.pr[j],
-                     targs.x[0][i], targs.x[1][i], targs.x[2][i],
-                     targs.u[0][i], targs.u[1][i], targs.u[2][i],
-                     targs.u[3][i], targs.u[4][i], targs.u[5][i],
-                     targs.u[6][i], targs.u[7][i], targs.u[8][i],
-                     targs.u[9][i], targs.u[10][i],targs.u[11][i]);
+    nbody_kernel<S,A>(stree.x[0][j], stree.x[1][j], stree.x[2][j],
+                 stree.s[0][j], stree.s[1][j], stree.s[2][j], stree.pr[j],
+                 targs.x[0][i], targs.x[1][i], targs.x[2][i],
+                 targs.u[0][i], targs.u[1][i], targs.u[2][i],
+                 targs.u[3][i], targs.u[4][i], targs.u[5][i],
+                 targs.u[6][i], targs.u[7][i], targs.u[8][i],
+                 targs.u[9][i], targs.u[10][i],targs.u[11][i]);
 }
 
 //
@@ -175,7 +347,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          float* tuy, float* tvy, float* twy,
                                          float* tuz, float* tvz, float* twz) {
     float flops = 0.0;
-    const bool silent = false;
+    const bool silent = true;
     const bool createTargTree = true;
     const bool blockwise = true;
 
@@ -183,7 +355,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,3,3,12> srcs(*nsrc,true);
+    Parts<STORE,ACCUM,3,3,12> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
@@ -193,7 +365,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,3,3,12> targs(*ntarg,false);
+    Parts<STORE,ACCUM,3,3,12> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
@@ -220,7 +392,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     if (!silent) printf("\nBuilding the source tree\n");
     if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
     start = std::chrono::system_clock::now();
-    Tree<float,3,3> stree(0);
+    Tree<STORE,3,3> stree(0);
     // split this node and recurse
     (void) makeTree(srcs, stree);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
@@ -229,7 +401,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
-    Parts<float,double,3,3,12> eqsrcs((stree.numnodes/2) * blockSize, true);
+    Parts<STORE,ACCUM,3,3,12> eqsrcs((stree.numnodes/2) * blockSize, true);
     if (!silent) printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -250,7 +422,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
-    Tree<float,3,3> ttree(0);
+    Tree<STORE,3,3> ttree(0);
     if (createTargTree or blockwise) {
         if (!silent) printf("\nBuilding the target tree\n");
         if (!silent) printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
@@ -336,7 +508,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<float,double,3,3,12> srcs(*nsrc, true);
+    Parts<STORE,ACCUM,3,3,12> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
@@ -346,7 +518,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
 
-    Parts<float,double,3,3,12> targs(*ntarg, false);
+    Parts<STORE,ACCUM,3,3,12> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
