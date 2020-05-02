@@ -27,7 +27,7 @@
 
 #ifdef USE_VC
 template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
-else
+#else
 template <class S> using Vector = std::vector<S>;
 #endif
 
@@ -64,20 +64,20 @@ public:
     // state
     bool are_sources;
     size_t n;
-    alignas(32) std::array<std::vector<S>, PD> x;
+    alignas(32) std::array<Vector<S>, PD> x;
 
     // actuator (needed by sources)
-    alignas(32) std::array<std::vector<S>, SD> s;
-    alignas(32) std::vector<S> r;
+    alignas(32) std::array<Vector<S>, SD> s;
+    alignas(32) Vector<S> r;
 
     // results (needed by targets)
-    alignas(32) std::array<std::vector<A>, OD> u;
+    alignas(32) std::array<Vector<A>, OD> u;
     alignas(32) std::vector<size_t> gidx;
 
     // temporary
     alignas(32) std::vector<size_t> lidx;
     alignas(32) std::vector<size_t> itemp;
-    alignas(32) std::vector<S> ftemp;
+    alignas(32) Vector<S> ftemp;
 
     // useful later
     //typename S::value_type state_type;
@@ -178,15 +178,15 @@ public:
     int numnodes;
 
     // tree node centers of mass
-    alignas(32) std::array<std::vector<S>, PD> x;
+    alignas(32) std::array<Vector<S>, PD> x;
     // node size
-    alignas(32) std::array<std::vector<S>, PD> ns;
+    alignas(32) std::array<Vector<S>, PD> ns;
     // node radius
-    alignas(32) std::vector<S> nr;
+    alignas(32) Vector<S> nr;
     // node particle radius
-    alignas(32) std::vector<S> pr;
+    alignas(32) Vector<S> pr;
     // node strengths
-    alignas(32) std::array<std::vector<S>, SD> s;
+    alignas(32) std::array<Vector<S>, SD> s;
 
     // real point offset and count
     alignas(32) std::vector<size_t> ioffset;		// is this redundant?
@@ -505,7 +505,7 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
 // from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 //
 template <class S>
-std::vector<size_t> sortIndexes(const std::vector<S> &v) {
+std::vector<size_t> sortIndexes(const Vector<S> &v) {
 
   // initialize original index locations
   alignas(32) std::vector<size_t> idx(v.size());
@@ -523,7 +523,7 @@ std::vector<size_t> sortIndexes(const std::vector<S> &v) {
 //
 template <class S>
 void splitSort(const int recursion_level,
-               const std::vector<S> &v,
+               const Vector<S> &v,
                std::vector<size_t> &idx,
                const size_t istart, const size_t istop) {
 
@@ -577,7 +577,7 @@ void splitSort(const int recursion_level,
 //
 template <class S>
 void sortIndexesSection(const int recursion_level,
-                        const std::vector<S> &v,
+                        const Vector<S> &v,
                         std::vector<size_t> &idx,
                         const size_t istart, const size_t istop) {
 
@@ -600,7 +600,7 @@ void sortIndexesSection(const int recursion_level,
 // Find min and max values along an axis
 //
 template <class S>
-std::pair<S,S> minMaxValue(const std::vector<S> &x, size_t istart, size_t iend) {
+std::pair<S,S> minMaxValue(const Vector<S> &x, size_t istart, size_t iend) {
 
     auto itbeg = x.begin() + istart;
     auto itend = x.begin() + iend;
@@ -616,7 +616,7 @@ std::pair<S,S> minMaxValue(const std::vector<S> &x, size_t istart, size_t iend) 
 // Helper function to reorder a segment of a vector
 //
 template <class S>
-void reorder(std::vector<S> &x, std::vector<S> &t,
+void reorder(Vector<S> &x, Vector<S> &t,
              const std::vector<size_t> &idx,
              const size_t pfirst, const size_t plast) {
 
@@ -767,12 +767,12 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         const size_t plast = pfirst + t.num[tnode];
 
         // find total mass and center of mass - old way
-        alignas(32) std::vector<S> absstr(plast-pfirst);
+        alignas(32) Vector<S> absstr(plast-pfirst);
 
         if (p.are_sources) {
         if (SD == 1) {
             // find abs() of each entry using a lambda
-            absstr = std::vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
+            absstr = Vector<S>(p.s[0].begin()+pfirst, p.s[0].begin()+plast);
             std::for_each(absstr.begin(), absstr.end(), [](S &str){ str = std::abs(str); });
             //std::fill(absstr.begin(), absstr.end(), (S)0.0);
             //for (size_t i=pfirst; i<plast; ++i) {

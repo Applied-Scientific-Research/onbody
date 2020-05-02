@@ -4,6 +4,16 @@
  * Copyright (c) 2017-20, Mark J Stock
  */
 
+#define STORE float
+#define ACCUM float
+
+#define USE_RM_KERNEL
+//#define USE_EXPONENTIAL_KERNEL
+
+#ifdef USE_VC
+#include <Vc/Vc>
+#endif
+
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
@@ -15,15 +25,41 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
-#include <algorithm>	// for sort and minmax
-#include <numeric>	// for iota
-#include <future>	// for async
-
-
-#define STORE float
-#define ACCUM double
 
 const char* progname = "onvort3d";
+
+#ifdef USE_VC
+template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+#else
+template <class S> using Vector = std::vector<S>;
+#endif
+
+#ifdef USE_RM_KERNEL
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S r2 = distsq + sr*sr;
+#ifdef USE_VC
+  return Vc::reciprocal(r2*Vc::sqrt(r2));
+#else
+  return S(1.0) / (r2*std::sqrt(r2));
+#endif
+}
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  const float r2 = distsq + sr*sr;
+  return 1.0f / (r2*std::sqrt(r2));
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  const double r2 = distsq + sr*sr;
+  return 1.0 / (r2*std::sqrt(r2));
+}
+
+static inline int flops_tp_nograds () { return 5; }
+#endif
 
 //
 // The inner, scalar kernel
@@ -32,22 +68,21 @@ template <class S, class A>
 static inline void nbody_kernel(const S sx, const S sy, const S sz,
                                 const S ssx, const S ssy, const S ssz, const S sr,
                                 const S tx, const S ty, const S tz,
-                                A& __restrict__ tax, A& __restrict__ tay, A& __restrict__ taz) {
+                                A& __restrict__ tu, A& __restrict__ tv, A& __restrict__ tw) {
     // 28 flops
     const S dx = sx - tx;
     const S dy = sy - ty;
     const S dz = sz - tz;
-    S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
-    r2 = (S)1.0 / (r2*std::sqrt(r2));
+    const S r3 = core_func<S>(dx*dx + dy*dy + dz*dz, sr);
     const S dxxw = dz*ssy - dy*ssz;
     const S dyxw = dx*ssz - dz*ssx;
     const S dzxw = dy*ssx - dx*ssy;
-    tax += r2 * dxxw;
-    tay += r2 * dyxw;
-    taz += r2 * dzxw;
+    tu += r3 * dxxw;
+    tv += r3 * dyxw;
+    tw += r3 * dzxw;
 }
 
-static inline int nbody_kernel_flops() { return 28; }
+static inline int nbody_kernel_flops() { return 23 + flops_tp_nograds(); }
 
 template <class S, class A, int PD, int SD, int OD> class Parts;
 
@@ -55,26 +90,110 @@ template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+
+#ifdef USE_VC
+    // this works
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    // but this does not
+    //Vc::simdize<Vector<S>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    // spread this target over a vector
+    const Vc::Vector<S> vtx = targs.x[0][i];
+    const Vc::Vector<S> vty = targs.x[1][i];
+    const Vc::Vector<S> vtz = targs.x[2][i];
+    Vc::Vector<A> vtu0(0.0f);
+    Vc::Vector<A> vtu1(0.0f);
+    Vc::Vector<A> vtu2(0.0f);
+    // reference source data as Vc::Vector<A>
+    sxit = srcs.x[0].begin() + jstart;
+    syit = srcs.x[1].begin() + jstart;
+    szit = srcs.x[2].begin() + jstart;
+    ssxit = srcs.s[0].begin() + jstart;
+    ssyit = srcs.s[1].begin() + jstart;
+    sszit = srcs.s[2].begin() + jstart;
+    srit = srcs.r.begin() + jstart;
+    for (size_t j=0; j<nSrcVec; ++j) {
+        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                     *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
+                     vtx, vty, vtz, vtu0, vtu1, vtu2);
+        // advance the source iterators
+        ++sxit;
+        ++syit;
+        ++szit;
+        ++ssxit;
+        ++ssyit;
+        ++sszit;
+        ++srit;
+    }
+    // reduce target results to scalar
+    targs.u[0][i] += vtu0.sum();
+    targs.u[1][i] += vtu1.sum();
+    targs.u[2][i] += vtu2.sum();
+
+#else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
                      srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i]);
     }
+#endif
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
+
+#ifdef USE_VC
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    for (size_t i=istart; i<iend; ++i) {
+        // spread this target over a vector
+        const Vc::Vector<S> vtx = targs.x[0][i];
+        const Vc::Vector<S> vty = targs.x[1][i];
+        const Vc::Vector<S> vtz = targs.x[2][i];
+        Vc::Vector<A> vtu0(0.0f);
+        Vc::Vector<A> vtu1(0.0f);
+        Vc::Vector<A> vtu2(0.0f);
+        // convert source data to Vc::Vector<S>
+        sxit = srcs.x[0].begin() + jstart;
+        syit = srcs.x[1].begin() + jstart;
+        szit = srcs.x[2].begin() + jstart;
+        ssxit = srcs.s[0].begin() + jstart;
+        ssyit = srcs.s[1].begin() + jstart;
+        sszit = srcs.s[2].begin() + jstart;
+        srit = srcs.r.begin() + jstart;
+        for (size_t j=0; j<nSrcVec; ++j) {
+            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                         *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
+                         vtx, vty, vtz, vtu0, vtu1, vtu2);
+            // advance the source iterators
+            ++sxit;
+            ++syit;
+            ++szit;
+            ++ssxit;
+            ++ssyit;
+            ++sszit;
+            ++srit;
+        }
+        // reduce target results to scalar
+        targs.u[0][i] += vtu0.sum();
+        targs.u[1][i] += vtu1.sum();
+        targs.u[2][i] += vtu2.sum();
+    }
+#else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
                          srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i]);
+        }
     }
-    }
+#endif
 }
 
 template <class S, int PD, int SD> class Tree;
@@ -83,7 +202,7 @@ template <class S, class A, int PD, int SD, int OD>
 void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
-    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.x[2][j],
+    nbody_kernel<S,A>(stree.x[0][j], stree.x[1][j], stree.x[2][j],
                  stree.s[0][j], stree.s[1][j], stree.s[2][j], stree.pr[j],
                  targs.x[0][i], targs.x[1][i], targs.x[2][i],
                  targs.u[0][i], targs.u[1][i], targs.u[2][i]);
@@ -101,8 +220,8 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 template <class S, class A>
 A least_squares_val(const S xt, const S yt, const S zt,
-                    const std::vector<S>& x, const std::vector<S>& y,
-                    const std::vector<S>& z, const std::vector<A>& u,
+                    const Vector<S>& x, const Vector<S>& y,
+                    const Vector<S>& z, const Vector<A>& u,
                     const size_t istart, const size_t iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
@@ -809,6 +928,5 @@ int main(int argc, char *argv[]) {
     }
 
     printf("\nDone.\n");
-
     return 0;
 }

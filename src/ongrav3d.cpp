@@ -4,6 +4,16 @@
  * Copyright (c) 2017-20, Mark J Stock
  */
 
+#define STORE float
+#define ACCUM double
+
+#define USE_RM_KERNEL
+//#define USE_EXPONENTIAL_KERNEL
+
+#ifdef USE_VC
+#include <Vc/Vc>
+#endif
+
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
@@ -15,13 +25,6 @@
 #include <vector>
 #include <iostream>
 #include <chrono>
-#include <algorithm>	// for sort and minmax
-#include <numeric>	// for iota
-#include <future>	// for async
-
-
-#define STORE float
-#define ACCUM double
 
 const char* progname = "ongrav3d";
 
@@ -68,7 +71,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
             nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i]);
-    }
+        }
     }
 }
 
@@ -797,6 +800,5 @@ int main(int argc, char *argv[]) {
     }
 
     printf("\nDone.\n");
-
     return 0;
 }

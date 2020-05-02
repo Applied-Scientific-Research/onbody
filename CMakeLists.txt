@@ -1,19 +1,30 @@
+#
+# onbody
+#
 CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
 PROJECT ( onbody )
 
+# User-serviceable variables here
+SET (CMAKE_CONFIGURATION_TYPES "Debug" "Release" "RelWithDebInfo")
+SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build" )
+SET (USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
+SET (USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
 SET (CMAKE_VERBOSE_MAKEFILE on)
-SET (DEFAULT_BUILD_TYPE "Release")
 
 IF (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}")
+  SET (CMAKE_BUILD_TYPE "Release")
 ENDIF ()
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14")
-  SET (CMAKE_CXX_FLAGS_DEBUG "-g -ggdb")
+  SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
+  SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -g -ggdb3")
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14 -stdlib=libc++")
+  SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
+  SET (CMAKE_CXX_FLAGS_RELEASE "-O3")
+  SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -ggdb")
 ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
 ENDIF ()
@@ -21,6 +32,17 @@ ENDIF ()
 IF ( WIN32 )
 
   SET ( PLATFORM_LIBS ${FRAMEWORK_LIBS} )
+
+  # OpenMP for multithreading
+  IF( USE_OMP )
+    FIND_PACKAGE (OpenMP REQUIRED)
+    IF (OPENMP_FOUND)
+      #MESSAGE ("OPENMP FOUND")
+      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    ENDIF ()
+  ENDIF()
 
 ELSEIF ( APPLE )
 
@@ -31,35 +53,62 @@ ELSEIF ( APPLE )
 
   SET (PLATFORM_LIBS ${FRAMEWORK_LIBS} ${COCOA_LIBRARY} ${IOKIT_LIBRARY})
 
-  FIND_PACKAGE (OpenMP REQUIRED)
-  IF (OPENMP_FOUND)
-    MESSAGE ("OPENMP FOUND")
-    SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-  ENDIF ()
-
+  # OpenMP for multithreading
+  IF( USE_OMP )
+    FIND_PACKAGE (OpenMP REQUIRED)
+    IF (OPENMP_FOUND)
+      #MESSAGE ("OPENMP FOUND")
+      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    ENDIF ()
+  ENDIF()
 
 ELSEIF ( UNIX )
 
-  FIND_PACKAGE( OpenMP REQUIRED)
-  IF (OPENMP_FOUND)
-    #MESSAGE ("OPENMP FOUND")
-    SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-  ENDIF ()
+  # OpenMP for multithreading
+  IF( USE_OMP )
+    FIND_PACKAGE( OpenMP REQUIRED )
+    IF( OPENMP_FOUND )
+      #message("OPENMP FOUND")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    ENDIF()
+  ELSE()
+    # suppress the warning
+    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+    # need to find pthreads (for std::async?)
+    FIND_PACKAGE( Threads REQUIRED )
+  ENDIF()
+
+  # Vc for explicit vectorization
+  IF( USE_VC )
+    SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
+    SET (VC_ROOT "/opt/Vc" CACHE STRING "Vc root" )
+    INCLUDE_DIRECTORIES( "${VC_ROOT}/include" )
+    FIND_LIBRARY( VC_LIBS NAMES Vc PATHS "${VC_ROOT}/lib" )
+  ELSE()
+    SET (VC_LIBS "")
+  ENDIF()
 
   INCLUDE_DIRECTORIES ( "/usr/include/eigen3" )
 
 ENDIF ()
 
 INCLUDE_DIRECTORIES ( "src" )
+ADD_DEFINITIONS (${CPREPROCDEFS})
 
 # original targets
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
+
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
+TARGET_LINK_LIBRARIES( "onvort3d" ${VC_LIBS} )
+
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
+
+ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
+TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )
 
 # new targets
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" )
