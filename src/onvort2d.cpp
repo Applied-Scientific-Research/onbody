@@ -5,7 +5,7 @@
  */
 
 #define STORE float
-#define ACCUM double
+#define ACCUM float
 
 #define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
@@ -29,28 +29,33 @@
 //#include "Polynomial.hh"
 #include "wlspoly.hpp"
 
-
 const char* progname = "onvort2d";
+
+#ifdef USE_VC
+template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+#else
+template <class S> using Vector = std::vector<S>;
+#endif
 
 //
 // The inner, scalar kernel
 //
 template <class S, class A>
 static inline void nbody_kernel(const S sx, const S sy,
-                                const S sr, const S sm,
+                                const S sr, const S ss,
                                 const S tx, const S ty,
-                                A& __restrict__ tax, A& __restrict__ tay) {
+                                A& __restrict__ tu, A& __restrict__ tv) {
     // 12 flops
     const S dx = tx - sx;
     const S dy = ty - sy;
     // Rosenhead-Moore
     S r2 = dx*dx + dy*dy + sr*sr;
-    r2 = sm/r2;
+    r2 = ss/r2;
     // Exponential
     //const S d2 = dx*dx + dy*dy + (S)1.e-14;
     //S r2 = sm * ((S)1.0 - std::exp(-d2/(sr*sr))) / d2;
-    tax -= r2 * dy;
-    tay += r2 * dx;
+    tu -= r2 * dy;
+    tv += r2 * dx;
 }
 
 static inline int nbody_kernel_flops() { return 12; }
@@ -61,24 +66,90 @@ template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+
+#ifdef USE_VC
+    // this works
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, ssit, srit;
+    // but this does not
+    //Vc::simdize<Vector<S>::const_iterator> sxit, syit, ssit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    // spread this target over a vector
+    const Vc::Vector<S> vtx = targs.x[0][i];
+    const Vc::Vector<S> vty = targs.x[1][i];
+    Vc::Vector<A> vtu0(0.0f);
+    Vc::Vector<A> vtu1(0.0f);
+    // reference source data as Vc::Vector<A>
+    sxit = srcs.x[0].begin() + jstart;
+    syit = srcs.x[1].begin() + jstart;
+    ssit = srcs.s[0].begin() + jstart;
+    srit = srcs.r.begin() + jstart;
+    for (size_t j=0; j<nSrcVec; ++j) {
+        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                     *sxit, *syit, *srit, *ssit,
+                     vtx, vty, vtu0, vtu1);
+        // advance the source iterators
+        ++sxit;
+        ++syit;
+        ++ssit;
+        ++srit;
+    }
+    // reduce target results to scalar
+    targs.u[0][i] += vtu0.sum();
+    targs.u[1][i] += vtu1.sum();
+
+#else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
+        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                      targs.x[0][i], targs.x[1][i],
                      targs.u[0][i], targs.u[1][i]);
     }
+#endif
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
+
+#ifdef USE_VC
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, ssit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    for (size_t i=istart; i<iend; ++i) {
+        // spread this target over a vector
+        const Vc::Vector<S> vtx = targs.x[0][i];
+        const Vc::Vector<S> vty = targs.x[1][i];
+        Vc::Vector<A> vtu0(0.0f);
+        Vc::Vector<A> vtu1(0.0f);
+        // convert source data to Vc::Vector<S>
+        sxit = srcs.x[0].begin() + jstart;
+        syit = srcs.x[1].begin() + jstart;
+        ssit = srcs.s[0].begin() + jstart;
+        srit = srcs.r.begin() + jstart;
+        for (size_t j=0; j<nSrcVec; ++j) {
+            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                         *sxit, *syit, *srit, *ssit,
+                         vtx, vty, vtu0, vtu1);
+            // advance the source iterators
+            ++sxit;
+            ++syit;
+            ++ssit;
+            ++srit;
+        }
+        // reduce target results to scalar
+        targs.u[0][i] += vtu0.sum();
+        targs.u[1][i] += vtu1.sum();
+    }
+#else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
+            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i],
                          targs.u[0][i], targs.u[1][i]);
         }
     }
+#endif
 }
 
 template <class S, int PD, int SD> class Tree;
@@ -87,7 +158,7 @@ template <class S, class A, int PD, int SD, int OD>
 void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
-    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.pr[j], stree.s[0][j],
+    nbody_kernel<S,A>(stree.x[0][j], stree.x[1][j], stree.pr[j], stree.s[0][j],
                  targs.x[0][i], targs.x[1][i],
                  targs.u[0][i], targs.u[1][i]);
 }
@@ -104,8 +175,8 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 template <class S, class A>
 A least_squares_val(const S xt, const S yt,
-                    const std::vector<S>& x, const std::vector<S>& y,
-                    const std::vector<A>& u,
+                    const Vector<S>& x, const Vector<S>& y,
+                    const Vector<A>& u,
                     const size_t istart, const size_t iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);

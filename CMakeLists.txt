@@ -101,11 +101,13 @@ ADD_DEFINITIONS (${CPREPROCDEFS})
 
 # original targets
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
+TARGET_LINK_LIBRARIES( "onvort2d" ${VC_LIBS} )
 
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvort3d" ${VC_LIBS} )
 
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
+TARGET_LINK_LIBRARIES( "ongrav3d" ${VC_LIBS} )
 
 ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )

@@ -5,7 +5,7 @@
  */
 
 #define STORE float
-#define ACCUM double
+#define ACCUM float
 
 #define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
@@ -28,6 +28,12 @@
 
 const char* progname = "ongrav3d";
 
+#ifdef USE_VC
+template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+#else
+template <class S> using Vector = std::vector<S>;
+#endif
+
 //
 // The inner, scalar kernel
 //
@@ -40,11 +46,11 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dx = sx - tx;
     const S dy = sy - ty;
     const S dz = sz - tz;
-    S r2 = dx*dx + dy*dy + dz*dz + sr*sr;
-    r2 = sm/(r2*std::sqrt(r2));
-    tax += r2 * dx;
-    tay += r2 * dy;
-    taz += r2 * dz;
+    S r3 = dx*dx + dy*dy + dz*dz + sr*sr;
+    r3 = sm/(r3*std::sqrt(r3));
+    tax += r3 * dx;
+    tay += r3 * dy;
+    taz += r3 * dz;
 }
 
 static inline int nbody_kernel_flops() { return 19; }
@@ -55,24 +61,100 @@ template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
+
+#ifdef USE_VC
+    // this works
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, smit, srit;
+    // but this does not
+    //Vc::simdize<Vector<S>::const_iterator> sxit, syit, szit, smit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    // spread this target over a vector
+    const Vc::Vector<S> vtx = targs.x[0][i];
+    const Vc::Vector<S> vty = targs.x[1][i];
+    const Vc::Vector<S> vtz = targs.x[2][i];
+    Vc::Vector<A> vtu0(0.0f);
+    Vc::Vector<A> vtu1(0.0f);
+    Vc::Vector<A> vtu2(0.0f);
+    // reference source data as Vc::Vector<A>
+    sxit = srcs.x[0].begin() + jstart;
+    syit = srcs.x[1].begin() + jstart;
+    szit = srcs.x[2].begin() + jstart;
+    smit = srcs.s[0].begin() + jstart;
+    srit = srcs.r.begin() + jstart;
+    for (size_t j=0; j<nSrcVec; ++j) {
+        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                     *sxit, *syit, *szit, *srit, *smit,
+                     vtx, vty, vtz, vtu0, vtu1, vtu2);
+        // advance the source iterators
+        ++sxit;
+        ++syit;
+        ++szit;
+        ++smit;
+        ++srit;
+    }
+    // reduce target results to scalar
+    targs.u[0][i] += vtu0.sum();
+    targs.u[1][i] += vtu1.sum();
+    targs.u[2][i] += vtu2.sum();
+
+#else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
+        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i]);
     }
+#endif
 }
 
 template <class S, class A, int PD, int SD, int OD>
 void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
+
+#ifdef USE_VC
+    Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, smit, srit;
+    const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
+
+    for (size_t i=istart; i<iend; ++i) {
+        // spread this target over a vector
+        const Vc::Vector<S> vtx = targs.x[0][i];
+        const Vc::Vector<S> vty = targs.x[1][i];
+        const Vc::Vector<S> vtz = targs.x[2][i];
+        Vc::Vector<A> vtu0(0.0f);
+        Vc::Vector<A> vtu1(0.0f);
+        Vc::Vector<A> vtu2(0.0f);
+        // convert source data to Vc::Vector<S>
+        sxit = srcs.x[0].begin() + jstart;
+        syit = srcs.x[1].begin() + jstart;
+        szit = srcs.x[2].begin() + jstart;
+        smit = srcs.s[0].begin() + jstart;
+        srit = srcs.r.begin() + jstart;
+        for (size_t j=0; j<nSrcVec; ++j) {
+            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+                         *sxit, *syit, *szit, *srit, *smit,
+                         vtx, vty, vtz, vtu0, vtu1, vtu2);
+            // advance the source iterators
+            ++sxit;
+            ++syit;
+            ++szit;
+            ++smit;
+            ++srit;
+        }
+        // reduce target results to scalar
+        targs.u[0][i] += vtu0.sum();
+        targs.u[1][i] += vtu1.sum();
+        targs.u[2][i] += vtu2.sum();
+    }
+#else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
+            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i]);
         }
     }
+#endif
 }
 
 template <class S, int PD, int SD> class Tree;
@@ -81,7 +163,7 @@ template <class S, class A, int PD, int SD, int OD>
 void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
-    nbody_kernel(stree.x[0][j], stree.x[1][j], stree.x[2][j], stree.pr[j], stree.s[0][j],
+    nbody_kernel<S,A>(stree.x[0][j], stree.x[1][j], stree.x[2][j], stree.pr[j], stree.s[0][j],
                  targs.x[0][i], targs.x[1][i], targs.x[2][i],
                  targs.u[0][i], targs.u[1][i], targs.u[2][i]);
 }
@@ -98,8 +180,8 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 template <class S, class A>
 A least_squares_val(const S xt, const S yt, const S zt,
-                    const std::vector<S>& x, const std::vector<S>& y,
-                    const std::vector<S>& z, const std::vector<A>& u,
+                    const Vector<S>& x, const Vector<S>& y,
+                    const Vector<S>& z, const Vector<A>& u,
                     const size_t istart, const size_t iend) {
 
     //printf("  target point at %g %g %g\n", xt, yt, zt);
