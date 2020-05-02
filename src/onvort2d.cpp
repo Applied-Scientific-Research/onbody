@@ -1,7 +1,7 @@
 /*
  * onvort2d - testbed for an O(N) 2d vortex solver
  *
- * Copyright (c) 2017-20, Mark J Stock
+ * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -100,7 +100,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 
 #else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
+        nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                      targs.x[0][i], targs.x[1][i],
                      targs.u[0][i], targs.u[1][i]);
     }
@@ -144,7 +144,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 #else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
+            nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i],
                          targs.u[0][i], targs.u[1][i]);
         }

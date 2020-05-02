@@ -1,7 +1,7 @@
 /*
  * onvortgrad3d - testbed for an O(N) 3d vortex solver with velocity gradients
  *
- * Copyright (c) 2017-20, Mark J Stock
+ * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -224,7 +224,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 
 #else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+        nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
                      srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i],
@@ -300,7 +300,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 #else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+            nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
                          srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i],
