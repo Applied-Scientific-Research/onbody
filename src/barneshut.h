@@ -32,7 +32,7 @@ template <class S> using Vector = std::vector<S>;
 #endif
 
 // the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 64;
+const size_t blockSize = 128;
 
 //
 // Find index of msb of uint32
@@ -438,7 +438,8 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // scale the distance in the box-opening criterion?
     if (PD == 2) dist = std::exp(0.75*std::log(dist));
-    else dist = std::exp(0.666667*std::log(dist));
+    else dist = std::exp(0.75*std::log(dist));
+    //else dist = std::exp(0.666667*std::log(dist));
     //dist = std::exp(0.75*std::log(dist));
     //dist = std::exp(0.666667*std::log(dist));
     //dist = std::sqrt(dist);
