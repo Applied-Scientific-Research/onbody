@@ -7,8 +7,9 @@
 #define STORE float
 #define ACCUM float
 
-#define USE_RM_KERNEL
+//#define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
+#define USE_EXPONENTIAL_KERNEL2
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -37,6 +38,134 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 template <class S> using Vector = std::vector<S>;
 #endif
 
+
+#ifdef USE_RM_KERNEL
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S r2 = distsq + sr*sr;
+#ifdef USE_VC
+  return Vc::reciprocal(r2);
+#else
+  return S(1.0) / r2;
+#endif
+}
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  return 1.0f / (distsq + sr*sr);
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  return 1.0 / (distsq + sr*sr);
+}
+
+static inline int flops_tp_nograds () { return 3; }
+#endif
+
+#ifdef USE_EXPONENTIAL_KERNEL2
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+#ifdef USE_VC
+  const S ood2 = Vc::reciprocal(distsq);
+  const S corefac = Vc::reciprocal(sr*sr);
+#else
+  const S ood2 = S(1.0) / distsq;
+  const S corefac = S(1.0) / std::pow(sr,2);
+#endif
+  const S reld2 = corefac / ood2;
+  // 7 flops to here
+#ifdef USE_VC
+  S returnval = ood2;
+  returnval(reld2 < S(16.0)) = ood2 * (S(1.0) - Vc::exp(-reld2));
+  returnval(reld2 < S(0.001)) = corefac;
+  return returnval;
+#else
+  if (reld2 > S(16.0)) {
+    return ood2;
+  } else if (reld2 < S(0.001)) {
+    return corefac;
+  } else {
+    return ood2 * (S(1.0) - std::exp(-reld2));
+  }
+#endif
+}
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  const float ood2 = 1.0f / distsq;
+  const float corefac = 1.0f / std::pow(sr,2);
+  const float reld2 = corefac / ood2;
+  if (reld2 > 16.0f) {
+    return ood2;
+  } else if (reld2 < 0.001f) {
+    return corefac;
+  } else {
+    return ood2 * (1.0f - std::exp(-reld2));
+  }
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  const double ood2 = 1.0 / distsq;
+  const double corefac = 1.0 / std::pow(sr,2);
+  const double reld2 = corefac / ood2;
+  if (reld2 > 16.0) {
+    return ood2;
+  } else if (reld2 < 0.001) {
+    return corefac;
+  } else {
+    return ood2 * (1.0 - std::exp(-reld2));
+  }
+}
+
+static inline int flops_tp_nograds () { return 9; }
+#endif
+
+#ifdef USE_EXPONENTIAL_KERNEL
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S d2 = distsq + S(1.e-10);
+#ifdef USE_VC
+  // this line generates nan results
+  return (S(1.0) - Vc::exp(-d2/(sr*sr))) / d2;
+#else
+  return (S(1.0) - std::exp(-d2/(sr*sr))) / d2;
+#endif
+}
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  const float d2 = distsq + 1.e-10;
+  return (1.0f - std::exp(-d2/(sr*sr))) / d2;
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  const double d2 = distsq + 1.e-14;
+  return (1.0 - std::exp(-d2/(sr*sr))) / d2;
+}
+
+static inline int flops_tp_nograds () { return 6; }
+#endif
+
+
+// casting from S to A
+template <class S, class A>
+#ifdef USE_VC
+static inline A mycast (const S _in) { return Vc::simd_cast<A>(_in); }
+#else
+static inline A mycast (const S _in) { return _in; }
+#endif
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <> inline float mycast (const float _in) { return _in; }
+template <> inline double mycast (const float _in) { return (double)_in; }
+template <> inline double mycast (const double _in) { return _in; }
+
+
 //
 // The inner, scalar kernel
 //
@@ -48,14 +177,9 @@ static inline void nbody_kernel(const S sx, const S sy,
     // 12 flops
     const S dx = tx - sx;
     const S dy = ty - sy;
-    // Rosenhead-Moore
-    S r2 = dx*dx + dy*dy + sr*sr;
-    r2 = ss/r2;
-    // Exponential
-    //const S d2 = dx*dx + dy*dy + (S)1.e-14;
-    //S r2 = sm * ((S)1.0 - std::exp(-d2/(sr*sr))) / d2;
-    tu -= r2 * dy;
-    tv += r2 * dx;
+    const S r2 = ss * core_func<S>(dx*dx + dy*dy, sr);
+    tu -= mycast<S,A>(r2*dy);
+    tv += mycast<S,A>(r2*dx);
 }
 
 static inline int nbody_kernel_flops() { return 12; }
@@ -74,18 +198,21 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     //Vc::simdize<Vector<S>::const_iterator> sxit, syit, ssit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     // spread this target over a vector
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
-    Vc::Vector<A> vtu0(0.0f);
-    Vc::Vector<A> vtu1(0.0f);
+    VecA vtu0(0.0f);
+    VecA vtu1(0.0f);
     // reference source data as Vc::Vector<A>
     sxit = srcs.x[0].begin() + jstart;
     syit = srcs.x[1].begin() + jstart;
     ssit = srcs.s[0].begin() + jstart;
     srit = srcs.r.begin() + jstart;
     for (size_t j=0; j<nSrcVec; ++j) {
-        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+        nbody_kernel<Vc::Vector<S>,VecA>(
                      *sxit, *syit, *srit, *ssit,
                      vtx, vty, vtu0, vtu1);
         // advance the source iterators
@@ -116,19 +243,22 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, ssit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     for (size_t i=istart; i<iend; ++i) {
         // spread this target over a vector
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
-        Vc::Vector<A> vtu0(0.0f);
-        Vc::Vector<A> vtu1(0.0f);
+        VecA vtu0(0.0f);
+        VecA vtu1(0.0f);
         // convert source data to Vc::Vector<S>
         sxit = srcs.x[0].begin() + jstart;
         syit = srcs.x[1].begin() + jstart;
         ssit = srcs.s[0].begin() + jstart;
         srit = srcs.r.begin() + jstart;
         for (size_t j=0; j<nSrcVec; ++j) {
-            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+            nbody_kernel<Vc::Vector<S>,VecA>(
                          *sxit, *syit, *srit, *ssit,
                          vtx, vty, vtu0, vtu1);
             // advance the source iterators
@@ -497,7 +627,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
+    static std::vector<int> test_iterations = {1, 0, 0, 1, 0};
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;

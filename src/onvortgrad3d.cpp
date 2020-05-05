@@ -129,6 +129,7 @@ template <> inline float mycast (const float _in) { return _in; }
 template <> inline double mycast (const float _in) { return (double)_in; }
 template <> inline double mycast (const double _in) { return _in; }
 
+
 //
 // The inner, scalar kernel
 //

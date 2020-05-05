@@ -49,7 +49,7 @@ static inline void core_func (const S distsq, const S sr,
 // specialize, in case the non-vectorized version of nbody_kernel is called
 template <>
 inline void core_func (const float distsq, const float sr,
-                              float* const __restrict__ r3, float* const __restrict__ bbb) {
+                       float* const __restrict__ r3, float* const __restrict__ bbb) {
   const float r2 = distsq + sr*sr;
   *r3 = 1.0f / (r2*std::sqrt(r2));
   *bbb = -3.0f * (*r3) / r2;
@@ -57,7 +57,7 @@ inline void core_func (const float distsq, const float sr,
 
 template <>
 inline void core_func (const double distsq, const double sr,
-                              double* const __restrict__ r3, double* const __restrict__ bbb) {
+                       double* const __restrict__ r3, double* const __restrict__ bbb) {
   const double r2 = distsq + sr*sr;
   *r3 = 1.0 / (r2*std::sqrt(r2));
   *bbb = -3.0 * (*r3) / r2;
@@ -115,6 +115,19 @@ int flops_tp_grads () { return 11; }
 #endif
 
 
+// casting from S to A
+template <class S, class A>
+#ifdef USE_VC
+static inline A mycast (const S _in) { return Vc::simd_cast<A>(_in); }
+#else
+static inline A mycast (const S _in) { return _in; }
+#endif
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <> inline float mycast (const float _in) { return _in; }
+template <> inline double mycast (const float _in) { return (double)_in; }
+template <> inline double mycast (const double _in) { return _in; }
+
+
 //
 // The inner, scalar kernel
 //
@@ -135,21 +148,21 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     S dxxw = dz*ssy - dy*ssz;
     S dyxw = dx*ssz - dz*ssx;
     S dzxw = dy*ssx - dx*ssy;
-    tu += r3 * dxxw;
-    tv += r3 * dyxw;
-    tw += r3 * dzxw;
+    tu += mycast<S,A>(r3*dxxw);
+    tv += mycast<S,A>(r3*dyxw);
+    tw += mycast<S,A>(r3*dzxw);
     dxxw *= bbb;
     dyxw *= bbb;
     dzxw *= bbb;
-    tux += dx*dxxw;
-    tvx += dx*dyxw + ssz*r3;
-    twx += dx*dzxw - ssy*r3;
-    tuy += dy*dxxw - ssz*r3;
-    tvy += dy*dyxw;
-    twy += dy*dzxw + ssx*r3;
-    tuz += dz*dxxw + ssy*r3;
-    tvz += dz*dyxw - ssx*r3;
-    twz += dz*dzxw;
+    tux += mycast<S,A>(dx*dxxw);
+    tvx += mycast<S,A>(dx*dyxw + ssz*r3);
+    twx += mycast<S,A>(dx*dzxw - ssy*r3);
+    tuy += mycast<S,A>(dy*dxxw - ssz*r3);
+    tvy += mycast<S,A>(dy*dyxw);
+    twy += mycast<S,A>(dy*dzxw + ssx*r3);
+    tuz += mycast<S,A>(dz*dxxw + ssy*r3);
+    tvz += mycast<S,A>(dz*dyxw - ssx*r3);
+    twz += mycast<S,A>(dz*dzxw);
 }
 
 static inline int nbody_kernel_flops() { return 56 + flops_tp_grads(); }
@@ -168,22 +181,25 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     //Vc::simdize<Vector<S>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     // spread this target over a vector
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
     const Vc::Vector<S> vtz = targs.x[2][i];
-    Vc::Vector<A> vtu0(0.0f);
-    Vc::Vector<A> vtu1(0.0f);
-    Vc::Vector<A> vtu2(0.0f);
-    Vc::Vector<A> vtu3(0.0f);
-    Vc::Vector<A> vtu4(0.0f);
-    Vc::Vector<A> vtu5(0.0f);
-    Vc::Vector<A> vtu6(0.0f);
-    Vc::Vector<A> vtu7(0.0f);
-    Vc::Vector<A> vtu8(0.0f);
-    Vc::Vector<A> vtu9(0.0f);
-    Vc::Vector<A> vtu10(0.0f);
-    Vc::Vector<A> vtu11(0.0f);
+    VecA vtu0(0.0f);
+    VecA vtu1(0.0f);
+    VecA vtu2(0.0f);
+    VecA vtu3(0.0f);
+    VecA vtu4(0.0f);
+    VecA vtu5(0.0f);
+    VecA vtu6(0.0f);
+    VecA vtu7(0.0f);
+    VecA vtu8(0.0f);
+    VecA vtu9(0.0f);
+    VecA vtu10(0.0f);
+    VecA vtu11(0.0f);
     // reference source data as Vc::Vector<A>
     sxit = srcs.x[0].begin() + jstart;
     syit = srcs.x[1].begin() + jstart;
@@ -193,7 +209,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     sszit = srcs.s[2].begin() + jstart;
     srit = srcs.r.begin() + jstart;
     for (size_t j=0; j<nSrcVec; ++j) {
-        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+        nbody_kernel<Vc::Vector<S>,VecA>(
                      *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
                      vtx, vty, vtz, vtu0, vtu1, vtu2, vtu3, vtu4,
                      vtu5, vtu6, vtu7, vtu8, vtu9, vtu10, vtu11);
@@ -242,23 +258,26 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     for (size_t i=istart; i<iend; ++i) {
         // spread this target over a vector
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
         const Vc::Vector<S> vtz = targs.x[2][i];
-        Vc::Vector<A> vtu0(0.0f);
-        Vc::Vector<A> vtu1(0.0f);
-        Vc::Vector<A> vtu2(0.0f);
-        Vc::Vector<A> vtu3(0.0f);
-        Vc::Vector<A> vtu4(0.0f);
-        Vc::Vector<A> vtu5(0.0f);
-        Vc::Vector<A> vtu6(0.0f);
-        Vc::Vector<A> vtu7(0.0f);
-        Vc::Vector<A> vtu8(0.0f);
-        Vc::Vector<A> vtu9(0.0f);
-        Vc::Vector<A> vtu10(0.0f);
-        Vc::Vector<A> vtu11(0.0f);
+        VecA vtu0(0.0f);
+        VecA vtu1(0.0f);
+        VecA vtu2(0.0f);
+        VecA vtu3(0.0f);
+        VecA vtu4(0.0f);
+        VecA vtu5(0.0f);
+        VecA vtu6(0.0f);
+        VecA vtu7(0.0f);
+        VecA vtu8(0.0f);
+        VecA vtu9(0.0f);
+        VecA vtu10(0.0f);
+        VecA vtu11(0.0f);
         // convert source data to Vc::Vector<S>
         sxit = srcs.x[0].begin() + jstart;
         syit = srcs.x[1].begin() + jstart;
@@ -268,7 +287,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         sszit = srcs.s[2].begin() + jstart;
         srit = srcs.r.begin() + jstart;
         for (size_t j=0; j<nSrcVec; ++j) {
-            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+            nbody_kernel<Vc::Vector<S>,VecA>(
                          *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
                          vtx, vty, vtz, vtu0, vtu1, vtu2, vtu3, vtu4,
                          vtu5, vtu6, vtu7, vtu8, vtu9, vtu10, vtu11);

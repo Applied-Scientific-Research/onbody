@@ -7,8 +7,8 @@
 #define STORE float
 #define ACCUM float
 
-#define USE_RM_KERNEL
-//#define USE_EXPONENTIAL_KERNEL
+//#define USE_RM_KERNEL
+#define USE_EXPONENTIAL_KERNEL
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -33,6 +33,7 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 #else
 template <class S> using Vector = std::vector<S>;
 #endif
+
 
 #ifdef USE_RM_KERNEL
 template <class S>
@@ -61,6 +62,84 @@ inline double core_func (const double distsq, const double sr) {
 static inline int flops_tp_nograds () { return 5; }
 #endif
 
+#ifdef USE_EXPONENTIAL_KERNEL
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+#ifdef USE_VC
+  const S dist = Vc::sqrt(distsq);
+  const S corefac = Vc::reciprocal(sr*sr*sr);
+  const S ood3 = Vc::reciprocal(distsq * dist);
+#else
+  const S dist = std::sqrt(distsq);
+  const S corefac = S(1.0) / std::pow(sr,3);
+  const S ood3 = S(1.0) / (distsq * dist);
+#endif
+  const S reld3 = corefac / ood3;
+  // 7 flops to here
+#ifdef USE_VC
+  S returnval = ood3;
+  returnval(reld3 < S(16.0)) = ood3 * (S(1.0) - Vc::exp(-reld3));
+  returnval(reld3 < S(0.001)) = corefac;
+  return returnval;
+#else
+  if (reld3 > S(16.0)) {
+    return ood3;
+  } else if (reld3 < S(0.001)) {
+    return corefac;
+  } else {
+    return ood3 * (S(1.0) - std::exp(-reld3));
+  }
+#endif
+}
+
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  const float dist = std::sqrt(distsq);
+  const float corefac = 1.0f / std::pow(sr,3);
+  const float ood3 = 1.0f / (distsq * dist);
+  const float reld3 = corefac / ood3;
+  if (reld3 > 16.0f) {
+    return ood3;
+  } else if (reld3 < 0.001f) {
+    return corefac;
+  } else {
+    return ood3 * (1.0f - std::exp(-reld3));
+  }
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  const double dist = std::sqrt(distsq);
+  const double corefac = 1.0 / std::pow(sr,3);
+  const double ood3 = 1.0 / (distsq * dist);
+  const double reld3 = corefac / ood3;
+  if (reld3 > 16.0) {
+    return ood3;
+  } else if (reld3 < 0.001) {
+    return corefac;
+  } else {
+    return ood3 * (1.0 - std::exp(-reld3));
+  }
+}
+
+static inline int flops_tp_nograds () { return 9; }
+#endif
+
+
+// casting from S to A
+template <class S, class A>
+#ifdef USE_VC
+static inline A mycast (const S _in) { return Vc::simd_cast<A>(_in); }
+#else
+static inline A mycast (const S _in) { return _in; }
+#endif
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <> inline float mycast (const float _in) { return _in; }
+template <> inline double mycast (const float _in) { return (double)_in; }
+template <> inline double mycast (const double _in) { return _in; }
+
+
 //
 // The inner, scalar kernel
 //
@@ -77,9 +156,9 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dxxw = dz*ssy - dy*ssz;
     const S dyxw = dx*ssz - dz*ssx;
     const S dzxw = dy*ssx - dx*ssy;
-    tu += r3 * dxxw;
-    tv += r3 * dyxw;
-    tw += r3 * dzxw;
+    tu += mycast<S,A>(r3*dxxw);
+    tv += mycast<S,A>(r3*dyxw);
+    tw += mycast<S,A>(r3*dzxw);
 }
 
 static inline int nbody_kernel_flops() { return 23 + flops_tp_nograds(); }
@@ -98,13 +177,16 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     //Vc::simdize<Vector<S>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     // spread this target over a vector
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
     const Vc::Vector<S> vtz = targs.x[2][i];
-    Vc::Vector<A> vtu0(0.0f);
-    Vc::Vector<A> vtu1(0.0f);
-    Vc::Vector<A> vtu2(0.0f);
+    VecA vtu0(0.0f);
+    VecA vtu1(0.0f);
+    VecA vtu2(0.0f);
     // reference source data as Vc::Vector<A>
     sxit = srcs.x[0].begin() + jstart;
     syit = srcs.x[1].begin() + jstart;
@@ -114,7 +196,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     sszit = srcs.s[2].begin() + jstart;
     srit = srcs.r.begin() + jstart;
     for (size_t j=0; j<nSrcVec; ++j) {
-        nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+        nbody_kernel<Vc::Vector<S>,VecA>(
                      *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
                      vtx, vty, vtz, vtu0, vtu1, vtu2);
         // advance the source iterators
@@ -133,7 +215,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 
 #else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+        nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
                      srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i]);
@@ -150,14 +232,17 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     Vc::simdize<Vector<STORE>::const_iterator> sxit, syit, szit, ssxit, ssyit, sszit, srit;
     const size_t nSrcVec = (jend-jstart + Vc::Vector<S>::Size - 1) / Vc::Vector<S>::Size;
 
+    // a simd type for A with the same number of entries as S
+    typedef Vc::SimdArray<A,Vc::Vector<S>::size()> VecA;
+
     for (size_t i=istart; i<iend; ++i) {
         // spread this target over a vector
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
         const Vc::Vector<S> vtz = targs.x[2][i];
-        Vc::Vector<A> vtu0(0.0f);
-        Vc::Vector<A> vtu1(0.0f);
-        Vc::Vector<A> vtu2(0.0f);
+        VecA vtu0(0.0f);
+        VecA vtu1(0.0f);
+        VecA vtu2(0.0f);
         // convert source data to Vc::Vector<S>
         sxit = srcs.x[0].begin() + jstart;
         syit = srcs.x[1].begin() + jstart;
@@ -167,7 +252,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         sszit = srcs.s[2].begin() + jstart;
         srit = srcs.r.begin() + jstart;
         for (size_t j=0; j<nSrcVec; ++j) {
-            nbody_kernel<Vc::Vector<S>,Vc::Vector<A>>(
+            nbody_kernel<Vc::Vector<S>,VecA>(
                          *sxit, *syit, *szit, *ssxit, *ssyit, *sszit, *srit,
                          vtx, vty, vtz, vtu0, vtu1, vtu2);
             // advance the source iterators
@@ -187,7 +272,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 #else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j],
+            nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j],
                          srcs.s[0][j],  srcs.s[1][j], srcs.s[2][j], srcs.r[j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i]);
@@ -616,7 +701,7 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
-    static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
+    static std::vector<int> test_iterations = {1, 0, 0, 1, 0};
     bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
