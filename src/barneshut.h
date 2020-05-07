@@ -25,6 +25,8 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+#define PARTIAL_SORT
+
 #ifdef USE_VC
 template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 #else
@@ -502,24 +504,6 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
 
 
 //
-// Sort but retain only sorted index! Uses C++11 lambdas
-// from http://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
-//
-template <class S>
-std::vector<size_t> sortIndexes(const Vector<S> &v) {
-
-  // initialize original index locations
-  alignas(32) std::vector<size_t> idx(v.size());
-  std::iota(idx.begin(), idx.end(), 0);
-
-  // sort indexes based on comparing values in v
-  std::sort(idx.begin(), idx.end(),
-       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
-
-  return idx;
-}
-
-//
 // Split into two threads, sort, and zipper
 //
 template <class S>
@@ -629,6 +613,86 @@ void reorder(Vector<S> &x, Vector<S> &t,
 }
 
 //
+// Perform an experimental partial sort
+//
+template <class S>
+void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx,
+                        const size_t istart, const size_t nless, const size_t istop) {
+
+  assert(v.size() == idx.size() && "Array size mismatch in partialSortIndexes");
+  assert(v.size() >= istop && "Not enough data in partialSortIndexes");
+  assert(istop > istart && "Invalid sort range in partialSortIndexes");
+  assert(nless > istart && "Invalid cutoff in partialSortIndexes");
+  assert(nless < istop && "Invalid cutoff in partialSortIndexes");
+
+  // initialize original index locations
+  std::iota(idx.begin()+istart, idx.begin()+istop, istart);
+
+  // set initial low and high indicies for the test area
+  size_t pfirst = istart;
+  size_t plast = istop-1;
+  int iters = 0;
+  float cutoff_ideal = (float)(nless-istart) / (float)(istop-istart);
+
+  while (plast > pfirst and iters < 100) {
+
+    // find min/max of range
+    auto minmax = minMaxValue(v, pfirst, plast+1);
+
+    // estimate value at cutoff
+    S frac = (S)(nless-0.5-pfirst) / (S)(plast-pfirst);
+    frac = (9.0*frac + 1.0*cutoff_ideal) / 10.0;
+    S testval = minmax.first + (minmax.second-minmax.first) * frac;
+
+    // march from both ends looking for pairs to swap
+    size_t tfirst = pfirst;
+    size_t tlast = plast;
+
+    while (true) {
+      while (v[tfirst] < testval) ++tfirst;
+      while (v[tlast] >= testval) --tlast;
+      if (tlast > tfirst) {
+        // why not use std::swap? try it. go ahead. i'll wait here.
+        const S val = v[tfirst];
+        v[tfirst] = v[tlast];
+        v[tlast] = val;
+        const size_t ival = idx[tfirst];
+        idx[tfirst] = idx[tlast];
+        idx[tlast] = ival;
+      } else {
+        break;
+      }
+    }
+
+    // now all points from pfirst to tlast are below, 
+    // and all points from tfirst to plast are above
+
+    const size_t oldpfirst = pfirst;
+    const size_t oldplast = plast;
+
+    // test for completion, or refine bounds for next step
+    if (tfirst == nless) {
+      // sort complete!
+      break;
+    } else if (tfirst < nless) {
+      // reset lower bound
+      pfirst = tfirst;
+    } else {
+      // rest upper bound
+      plast = tlast;
+    }
+
+    // if pfirst and plast didn't change, then the middle numbers are all the same
+    if (pfirst == oldpfirst and plast == oldplast) {
+      break;
+    }
+
+    iters++;
+  }
+}
+
+
+//
 // Make a VAMsplit k-d tree from this set of particles
 // Split this segment of the particles on its longest axis
 //
@@ -690,24 +754,24 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     }
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
 
-    // sort this portion of the array along the big axis
-    //printf("sort\n");
-    //if (pfirst == 0) reset_and_start_timer();
-    (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.lidx, pfirst, plast);
-    //if (pfirst == 0) printf("    sort time:\t\t[%.3f] million cycles\n", get_elapsed_mcycles());
-
-    // rearrange the elements - parallel sections did not make things faster
-    //printf("reorder\n");
-    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
-    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
-    reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
-    p.reorder_idx(pfirst, plast);
-    //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
-    //if (pfirst == 0) printf("    reorder time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
-
     // determine where the split should be
     size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
     //printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
+
+    // sort this portion of the array along the big axis
+#ifdef PARTIAL_SORT
+    (void) partialSortIndexes(p.x[maxaxis], p.lidx, pfirst, pmiddle, plast);
+    // note, this also sorts the values
+    for (int d=0; d<PD; ++d) if (d != maxaxis) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+#else
+    (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.lidx, pfirst, plast);
+    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+#endif
+
+    // rearrange the elements - parallel sections did not make things faster
+    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
+    reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
+    p.reorder_idx(pfirst, plast);
 
     // recursively call this routine for this node's new children
     #pragma omp task shared(p,t)
