@@ -7,9 +7,9 @@
 #define STORE float
 #define ACCUM float
 
-//#define USE_RM_KERNEL
+#define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
-#define USE_EXPONENTIAL_KERNEL2
+//#define USE_EXPONENTIAL_KERNEL2
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -652,7 +652,19 @@ int main(int argc, char *argv[]) {
     printf("  block size of %ld and theta %g\n\n", blockSize, theta);
 
     // if problem is too big, skip some number of target particles
+#ifdef _OPENMP
+  #ifdef USE_VC
+    size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+10));
+  #else
     size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+  #endif
+#else
+  #ifdef USE_VC
+    size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+9));
+  #else
+    size_t ntskip = std::max(1, (int)((float)numSrcs*(float)numTargs/2.e+8));
+  #endif
+#endif
 
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
