@@ -8,7 +8,8 @@
 #define ACCUM float
 
 //#define USE_RM_KERNEL
-#define USE_EXPONENTIAL_KERNEL
+//#define USE_EXPONENTIAL_KERNEL
+#define USE_V2_KERNEL
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -36,6 +37,9 @@ template <class S> using Vector = std::vector<S>;
 
 
 #ifdef USE_RM_KERNEL
+//
+// core functions - Rosenhead-Moore
+//
 template <class S>
 static inline S core_func (const S distsq, const S sr) {
   const S r2 = distsq + sr*sr;
@@ -63,6 +67,9 @@ static inline int flops_tp_nograds () { return 5; }
 #endif
 
 #ifdef USE_EXPONENTIAL_KERNEL
+//
+// core functions - compact exponential
+//
 template <class S>
 static inline S core_func (const S distsq, const S sr) {
 #ifdef USE_VC
@@ -126,8 +133,46 @@ inline double core_func (const double distsq, const double sr) {
 static inline int flops_tp_nograds () { return 9; }
 #endif
 
+#ifdef USE_V2_KERNEL
+//
+// core functions - compact exponential
+//
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S s2 = sr*sr;
+  const S denom = distsq*distsq + s2*s2;
+#ifdef USE_VC
+  const S rsqd = Vc::rsqrt(denom);
+  return rsqd*Vc::sqrt(rsqd);
+#else
+  const S sqd = std::sqrt(denom);
+  return S(1.0) / (sqd*std::sqrt(sqd));
+#endif
+}
 
+// specialize, in case the non-vectorized version of nbody_kernel is called
+template <>
+inline float core_func (const float distsq, const float sr) {
+  const float s2 = sr*sr;
+  const float denom = distsq*distsq + s2*s2;
+  const float sqd = std::sqrt(denom);
+  return 1.0f / (sqd*std::sqrt(sqd));
+}
+
+template <>
+inline double core_func (const double distsq, const double sr) {
+  const double s2 = sr*sr;
+  const double denom = distsq*distsq + s2*s2;
+  const double sqd = std::sqrt(denom);
+  return 1.0 / (sqd*std::sqrt(sqd));
+}
+
+static inline int flops_tp_nograds () { return 7; }
+#endif
+
+//
 // casting from S to A
+//
 template <class S, class A>
 #ifdef USE_VC
 static inline A mycast (const S _in) { return Vc::simd_cast<A>(_in); }
