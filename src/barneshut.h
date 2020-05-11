@@ -701,11 +701,13 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
 
     //printf("splitNode %ld  %ld %ld\n", tnode, pfirst, plast);
 
+    #ifndef PARTIAL_SORT
     #ifdef _OPENMP
     const int thislev = log_2(tnode);
     const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
     #else
     const int sort_recursion = 0;
+    #endif
     #endif
 
     // debug print - starting condition
