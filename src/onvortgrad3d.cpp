@@ -7,8 +7,8 @@
 #define STORE float
 #define ACCUM float
 
-#define USE_RM_KERNEL
-//#define USE_EXPONENTIAL_KERNEL
+//#define USE_RM_KERNEL
+#define USE_EXPONENTIAL_KERNEL
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -34,57 +34,71 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 template <class S> using Vector = std::vector<S>;
 #endif
 
+
+#ifdef USE_VC
+template <class S>
+static inline S oor1p5(const S _in) {
+  //return Vc::reciprocal(_in*Vc::sqrt(_in));           // 243 GFlop/s
+  return Vc::rsqrt(_in) * Vc::reciprocal(_in);          // 302 GFlop/s
+}
+template <>
+inline float oor1p5(const float _in) {
+  return 1.0f / (_in*std::sqrt(_in));
+}
+template <>
+inline double oor1p5(const double _in) {
+  return 1.0 / (_in*std::sqrt(_in));
+}
+#else
+template <class S>
+static inline S oor1p5(const S _in) {
+  return S(1.0) / (_in*std::sqrt(_in));
+}
+#endif
+
+#ifdef USE_VC
+template <class S>
+static inline S my_recip(const S _in) {
+  return Vc::reciprocal(_in);
+}
+template <>
+inline float my_recip(const float _in) {
+  return 1.0f / _in;
+}
+template <>
+inline double my_recip(const double _in) {
+  return 1.0 / _in;
+}
+#else
+template <class S>
+static inline S my_recip(const S _in) {
+  return S(1.0) / _in;
+}
+#endif
+
+
 #ifdef USE_RM_KERNEL
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
   const S r2 = distsq + sr*sr;
-#ifdef USE_VC
-  *r3 = Vc::reciprocal(r2*Vc::sqrt(r2));
-  *bbb = S(-3.0) * (*r3) * Vc::reciprocal(r2);
-#else
-  *r3 = S(1.0) / (r2*std::sqrt(r2));
-  *bbb = S(-3.0) * (*r3) / r2;
-#endif
+  *r3 = oor1p5(r2);
+  *bbb = S(-3.0) * (*r3) * my_recip(r2);
 }
-
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <>
-inline void core_func (const float distsq, const float sr,
-                       float* const __restrict__ r3, float* const __restrict__ bbb) {
-  const float r2 = distsq + sr*sr;
-  *r3 = 1.0f / (r2*std::sqrt(r2));
-  *bbb = -3.0f * (*r3) / r2;
-}
-
-template <>
-inline void core_func (const double distsq, const double sr,
-                       double* const __restrict__ r3, double* const __restrict__ bbb) {
-  const double r2 = distsq + sr*sr;
-  *r3 = 1.0 / (r2*std::sqrt(r2));
-  *bbb = -3.0 * (*r3) / r2;
-}
-
 int flops_tp_grads () { return 7; }
 #endif
 
 #ifdef USE_EXPONENTIAL_KERNEL
+#ifdef USE_VC
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
-#ifdef USE_VC
   const S dist = Vc::sqrt(distsq);
   const S corefac = Vc::reciprocal(sr*sr*sr);
-#else
-  const S dist = std::sqrt(distsq);
-  const S corefac = S(1.0) / std::pow(sr,3);
-#endif
-
   const S d3 = distsq * dist;
   const S reld3 = d3 * corefac;
   // 6 flops to here
 
-#ifdef USE_VC
   S myr3, mybbb;
   myr3(reld3 > S(16.0)) = Vc::reciprocal(d3);
   mybbb(reld3 > S(16.0)) = S(-3.0) / (d3 * distsq);
@@ -95,7 +109,68 @@ static inline void core_func (const S distsq, const S sr,
   mybbb(reld3 < S(0.001)) = S(-1.5) * dist * corefac * corefac;
   *r3 = myr3;
   *bbb = mybbb;
+}
+
+template <>
+inline void core_func (const float distsq, const float sr,
+                              float* const __restrict__ r3, float* const __restrict__ bbb) {
+  const float dist = std::sqrt(distsq);
+  const float corefac = 1.0f / std::pow(sr,3);
+  const float d3 = distsq * dist;
+  const float reld3 = d3 * corefac;
+  // 6 flops to here
+
+  if (reld3 > 16.0f) {
+    *r3 = 1.0f / d3;
+    *bbb = -3.0f / (d3 * distsq);
+    // this is 4 flops and is most likely
+  } else if (reld3 < 0.001f) {
+    *r3 = corefac;
+    *bbb = -1.5f * dist * corefac * corefac;
+    // this is 5 flops
+  } else {
+    const float expreld3 = std::exp(-reld3);
+    *r3 = (1.0f - expreld3) / d3;
+    *bbb = 3.0f * (corefac*expreld3 - *r3) / distsq;
+    // this is 9 flops
+  }
+}
+
+template <>
+inline void core_func (const double distsq, const double sr,
+                              double* const __restrict__ r3, double* const __restrict__ bbb) {
+  const double dist = std::sqrt(distsq);
+  const double corefac = 1.0 / std::pow(sr,3);
+  const double d3 = distsq * dist;
+  const double reld3 = d3 * corefac;
+  // 6 flops to here
+
+  if (reld3 > 16.0) {
+    *r3 = 1.0 / d3;
+    *bbb = -3.0 / (d3 * distsq);
+    // this is 4 flops and is most likely
+  } else if (reld3 < 0.001) {
+    *r3 = corefac;
+    *bbb = -1.5 * dist * corefac * corefac;
+    // this is 5 flops
+  } else {
+    const double expreld3 = std::exp(-reld3);
+    *r3 = (1.0 - expreld3) / d3;
+    *bbb = 3.0 * (corefac*expreld3 - *r3) / distsq;
+    // this is 9 flops
+  }
+}
 #else
+
+template <class S>
+static inline void core_func (const S distsq, const S sr,
+                              S* const __restrict__ r3, S* const __restrict__ bbb) {
+  const S dist = std::sqrt(distsq);
+  const S corefac = S(1.0) / std::pow(sr,3);
+  const S d3 = distsq * dist;
+  const S reld3 = d3 * corefac;
+  // 6 flops to here
+
   if (reld3 > S(16.0)) {
     *r3 = S(1.0) / d3;
     *bbb = S(-3.0) / (d3 * distsq);
@@ -110,8 +185,8 @@ static inline void core_func (const S distsq, const S sr,
     *bbb = S(3.0) * (corefac*expreld3 - *r3) / distsq;
     // this is 9 flops
   }
-#endif
 }
+#endif
 
 int flops_tp_grads () { return 11; }
 #endif
