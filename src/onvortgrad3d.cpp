@@ -101,9 +101,8 @@ static inline void core_func (const S distsq, const S sr,
   const S dm3 = Vc::reciprocal(d3);
   const S dm2 = dm1 * dm1;
 
-  S myr3, mybbb;
-  myr3(reld3 > S(16.0)) = dm3;
-  mybbb(reld3 > S(16.0)) = S(-3.0) * dm3 * dm2;
+  S myr3 = dm3;
+  S mybbb = S(-3.0) * dm3 * dm2;
   const S expreld3 = Vc::exp(-reld3);
   myr3(reld3 < S(16.0)) = (S(1.0) - expreld3) * dm3;
   mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) * dm2;
