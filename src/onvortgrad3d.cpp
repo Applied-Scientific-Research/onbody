@@ -99,15 +99,16 @@ static inline void core_func (const S distsq, const S sr,
   const S reld3 = d3 * corefac;
   // 6 flops to here
   const S dm3 = Vc::reciprocal(d3);
+  const S dm2 = dm1 * dm1;
 
   S myr3, mybbb;
   myr3(reld3 > S(16.0)) = dm3;
-  mybbb(reld3 > S(16.0)) = S(-3.0) * dm3 / distsq;
+  mybbb(reld3 > S(16.0)) = S(-3.0) * dm3 * dm2;
   const S expreld3 = Vc::exp(-reld3);
   myr3(reld3 < S(16.0)) = (S(1.0) - expreld3) * dm3;
-  mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) / distsq;
+  mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) * dm2;
   myr3(reld3 < S(0.001)) = corefac;
-  mybbb(reld3 < S(0.001)) = S(-1.5) * distsq * dm1 * corefac * corefac;
+  mybbb(reld3 < S(0.001)) = S(-1.5) * dm2 * reld3 * corefac;
   *r3 = myr3;
   *bbb = mybbb;
 }
