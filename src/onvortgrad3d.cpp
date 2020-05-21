@@ -93,9 +93,9 @@ int flops_tp_grads () { return 7; }
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
-  const S dist = Vc::sqrt(distsq);
+  const S dm1 = Vc::rsqrt(distsq);
   const S corefac = Vc::reciprocal(sr*sr*sr);
-  const S d3 = distsq * dist;
+  const S d3 = distsq * distsq * dm1;
   const S reld3 = d3 * corefac;
   // 6 flops to here
 
@@ -106,14 +106,14 @@ static inline void core_func (const S distsq, const S sr,
   myr3(reld3 < S(16.0)) = (S(1.0) - expreld3) / d3;
   mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) / distsq;
   myr3(reld3 < S(0.001)) = corefac;
-  mybbb(reld3 < S(0.001)) = S(-1.5) * dist * corefac * corefac;
+  mybbb(reld3 < S(0.001)) = S(-1.5) * distsq * dm1 * corefac * corefac;
   *r3 = myr3;
   *bbb = mybbb;
 }
 
 template <>
 inline void core_func (const float distsq, const float sr,
-                              float* const __restrict__ r3, float* const __restrict__ bbb) {
+                       float* const __restrict__ r3, float* const __restrict__ bbb) {
   const float dist = std::sqrt(distsq);
   const float corefac = 1.0f / std::pow(sr,3);
   const float d3 = distsq * dist;
@@ -138,7 +138,7 @@ inline void core_func (const float distsq, const float sr,
 
 template <>
 inline void core_func (const double distsq, const double sr,
-                              double* const __restrict__ r3, double* const __restrict__ bbb) {
+                       double* const __restrict__ r3, double* const __restrict__ bbb) {
   const double dist = std::sqrt(distsq);
   const double corefac = 1.0 / std::pow(sr,3);
   const double d3 = distsq * dist;
