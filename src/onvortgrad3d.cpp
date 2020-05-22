@@ -7,8 +7,8 @@
 #define STORE float
 #define ACCUM float
 
-//#define USE_RM_KERNEL
-#define USE_EXPONENTIAL_KERNEL
+#define USE_RM_KERNEL
+//#define USE_EXPONENTIAL_KERNEL
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -268,18 +268,10 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
     const Vc::Vector<S> vtz = targs.x[2][i];
-    VecA vtu0(0.0f);
-    VecA vtu1(0.0f);
-    VecA vtu2(0.0f);
-    VecA vtu3(0.0f);
-    VecA vtu4(0.0f);
-    VecA vtu5(0.0f);
-    VecA vtu6(0.0f);
-    VecA vtu7(0.0f);
-    VecA vtu8(0.0f);
-    VecA vtu9(0.0f);
-    VecA vtu10(0.0f);
-    VecA vtu11(0.0f);
+    VecA vtu0(0.0f); VecA vtu1(0.0f); VecA vtu2(0.0f);
+    VecA vtu3(0.0f); VecA vtu4(0.0f); VecA vtu5(0.0f);
+    VecA vtu6(0.0f); VecA vtu7(0.0f); VecA vtu8(0.0f);
+    VecA vtu9(0.0f); VecA vtu10(0.0f); VecA vtu11(0.0f);
     // reference source data as Vc::Vector<A>
     sxit = srcs.x[0].begin() + jstart;
     syit = srcs.x[1].begin() + jstart;
@@ -346,18 +338,10 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
         const Vc::Vector<S> vtz = targs.x[2][i];
-        VecA vtu0(0.0f);
-        VecA vtu1(0.0f);
-        VecA vtu2(0.0f);
-        VecA vtu3(0.0f);
-        VecA vtu4(0.0f);
-        VecA vtu5(0.0f);
-        VecA vtu6(0.0f);
-        VecA vtu7(0.0f);
-        VecA vtu8(0.0f);
-        VecA vtu9(0.0f);
-        VecA vtu10(0.0f);
-        VecA vtu11(0.0f);
+        VecA vtu0(0.0f); VecA vtu1(0.0f); VecA vtu2(0.0f);
+        VecA vtu3(0.0f); VecA vtu4(0.0f); VecA vtu5(0.0f);
+        VecA vtu6(0.0f); VecA vtu7(0.0f); VecA vtu8(0.0f);
+        VecA vtu9(0.0f); VecA vtu10(0.0f); VecA vtu11(0.0f);
         // convert source data to Vc::Vector<S>
         sxit = srcs.x[0].begin() + jstart;
         syit = srcs.x[1].begin() + jstart;
