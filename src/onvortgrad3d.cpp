@@ -85,7 +85,7 @@ static inline void core_func (const S distsq, const S sr,
   *r3 = oor1p5(r2);
   *bbb = S(-3.0) * (*r3) * my_recip(r2);
 }
-int flops_tp_grads () { return 7; }
+int flops_tp_grads () { return 8; }
 #endif
 
 #ifdef USE_EXPONENTIAL_KERNEL
@@ -97,17 +97,21 @@ static inline void core_func (const S distsq, const S sr,
   const S corefac = Vc::reciprocal(sr*sr*sr);
   const S d3 = distsq * distsq * dm1;
   const S reld3 = d3 * corefac;
-  // 6 flops to here
   const S dm3 = Vc::reciprocal(d3);
   const S dm2 = dm1 * dm1;
+  // 9 flops to here
 
   S myr3 = dm3;
   S mybbb = S(-3.0) * dm3 * dm2;
   const S expreld3 = Vc::exp(-reld3);
-  myr3(reld3 < S(16.0)) = (S(1.0) - expreld3) * dm3;
-  mybbb(reld3 < S(16.0)) = S(3.0) * (corefac*expreld3 - myr3) * dm2;
-  myr3(reld3 < S(0.001)) = corefac;
-  mybbb(reld3 < S(0.001)) = S(-1.5) * dm2 * reld3 * corefac;
+  // what is auto? Vc::float_m, Vc::Mask<float> usually
+  const auto mid = (reld3 < 16.f);
+  myr3(mid) = (S(1.0) - expreld3) * dm3;
+  mybbb(mid) = S(3.0) * (corefac*expreld3 - myr3) * dm2;
+  const auto close = (reld3 < 0.001f);
+  myr3(close) = corefac;
+  mybbb(close) = S(-1.5) * dm2 * reld3 * corefac;
+  // probably 11 more flops
   *r3 = myr3;
   *bbb = mybbb;
 }
@@ -119,21 +123,19 @@ inline void core_func (const float distsq, const float sr,
   const float corefac = 1.0f / std::pow(sr,3);
   const float d3 = distsq * dist;
   const float reld3 = d3 * corefac;
-  // 6 flops to here
+  const float dm3 = 1.0f / d3;
+  const float dm2 = 1.0f / distsq;
 
   if (reld3 > 16.0f) {
-    *r3 = 1.0f / d3;
-    *bbb = -3.0f / (d3 * distsq);
-    // this is 4 flops and is most likely
+    *r3 = dm3;
+    *bbb = -3.0f * dm3 * dm2;
   } else if (reld3 < 0.001f) {
     *r3 = corefac;
     *bbb = -1.5f * dist * corefac * corefac;
-    // this is 5 flops
   } else {
     const float expreld3 = std::exp(-reld3);
-    *r3 = (1.0f - expreld3) / d3;
-    *bbb = 3.0f * (corefac*expreld3 - *r3) / distsq;
-    // this is 9 flops
+    *r3 = (1.0f - expreld3) * dm3;
+    *bbb = 3.0f * (corefac*expreld3 - *r3) * dm2;
   }
 }
 
@@ -144,21 +146,19 @@ inline void core_func (const double distsq, const double sr,
   const double corefac = 1.0 / std::pow(sr,3);
   const double d3 = distsq * dist;
   const double reld3 = d3 * corefac;
-  // 6 flops to here
+  const double dm3 = 1.0 / d3;
+  const double dm2 = 1.0 / distsq;
 
   if (reld3 > 16.0) {
-    *r3 = 1.0 / d3;
-    *bbb = -3.0 / (d3 * distsq);
-    // this is 4 flops and is most likely
+    *r3 = dm3;
+    *bbb = -3.0 * dm3 * dm2;
   } else if (reld3 < 0.001) {
     *r3 = corefac;
     *bbb = -1.5 * dist * corefac * corefac;
-    // this is 5 flops
   } else {
     const double expreld3 = std::exp(-reld3);
-    *r3 = (1.0 - expreld3) / d3;
-    *bbb = 3.0 * (corefac*expreld3 - *r3) / distsq;
-    // this is 9 flops
+    *r3 = (1.0 - expreld3) * dm3;
+    *bbb = 3.0 * (corefac*expreld3 - *r3) * dm2;
   }
 }
 #else
@@ -170,26 +170,28 @@ static inline void core_func (const S distsq, const S sr,
   const S corefac = S(1.0) / std::pow(sr,3);
   const S d3 = distsq * dist;
   const S reld3 = d3 * corefac;
-  // 6 flops to here
+  const S dm3 = S(1.0) / d3;
+  const S dm2 = S(1.0) / distsq;
+  // 8 flops to here
 
   if (reld3 > S(16.0)) {
-    *r3 = S(1.0) / d3;
-    *bbb = S(-3.0) / (d3 * distsq);
-    // this is 4 flops and is most likely
+    *r3 = dm3;
+    *bbb = S(-3.0) * dm3 * dm2;
+    // this is 3 flops and is very likely
   } else if (reld3 < S(0.001)) {
     *r3 = corefac;
     *bbb = S(-1.5) * dist * corefac * corefac;
-    // this is 5 flops
+    // this is 4 flops
   } else {
     const S expreld3 = std::exp(-reld3);
-    *r3 = (S(1.0) - expreld3) / d3;
-    *bbb = S(3.0) * (corefac*expreld3 - *r3) / distsq;
-    // this is 9 flops
+    *r3 = (S(1.0) - expreld3) * dm3;
+    *bbb = S(3.0) * (corefac*expreld3 - *r3) * dm2;
+    // this is 7 flops and also very likely
   }
 }
 #endif
 
-int flops_tp_grads () { return 11; }
+int flops_tp_grads () { return 15; }
 #endif
 
 
