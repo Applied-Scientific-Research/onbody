@@ -7,9 +7,9 @@
 #define STORE float
 #define ACCUM float
 
-//#define USE_RM_KERNEL
+#define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
-#define USE_V2_KERNEL
+//#define USE_V2_KERNEL
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -35,6 +35,27 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 template <class S> using Vector = std::vector<S>;
 #endif
 
+#ifdef USE_VC
+template <class S>
+static inline S oor1p5(const S _in) {
+  //return Vc::reciprocal(_in*Vc::sqrt(_in));           // 243 GFlop/s
+  return Vc::rsqrt(_in) * Vc::reciprocal(_in);          // 302 GFlop/s
+}
+template <>
+inline float oor1p5(const float _in) {
+  return 1.0f / (_in*std::sqrt(_in));
+}
+template <>
+inline double oor1p5(const double _in) {
+  return 1.0 / (_in*std::sqrt(_in));
+}
+#else
+template <class S>
+static inline S oor1p5(const S _in) {
+  return S(1.0) / (_in*std::sqrt(_in));
+}
+#endif
+
 
 #ifdef USE_RM_KERNEL
 //
@@ -43,26 +64,8 @@ template <class S> using Vector = std::vector<S>;
 template <class S>
 static inline S core_func (const S distsq, const S sr) {
   const S r2 = distsq + sr*sr;
-#ifdef USE_VC
-  return Vc::reciprocal(r2*Vc::sqrt(r2));
-#else
-  return S(1.0) / (r2*std::sqrt(r2));
-#endif
+  return oor1p5(r2);
 }
-
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <>
-inline float core_func (const float distsq, const float sr) {
-  const float r2 = distsq + sr*sr;
-  return 1.0f / (r2*std::sqrt(r2));
-}
-
-template <>
-inline double core_func (const double distsq, const double sr) {
-  const double r2 = distsq + sr*sr;
-  return 1.0 / (r2*std::sqrt(r2));
-}
-
 static inline int flops_tp_nograds () { return 5; }
 #endif
 
