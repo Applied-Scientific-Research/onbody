@@ -63,10 +63,10 @@ static inline int flops_tp_nograds () { return 3; }
 template <class S>
 static inline S core_func (const S distsq, const S sr) {
 #ifdef USE_VC
-  const S ood2 = Vc::reciprocal(distsq);
+  const S ood2 = Vc::reciprocal(distsq+S(1.e-6));
   const S corefac = Vc::reciprocal(sr*sr);
 #else
-  const S ood2 = S(1.0) / distsq;
+  const S ood2 = S(1.0) / (distsq+S(1.e-6));
   const S corefac = S(1.0) / std::pow(sr,2);
 #endif
   const S reld2 = corefac / ood2;
@@ -285,13 +285,19 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
-    // allocate space for sources and targets
-    Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
+    // allocate space for sources and targets (but always a little more)
+    const int nsrclen = 8 * (*nsrc/8 + 1);
+    Parts<STORE,ACCUM,2,1,2> srcs(nsrclen, true);
+    //srcs.n = *nsrc;
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 1.0;
 
     Parts<STORE,ACCUM,2,1,2> targs(*ntarg, false);
     // initialize particle data
@@ -375,10 +381,13 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] += targs.u[0][i];
         for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] += targs.u[1][i];
         //for (int i=0; i<*ntarg; ++i) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
+        //for (int i=0; i<*nsrc; i+=100) printf("  %d  %g %g  %g %g\n", i, sx[i], sy[i], ss[i], sr[i]);
+        //for (int i=0; i<*ntarg; i+=100) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
     } else {
         // pull them out directly
         for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
         for (int i=0; i<*ntarg; ++i) tv[i] += targs.u[1][i];
+        //for (int i=0; i<*ntarg; i+=10) printf("  %d  %g %g\n", i, tu[i], tv[i]);
     }
 
     return flops;
@@ -388,10 +397,10 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
 //
 // same, but direct solver
 //
-extern "C" float external_vel_direct_f_ (const int* nsrc,  const float* sx, const float* sy,
-                                               const float* ss, const float* sr,
-                             const int* ntarg, const float* tx, const float* ty,
-                                                     float* tu,       float* tv) {
+extern "C" float external_vel_direct_f_ (const int* nsrc, const float* sx, const float* sy,
+                                         const float* ss, const float* sr,
+                                         const int* ntarg, const float* tx, const float* ty,
+                                         float* tu,       float* tv) {
     float flops = 0.0;
     bool silent = true;
 
