@@ -988,7 +988,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
         }
     }
 
-    //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
+    //printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
     if (t.num[tnode] <= blockSize) {
         // make the equivalent particles for this node
         (void) refineLeaf(p, t, t.ioffset[tnode], t.ioffset[tnode]+t.num[tnode]);
@@ -1027,11 +1027,11 @@ void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,
 
     t.epoffset[tnode] = tnode * blockSize;
     t.epnum[tnode] = 0;
-    //printf("    equivalent particles start at %d\n", t.epoffset[tnode]);
+    //printf("    equivalent particles start at %ld\n", t.epoffset[tnode]);
 
     // loop over children, adding equivalent particles to our list
     for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
-        //printf("  child %d has %d particles\n", ichild, t.num[ichild]);
+        //printf("  child %ld has %ld particles\n", ichild, t.num[ichild]);
 
         // split on whether this child is a leaf node or not
         if (t.num[ichild] > blockSize) {
@@ -1041,20 +1041,20 @@ void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,
             //printf("  back in node %d...\n", tnode);
 
             // now we read those equivalent particles and make higher-level equivalents
-            //printf("    child %d made equiv parts %d to %d\n", ichild, t.epoffset[ichild], t.epoffset[ichild]+t.epnum[ichild]);
+            //printf("    child %ld made equiv parts %ld to %ld\n", ichild, t.epoffset[ichild], t.epoffset[ichild]+t.epnum[ichild]);
 
             // merge pairs of child's equivalent particles until we have half
             size_t numEqps = (t.epnum[ichild]+1) / 2;
             size_t istart = (blockSize/2) * ichild;
             size_t istop = istart + numEqps;
-            //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
+            //printf("    making %ld equivalent particles %ld to %ld\n", numEqps, istart, istop);
 
             // loop over new equivalent particles and real particles together
             size_t iep = istart;
             size_t ip = t.epoffset[ichild] + 1;
             for (; iep<istop and ip<t.epoffset[ichild]+t.epnum[ichild];
                    iep++,     ip+=2) {
-                //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
+                //printf("    merging %ld and %ld into %ld\n", ip-1,ip,iep);
                 S str1, str2;
                 if (SD == 1) {
                     str1 = std::max((S)1.e-20, std::abs(ep.s[0][ip-1]));
@@ -1074,7 +1074,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.epoffset[ichild]+t.epnum[ichild]) {
-                //printf("    passing %d up into %d\n", ip-1,iep);
+                //printf("    passing %ld up into %ld\n", ip-1,iep);
                 for (int d=0; d<PD; ++d) ep.x[d][iep] = ep.x[d][ip-1];
                 for (int d=0; d<SD; ++d) ep.s[d][iep] = ep.s[d][ip-1];
                 ep.r[iep] = ep.r[ip-1];
@@ -1082,20 +1082,20 @@ void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,
             t.epnum[tnode] += numEqps;
         } else {
             // this child is a leaf node
-            //printf("    child leaf node has particles %d to %d\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
+            //printf("    child leaf node has particles %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
 
             // if we're a leaf node, merge pairs of particles until we have half
             size_t numEqps = (t.num[ichild]+1) / 2;
             size_t istart = (blockSize/2) * ichild;
             size_t istop = istart + numEqps;
-            //printf("    making %d equivalent particles %d to %d\n", numEqps, istart, istop);
+            //printf("    making %ld equivalent particles %ld to %ld\n", numEqps, istart, istop);
 
             // loop over new equivalent particles and real particles together
             size_t iep = istart;
             size_t ip = t.ioffset[ichild] + 1;
             for (; iep<istop and ip<t.ioffset[ichild]+t.num[ichild];
                    iep++,     ip+=2) {
-                //printf("    merging %d and %d into %d\n", ip-1,ip,iep);
+                //printf("    merging %ld and %ld into %ld\n", ip-1,ip,iep);
                 S str1, str2;
                 if (SD == 1) {
                     str1 = std::max((S)1.e-20, std::abs(p.s[0][ip-1]));
@@ -1115,12 +1115,12 @@ void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,
                 //if (ep.r[iep] != ep.r[iep]) {
                 //    printf("nan detected at ep %ld\n", iep);
                 //    printf("  pos %g %g and %g %g\n", p.x[0][ip-1], p.x[1][ip-1], p.x[0][ip], p.x[1][ip]);
-                //    printf("  str %g %g and rads %g %g\n", p.m[ip-1], p.m[ip], p.r[ip-1], p.r[ip]);
+                //    printf("  str %g %g and rads %g %g\n", p.s[0][ip-1], p.s[0][ip], p.r[ip-1], p.r[ip]);
                 //}
             }
             // don't merge the last odd one, just pass it up unmodified
             if (ip == t.ioffset[ichild]+t.num[ichild]) {
-                //printf("    passing %d up into %d\n", ip-1,iep);
+                //printf("    passing %ld up into %ld\n", ip-1,iep);
                 for (int d=0; d<PD; ++d) ep.x[d][iep] = p.x[d][ip-1];
                 ep.r[iep] = p.r[ip-1];
                 for (int d=0; d<SD; ++d) ep.s[d][iep] = p.s[d][ip-1];
