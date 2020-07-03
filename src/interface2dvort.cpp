@@ -408,12 +408,17 @@ extern "C" float external_vel_direct_f_ (const int* nsrc, const float* sx, const
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
+    const int nsrclen = 8 * (*nsrc/8 + 1);
+    Parts<STORE,ACCUM,2,1,2> srcs(nsrclen, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
+    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 0.0;
 
     Parts<STORE,ACCUM,2,1,2> targs(*ntarg, false);
     // initialize particle data
