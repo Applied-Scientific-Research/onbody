@@ -280,6 +280,7 @@ After changing the exponent on the distance in the box-opening criterion, the co
 * Increase accuracy of the prolongation operator - this means writing a simple linear least squares solver to determine the solution and gradient at a child point, given a set of weighted parent neighbor (equivalent point) values
 * Use a nearest-neighbor search for the prolongation - don't just take the other 7 or 15 in the parent box; but that uses non-local information!
 * Pull in Eigen to assemble and solve the matrix equation for the prolongation - we need more moments taken into consideration to raise the accuracy, I believe
+* Consider https://github.com/SINTEF-Geometry/MBA or https://github.com/SINTEF-Geometry/LSMG or https://github.com/ddemidov/mba for spline interpolation of the prolongation operation
 * Use smarter or faster data structures in the O(N) list-building system
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * Add radii to the target points (even if all zeros) and include their effect in the core function
