@@ -274,6 +274,13 @@ After changing the exponent on the distance in the box-opening criterion, the co
     `OMP_NUM_THREADS=16 ./ongrav3d -n=10000000 -t=2.0`
     `OMP_NUM_THREADS=16 ./onvort3d -n=10000000 -t=3.0`
 
+#### Barycentric Lagrange form
+Instead of generating N/2 equivalent particles from a tree node with N particles, we instead
+create K^D proxy particles at Chebyshev nodes of the 2nd kind and interpolate the tree nodes'
+particles onto those. Depending on K, this creates a higher-order distribution of charges/masses
+with which to perform long-range interactions. See Wang-Tlupova-Krasny 2020 for details.
+
+
 ## To Do
 
 * Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code
