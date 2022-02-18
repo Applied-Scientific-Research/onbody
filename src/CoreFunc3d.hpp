@@ -11,7 +11,7 @@
 #define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
 
-#include "MathHelper.h"
+#include "MathHelper.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>

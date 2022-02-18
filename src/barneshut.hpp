@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "Parts.h"
-#include "Tree.h"
+#include "Parts.hpp"
+#include "Tree.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>

@@ -7,7 +7,7 @@
 #define STORE float
 #define ACCUM float
 
-#include "CoreFunc3d.h"
+#include "CoreFunc3d.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -235,7 +235,7 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 // Now we can include the tree-building and recursion code
 //
-#include "barneshut.h"
+#include "barneshut.hpp"
 //
 //
 
