@@ -43,6 +43,8 @@ static inline uint32_t log_2(const uint32_t x) {
 // arrays always have 2^levels boxes allocated, even if some are not used
 // this way, node i children are 2*i and 2*i+1
 //
+// templatized on (S)torage type, (P)osition (D)imensions, and (S)trength (D)ims
+//
 template <class S, int PD, int SD>
 class Tree {
 public:
@@ -57,6 +59,8 @@ public:
 
     // tree node centers of mass
     alignas(32) std::array<Vector<S>, PD> x;
+    // node geometric center
+    alignas(32) std::array<Vector<S>, PD> nc;
     // node size
     alignas(32) std::array<Vector<S>, PD> ns;
     // node radius
@@ -90,6 +94,7 @@ template <class S, int PD, int SD>
 void Tree<S,PD,SD>::resize(size_t _num) {
     numnodes = _num;
     for (int d=0; d<PD; ++d) x[d].resize(numnodes);
+    for (int d=0; d<PD; ++d) nc[d].resize(numnodes);
     for (int d=0; d<PD; ++d) ns[d].resize(numnodes);
     nr.resize(numnodes);
     pr.resize(numnodes);

@@ -232,7 +232,7 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
         return;
     }
 
-    // minimum distance between box corners
+    // minimum distance between box corners - THIS IS WRONG!!! x is not the center but the cm!
     S dist = 0.0;
     for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.ns[d][snode]+tt.ns[d][tnode])), 2);
     dist = std::sqrt(dist);
@@ -526,6 +526,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     for (int d=0; d<PD; ++d) {
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
         t.ns[d][tnode] = minmax.second - minmax.first;
+        t.nc[d][tnode] = 0.5 * (minmax.second + minmax.first);
     }
 
     // write particle data to the tree node
@@ -807,7 +808,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
 
     if (tnode == 1) {
         #pragma omp taskwait
-        // allocate temporaries
+        // de-allocate temporaries
         p.lidx.resize(0);
         p.itemp.resize(0);
         p.ftemp.resize(0);
