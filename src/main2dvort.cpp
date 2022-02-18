@@ -1,5 +1,5 @@
 /*
- * barneshut.cpp - driver for Barnes-Hut treecode
+ * main2dvort.cpp - driver for Barnes-Hut treecode
  *
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
@@ -18,17 +18,17 @@
 
 // the fast solver
 extern "C" float external_vel_solver_f_ (const int*, const float*, const float*,
-                                                const float*, const float*,
-                                    const int*, const float*, const float*,
-                                                      float*,       float*);
+                                                     const float*, const float*,
+                                         const int*, const float*, const float*,
+                                                           float*,       float*);
 
 // the direct solver
 extern "C" float external_vel_direct_f_ (const int*, const float*, const float*,
-                                                const float*, const float*,
-                                    const int*, const float*, const float*,
-                                                      float*,       float*);
+                                                     const float*, const float*,
+                                         const int*, const float*, const float*,
+                                                           float*,       float*);
 
-const char* progname = "barneshut";
+const char* progname = "main2dvort";
 
 //
 // basic usage

@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include "Parts.hpp"
+#include "Tree.hpp"
+
 #ifdef USE_VC
 #include <Vc/Vc>
 #endif
@@ -32,206 +35,6 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 #else
 template <class S> using Vector = std::vector<S>;
 #endif
-
-// the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 128;
-
-//
-// Find index of msb of uint32
-// from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
-//
-static inline uint32_t log_2(const uint32_t x) {
-    if (x == 0) return 0;
-    return (31 - __builtin_clz (x));
-}
-
-//
-// A set of particles, can be sources or targets
-//
-// templatized on (S)torage and (A)ccumulator types, and
-//   (P)osition (D)imensions, (S)trength (D)ims, (O)utput (D)ims
-//
-template <class S, class A, int PD, int SD, int OD>
-class Parts {
-public:
-    Parts(const size_t, const bool);
-    void resize(const size_t);
-    void random_in_cube();
-    void smooth_strengths();
-    void central_strengths();
-    void wave_strengths();
-    void zero_vels();
-    void reorder_idx(const size_t, const size_t);
-
-    // state
-    bool are_sources;
-    size_t n;
-    alignas(32) std::array<Vector<S>, PD> x;
-
-    // actuator (needed by sources)
-    alignas(32) std::array<Vector<S>, SD> s;
-    alignas(32) Vector<S> r;
-
-    // results (needed by targets)
-    alignas(32) std::array<Vector<A>, OD> u;
-    alignas(32) std::vector<size_t> gidx;
-
-    // temporary
-    alignas(32) std::vector<size_t> lidx;
-    alignas(32) std::vector<size_t> itemp;
-    alignas(32) Vector<S> ftemp;
-
-    // useful later
-    //typename S::value_type state_type;
-    //typename A::value_type accumulator_type;
-};
-
-template <class S, class A, int PD, int SD, int OD>
-Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs) {
-    are_sources = _aresrcs;
-    resize(_num);
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::resize(const size_t _num) {
-    n = _num;
-    for (int d=0; d<PD; ++d) x[d].resize(n);
-    if (are_sources) for (int d=0; d<SD; ++d) s[d].resize(n);
-    r.resize(n);
-    if (not are_sources) for (int d=0; d<OD; ++d) u[d].resize(n);
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::random_in_cube() {
-    for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
-    if (are_sources) for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
-    for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)PD); }
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::smooth_strengths() {
-    if (not are_sources) return;
-    const S factor = 1.0 / (S)n;
-    for (int d=0; d<SD; ++d) {
-        for (size_t i=0; i<n; i++) {
-            s[d][i] = factor * (x[0][i] - x[1][i]);
-        }
-    }
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::central_strengths() {
-    if (not are_sources) return;
-    const S factor = 1.0 / (S)n;
-    for (size_t i=0; i<n; i++) {
-        S dist = 0.0;
-        for (int d=0; d<PD; ++d) dist += std::pow(x[d][i]-0.5,2);
-        dist = std::sqrt(dist);
-        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
-    }
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::wave_strengths() {
-    if (not are_sources) return;
-    const S factor = 1.0 / (S)n;
-    for (size_t i=0; i<n; i++) {
-        for (int d=0; d<SD; ++d) s[d][i] = factor * std::cos((d+0.7)*10.0*x[d][i]);
-    }
-}
-
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::zero_vels() {
-    if (are_sources) return;
-    for (int d=0; d<OD; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
-}
-
-//
-// Helper function to reorder the reordering indexes
-//
-template <class S, class A, int PD, int SD, int OD>
-void Parts<S,A,PD,SD,OD>::reorder_idx(const size_t pfirst, const size_t plast) {
-
-    // copy the original global index vector gidx into a temporary vector
-    std::copy(gidx.begin()+pfirst, gidx.begin()+plast, itemp.begin()+pfirst);
-
-    // scatter values from the temp vector back into the original vector
-    for (size_t i=pfirst; i<plast; ++i) gidx[i] = itemp[lidx[i]];
-}
-
-
-//
-// A tree, made of a structure of arrays
-//
-// 0 is empty, root node is 1, children are 2,3, their children 4,5 and 6,7
-// arrays always have 2^levels boxes allocated, even if some are not used
-// this way, node i children are 2*i and 2*i+1
-//
-template <class S, int PD, int SD>
-class Tree {
-public:
-    Tree(size_t);
-    void resize(size_t);
-    void print(size_t);
-
-    // number of levels in the tree
-    int levels;
-    // number of nodes in the tree (always 2^l)
-    int numnodes;
-
-    // tree node centers of mass
-    alignas(32) std::array<Vector<S>, PD> x;
-    // node size
-    alignas(32) std::array<Vector<S>, PD> ns;
-    // node radius
-    alignas(32) Vector<S> nr;
-    // node particle radius
-    alignas(32) Vector<S> pr;
-    // node strengths
-    alignas(32) std::array<Vector<S>, SD> s;
-
-    // real point offset and count
-    alignas(32) std::vector<size_t> ioffset;		// is this redundant?
-    alignas(32) std::vector<size_t> num;
-    // equivalent point offset and count
-    alignas(32) std::vector<size_t> epoffset;		// is this redundant?
-    alignas(32) std::vector<size_t> epnum;
-};
-
-template <class S, int PD, int SD>
-Tree<S,PD,SD>::Tree(size_t _num) {
-    // _num is number of elements this tree needs to store
-    uint32_t numLeaf = 1 + ((_num-1)/blockSize);
-    //printf("  %d nodes at leaf level\n", numLeaf);
-    levels = 1 + log_2(2*numLeaf-1);
-    //printf("  makes %d levels in tree\n", levels);
-    numnodes = 1 << levels;
-    //printf("  and %d total nodes in tree\n", numnodes);
-    resize(numnodes);
-}
-
-template <class S, int PD, int SD>
-void Tree<S,PD,SD>::resize(size_t _num) {
-    numnodes = _num;
-    for (int d=0; d<PD; ++d) x[d].resize(numnodes);
-    for (int d=0; d<PD; ++d) ns[d].resize(numnodes);
-    nr.resize(numnodes);
-    pr.resize(numnodes);
-    for (int d=0; d<SD; ++d) s[d].resize(numnodes);
-    ioffset.resize(numnodes);
-    num.resize(numnodes);
-    std::fill(num.begin(), num.end(), 0);
-    epoffset.resize(numnodes);
-    epnum.resize(numnodes);
-}
-
-template <class S, int PD, int SD>
-void Tree<S,PD,SD>::print(size_t _num) {
-    printf("\n%dD tree with %d levels\n", PD, levels);
-    for(size_t i=1; i<numnodes && i<_num; ++i) {
-        printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
-    }
-}
 
 
 //
@@ -429,7 +232,7 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
         return;
     }
 
-    // minimum distance between box corners
+    // minimum distance between box corners - THIS IS WRONG!!! x is not the center but the cm!
     S dist = 0.0;
     for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.ns[d][snode]+tt.ns[d][tnode])), 2);
     dist = std::sqrt(dist);
@@ -723,6 +526,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
     for (int d=0; d<PD; ++d) {
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
         t.ns[d][tnode] = minmax.second - minmax.first;
+        t.nc[d][tnode] = 0.5 * (minmax.second + minmax.first);
     }
 
     // write particle data to the tree node
@@ -1004,7 +808,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
 
     if (tnode == 1) {
         #pragma omp taskwait
-        // allocate temporaries
+        // de-allocate temporaries
         p.lidx.resize(0);
         p.itemp.resize(0);
         p.ftemp.resize(0);
