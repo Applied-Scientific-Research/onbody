@@ -115,6 +115,15 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         ep.r[i] = p.r[t.ioffset[tnode]];
     }
 
+    // precompute these useful indices
+    std::vector<std::array<S,PD>> kidx;
+    kidx.resize(numEqps);
+    for (size_t d=0; d<PD; ++d) {
+        const size_t divisor = ipow<size_t>(ncp,d);
+        for (size_t i=0; i<numEqps; ++i) {
+            kidx[i][d] = (i/divisor) % ncp;
+        }
+    }
 
     // loop over children, adding equivalent particles to our list
     for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
@@ -188,8 +197,9 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                     const size_t iep = iepstart + i;
                     S wgt = denom;
                     for (size_t d=0; d<PD; ++d) {
-                        const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
-                        wgt *= amat[d][k];
+                        //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
+                        //wgt *= amat[d][k];
+                        wgt *= amat[d][kidx[i][d]];
                     }
                     // note the use of ep for both here!
                     for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * ep.s[d][ip];
@@ -257,8 +267,9 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                     const size_t iep = iepstart + i;
                     S wgt = denom;
                     for (size_t d=0; d<PD; ++d) {
-                        const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
-                        wgt *= amat[d][k];
+                        //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
+                        //wgt *= amat[d][k];
+                        wgt *= amat[d][kidx[i][d]];
                         //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
                     }
                     for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * p.s[d][ip];
