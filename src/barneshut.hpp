@@ -151,13 +151,21 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
-    //dist = std::sqrt(dist) - 2.0*st.pr[snode];
-    dist = std::sqrt(dist);
-    // scale the distance in the box-opening criterion?
-    if (PD == 2) dist = std::exp(0.75*std::log(dist));
-    else dist = std::exp(0.666667*std::log(dist));
+
+    const bool use_traditional_mac = true;
+
+    if (use_traditional_mac) {
+        for (int d=0; d<PD; ++d) dist += std::pow(st.nc[d][snode] - tp.x[d][ip], 2);
+        dist = std::sqrt(dist);
+
+    } else {
+        for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
+        //dist = std::sqrt(dist) - 2.0*st.pr[snode];
+        dist = std::sqrt(dist);
+        // scale the distance in the box-opening criterion?
+        if (PD == 2) dist = std::exp(0.75*std::log(dist));
+        else dist = std::exp(0.666667*std::log(dist));
+    }
 
     // is source tree node far enough away?
     //if (dist / st.nr[snode] > theta) {
@@ -232,22 +240,32 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
         return;
     }
 
-    // minimum distance between box corners - THIS IS WRONG!!! x is not the center but the cm!
     S dist = 0.0;
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.ns[d][snode]+tt.ns[d][tnode])), 2);
-    dist = std::sqrt(dist);
 
-    // include the box's mean particle size? no, no real benefit
-    //dist += - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
-    //dist += + 1.0*st.pr[snode] + 1.0*tt.pr[tnode];
+    const bool use_traditional_mac = true;
 
-    // scale the distance in the box-opening criterion?
-    if (PD == 2) dist = std::exp(0.75*std::log(dist));
-    else dist = std::exp(0.75*std::log(dist));
-    //else dist = std::exp(0.666667*std::log(dist));
-    //dist = std::exp(0.75*std::log(dist));
-    //dist = std::exp(0.666667*std::log(dist));
-    //dist = std::sqrt(dist);
+    if (use_traditional_mac) {
+        for (int d=0; d<PD; ++d) dist += std::pow(st.nc[d][snode] - tt.nc[d][tnode], 2);
+        dist = std::sqrt(dist);
+
+    } else {
+
+        // minimum distance between box corners - THIS IS WRONG!!! x is not the center but the cm!
+        for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tt.x[d][tnode]) - (S)0.5*(st.ns[d][snode]+tt.ns[d][tnode])), 2);
+        dist = std::sqrt(dist);
+
+        // include the box's mean particle size? no, no real benefit
+        //dist += - 1.0*st.pr[snode] - 1.0*tt.pr[tnode];
+        //dist += + 1.0*st.pr[snode] + 1.0*tt.pr[tnode];
+
+        // scale the distance in the box-opening criterion?
+        if (PD == 2) dist = std::exp(0.75*std::log(dist));
+        else dist = std::exp(0.75*std::log(dist));
+        //else dist = std::exp(0.666667*std::log(dist));
+        //dist = std::exp(0.75*std::log(dist));
+        //dist = std::exp(0.666667*std::log(dist));
+        //dist = std::sqrt(dist);
+    }
 
     // is source tree node far enough away?
     //if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
