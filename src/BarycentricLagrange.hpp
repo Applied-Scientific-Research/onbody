@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include "MathHelper.hpp"
 #include "Parts.hpp"
 #include "Tree.hpp"
+
+#include <cassert>
 
 const int32_t maxorder = 15;
 
@@ -24,7 +27,8 @@ void set_sk(const int32_t _n) {
     assert(_n > 0 && "ERROR (set_sk): n must be >0");
     assert(_n <= maxorder && "ERROR (set_sk): n is too high!");
     for (int32_t k=0; k<=_n; ++k) {
-        sk<S>[k] = std::cos(k*M_PI/_n);
+        // using negative so that numbers start low and go high
+        sk<S>[k] = -std::cos(k*M_PI/_n);
     }
 }
 
@@ -33,11 +37,11 @@ template <class S>
 void set_wk(const int32_t _n) {
     assert(_n > 0 && "ERROR (set_wk): n must be >0");
     assert(_n <= maxorder && "ERROR (set_wk): n is too high!");
-    wk<S>[0] = 0.5;
+    wk<S>[0] = 0.5*ipow(-1,0);
     for (int32_t k=1; k<_n; ++k) {
-        wk<S>[k] = 1.;
+        wk<S>[k] = 1.*ipow(-1,k);
     }
-    wk<S>[_n] = 0.5;
+    wk<S>[_n] = 0.5*ipow(-1,_n);
 }
 
 
@@ -45,45 +49,225 @@ void set_wk(const int32_t _n) {
 // Loop over all nodes in the tree and calculate the n^d barycentric equivalent particles
 //
 template <class S, class A, int PD, int SD, int OD>
-void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, size_t tnode) {
-    printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
+void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
+                             Parts<S,A,PD,SD,OD>& ep,
+                             Tree<S,PD,SD>& t,
+                             const int32_t order,
+                             const size_t tnode) {
+
+    const bool dbg = false;
+    if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
 
+    // set the locations and weights of the barycentric particles
+    if (tnode == 1) {
+        (void) set_sk<S>(order);
+        (void) set_wk<S>(order);
+    }
+
+    // set some constants
+    const size_t ncp = order+1;		// number of Chebyshev points in each direction
+    const size_t numEqps = ipow<size_t>(ncp,PD);
+    //printf("    ncp %ld and numEqps %ld\n", ncp, numEqps);
+    assert(numEqps <= blockSize && "ERROR (calcBarycentricLagrange): requested order too large for blockSize");
+
+    // continue using blockSize for offset
     t.epoffset[tnode] = tnode * blockSize;
     t.epnum[tnode] = 0;
-    printf("    equivalent particles start at %ld\n", t.epoffset[tnode]);
+    const size_t iepstart = t.epoffset[tnode];
+    const size_t iepstop = iepstart + numEqps;
+    if (dbg) printf("    equivalent particles start at %ld\n", iepstart);
 
     // map the Chebyshev nodes to this cluster's bounds
+
+    // make a local copy of the sk coordinates
+    S lsk[PD][ncp];
+    for (size_t d=0; d<PD; ++d) {
+        for (size_t k=0; k<ncp; ++k) {
+            lsk[d][k] = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
+        }
+    }
+
     // note that t.x[d][tnode] is the center of mass - not the center of the cluster!!!
     // the cluster size is t.ns[d][tnode]
     // geometric center is t.nc[d][tnode]
+    for (size_t d=0; d<PD; ++d) {
+        const size_t divisor = ipow<size_t>(ncp,d);
+        //printf("    d %ld and divisor %ld\n", d, divisor);
+        for (size_t i=0; i<numEqps; ++i) {
+            ep.x[d][iepstart+i] = t.nc[d][tnode] + 0.5 * sk<S>[(i/divisor)%ncp] * t.ns[d][tnode];
+        }
+    }
+
+    // and locate the remainder of the particles (unused) to the cell center
+    for (size_t i=iepstop; i<iepstart+blockSize; ++i) {
+        for (size_t d=0; d<PD; ++d) ep.x[d][i] = t.nc[d][tnode];
+    }
+
+    if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
+    //for (size_t i=iepstart; i<iepstart+blockSize; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
+
+    // and set all equiv. particles weights and radii to zero
+    for (size_t i=iepstart; i<iepstop; ++i) {
+        for (size_t d=0; d<SD; ++d) ep.s[d][i] = 0.0;
+        ep.r[i] = 0.0;
+        // or use given radius
+        ep.r[i] = p.r[t.ioffset[tnode]];
+    }
+
 
     // loop over children, adding equivalent particles to our list
     for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
-        printf("  child %ld has %ld particles\n", ichild, t.num[ichild]);
+        if (dbg) printf("  child %ld has %ld particles\n", ichild, t.num[ichild]);
 
         // split on whether this child is a leaf node or not
         if (t.num[ichild] > blockSize) {
-            // this child is a non-leaf node and needs to make equivalent particles
-            (void) calcBarycentricLagrange(p, ep, t, ichild);
 
-            printf("  back in node %ld...\n", tnode);
-            exit(1);
+            // not a leaf node
+            if (dbg) printf("    from %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
+
+            // this child is a non-leaf node and needs to make equivalent particles
+            (void) calcBarycentricLagrange(p, ep, t, order, ichild);
+
+            if (dbg) printf("  back in node %ld...\n", tnode);
 
             // now we read those equivalent particles and make higher-level equivalents
-            //printf("    child %ld made equiv parts %ld to %ld\n", ichild, t.epoffset[ichild], t.epoffset[ichild]+t.epnum[ichild]);
+
+            // here istart and istop are the previous equivalent particles
+            const size_t istart = t.epoffset[ichild];
+            const size_t istop = istart + t.epnum[ichild];
+            if (dbg) printf("    starting with equiv particles %ld to %ld\n", istart, istop);
+
+            // and here is the range of new equivalent particles
+            if (dbg) printf("    putting into %ld new equiv particles %ld to %ld\n", numEqps, iepstart, iepstop);
+
+            // generate a reusable 2D array
+            std::array<std::vector<S>,PD> amat;
+            for (size_t d=0; d<PD; ++d) amat[d].resize(ncp);
+
+            // now do the work
+            for (size_t ip=istart; ip<istop; ++ip) {
+                //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
+
+                int32_t flag[PD];
+                for (size_t d=0; d<PD; ++d) flag[d] = -1;
+                S sum[PD];
+                for (size_t d=0; d<PD; ++d) sum[d] = 0.0;
+                for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+
+                // loop over coord indices and Cheby points to compute a
+                for (size_t d=0; d<PD; ++d) {
+                for (size_t k=0; k<ncp; ++k) {
+                    // note the use of ep here!
+                    const S dist = ep.x[d][ip] - lsk[d][k];
+                    if (std::abs(dist) < 1.e-10) {
+                        flag[d] = k;
+                    } else {
+                        amat[d][k] = wk<S>[k] / dist;
+                        sum[d] += amat[d][k];
+                    }
+                }
+                }
+
+                // if a flag was set, remove singularity
+                for (size_t d=0; d<PD; ++d) {
+                    if (flag[d] > -1) {
+                        sum[d] = 1.0;
+                        for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+                        amat[d][flag[d]] = 1.0;
+                    }
+                }
+
+                // can compute denominator now
+                S denom = 1.0;
+                for (size_t d=0; d<PD; ++d) denom *= sum[d];
+                denom = 1.0/denom;
+
+                // final loop to accumulate into equivalent weights
+                for (size_t i=0; i<numEqps; ++i) {
+                    const size_t iep = iepstart + i;
+                    S wgt = denom;
+                    for (size_t d=0; d<PD; ++d) {
+                        const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
+                        wgt *= amat[d][k];
+                    }
+                    // note the use of ep for both here!
+                    for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * ep.s[d][ip];
+                }
+            }
+
+            if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i]);
+
+            t.epnum[tnode] = numEqps;
 
         } else {
+
             // this child is a leaf node
-            //printf("    child leaf node has particles %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
+            const size_t istart = t.ioffset[ichild];
+            const size_t istop = istart + t.num[ichild];
+            if (dbg) printf("    child leaf node has particles %ld to %ld\n", istart, istop);
 
-            // if we're a leaf node, merge pairs of particles until we have half
-            size_t numEqps = (t.num[ichild]+1) / 2;
-            size_t istart = (blockSize/2) * ichild;
-            size_t istop = istart + numEqps;
-            printf("    making %ld equivalent particles %ld to %ld\n", numEqps, istart, istop);
+            // and here is the range of equivalent particles
+            if (dbg) printf("    putting into %ld equivalent particles %ld to %ld\n", numEqps, iepstart, iepstop);
 
-            t.epnum[tnode] += numEqps;
+            // generate a reusable 2D array
+            std::array<std::vector<S>,PD> amat;
+            for (size_t d=0; d<PD; ++d) amat[d].resize(ncp);
+
+            // now do the work
+            for (size_t ip=istart; ip<istop; ++ip) {
+                //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
+
+                int32_t flag[PD];
+                for (size_t d=0; d<PD; ++d) flag[d] = -1;
+                S sum[PD];
+                for (size_t d=0; d<PD; ++d) sum[d] = 0.0;
+                for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+
+                // loop over coord indices and Cheby points to compute a
+                for (size_t d=0; d<PD; ++d) {
+                for (size_t k=0; k<ncp; ++k) {
+                    const S dist = p.x[d][ip] - lsk[d][k];
+                    if (std::abs(dist) < 1.e-10) {
+                        flag[d] = k;
+                    } else {
+                        amat[d][k] = wk<S>[k] / dist;
+                        sum[d] += amat[d][k];
+                    }
+                    //printf("      d %ld k %ld x %g lsk %g flag %d amat %g\n", d, k, p.x[d][ip], lsk[d][k], flag[d], amat[d][k]);
+                }
+                }
+
+                // if a flag was set, remove singularity
+                for (size_t d=0; d<PD; ++d) {
+                    if (flag[d] > -1) {
+                        sum[d] = 1.0;
+                        for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+                        amat[d][flag[d]] = 1.0;
+                    }
+                }
+
+                // can compute denominator now
+                S denom = 1.0;
+                for (size_t d=0; d<PD; ++d) denom *= sum[d];
+                denom = 1.0/denom;
+
+                // final loop to accumulate into equivalent weights
+                for (size_t i=0; i<numEqps; ++i) {
+                    const size_t iep = iepstart + i;
+                    S wgt = denom;
+                    for (size_t d=0; d<PD; ++d) {
+                        const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
+                        wgt *= amat[d][k];
+                        //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
+                    }
+                    for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * p.s[d][ip];
+                }
+            }
+
+            if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i]);
+
+            t.epnum[tnode] = numEqps;
         }
     }
 

@@ -4,8 +4,8 @@
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
-#define STORE float
-#define ACCUM float
+#define STORE double
+#define ACCUM double
 
 #include "CoreFunc3d.hpp"
 #include "LeastSquares.hpp"
@@ -201,7 +201,7 @@ struct fastsumm_stats {
 template <class S, class A, int PD, int SD, int OD>
 struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Parts<S,A,PD,SD,OD>& eqsrcs, const Tree<S,PD,SD>& stree,
                     Parts<S,A,PD,SD,OD>& targs, Parts<S,A,PD,SD,OD>& eqtargs, const Tree<S,PD,SD>& ttree,
-                    const size_t ittn, std::vector<size_t> istv_in, const float theta) {
+                    const size_t ittn, std::vector<size_t> istv_in, const S theta) {
 
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
@@ -489,7 +489,8 @@ int main(int argc, char *argv[]) {
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t echonum = 1;
-    float theta = 4.0;
+    STORE theta = 4.0;
+    int32_t order = -1;
     std::vector<double> treetime(test_iterations.size(), 0.0);
 
     for (int i=1; i<argc; i++) {
@@ -499,9 +500,13 @@ int main(int argc, char *argv[]) {
             numSrcs = num;
             numTargs = num;
         } else if (strncmp(argv[i], "-t=", 3) == 0) {
-            float testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+3);
             if (testtheta < 0.0001) usage();
             theta = testtheta;
+        } else if (strncmp(argv[i], "-o=", 3) == 0) {
+            int32_t testorder = atoi(argv[i]+3);
+            if (testorder < 1) usage();
+            order = testorder;
         }
     }
 
@@ -519,7 +524,8 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
-    for (auto& m : srcs.s[0]) { m = std::abs(m); }
+    // comment out this line for electrostatics (charges can be + or -)
+    //for (auto& m : srcs.s[0]) { m = std::abs(m); }
 
     Parts<STORE,ACCUM,3,1,3> targs(numTargs, false);
     // initialize particle data
@@ -571,7 +577,11 @@ int main(int argc, char *argv[]) {
 
     // then, march through arrays merging pairs as you go up
     start = std::chrono::system_clock::now();
-    (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    if (order < 0) {
+        (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    } else {
+        (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+    }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
@@ -579,18 +589,21 @@ int main(int argc, char *argv[]) {
     treetime[4] += elapsed_seconds.count();
 
     // for the barycentric treecode, generate an alternate set of equivalent particles
-    printf("\nCalculating barycentric Lagrange particles\n");
-    const int32_t order = 4;
-    const size_t baryBlock = std::pow(order+1,3);
-    start = std::chrono::system_clock::now();
-    Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * baryBlock, true);
-    printf("  need %ld particles\n", barysrc.n);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("  allocate bary structures:\t[%.4f] seconds\n", elapsed_seconds.count());
-    start = std::chrono::system_clock::now();
-    (void) calcBarycentricLagrange(srcs, barysrc, stree, 1);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("  create barycentric parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    if (false) {
+        printf("\nCalculating barycentric Lagrange particles with order %d\n", order);
+        //const size_t baryBlock = std::pow(order+1,3);
+        start = std::chrono::system_clock::now();
+        //Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * baryBlock, true);
+        Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * blockSize, true);
+        printf("  need %ld particles\n", barysrc.n);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        printf("  allocate bary structures:\t[%.4f] seconds\n", elapsed_seconds.count());
+        start = std::chrono::system_clock::now();
+        // arguments are Parts, Parts, Tree, order, and first node
+        (void) calcBarycentricLagrange(srcs, barysrc, stree, order, 1);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        printf("  create barycentric parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
 
 
     // don't need the target tree for treecode, but will for fast code
