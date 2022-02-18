@@ -9,6 +9,7 @@
 
 #include "CoreFunc3d.hpp"
 #include "LeastSquares.hpp"
+#include "BarycentricLagrange.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -576,6 +577,20 @@ int main(int argc, char *argv[]) {
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
+
+    // for the barycentric treecode, generate an alternate set of equivalent particles
+    printf("\nCalculating barycentric Lagrange particles\n");
+    const int32_t order = 4;
+    const size_t baryBlock = std::pow(order+1,3);
+    start = std::chrono::system_clock::now();
+    Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * baryBlock, true);
+    printf("  need %ld particles\n", barysrc.n);
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  allocate bary structures:\t[%.4f] seconds\n", elapsed_seconds.count());
+    start = std::chrono::system_clock::now();
+    (void) calcBarycentricLagrange(srcs, barysrc, stree, 1);
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  create barycentric parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
     // don't need the target tree for treecode, but will for fast code
