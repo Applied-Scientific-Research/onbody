@@ -21,6 +21,16 @@
 
 
 #ifdef USE_RM_KERNEL
+//
+// core functions - Rosenhead-Moore
+//
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S r2 = distsq + sr*sr;
+  return oor1p5(r2);
+}
+static inline int flops_tp_nograds () { return 5; }
+
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
@@ -32,7 +42,24 @@ static inline int flops_tp_grads () { return 8; }
 #endif
 
 #ifdef USE_EXPONENTIAL_KERNEL
+//
+// core functions - compact exponential
+//
 #ifdef USE_VC
+
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S dist = Vc::sqrt(distsq);
+  const S corefac = Vc::reciprocal(sr*sr*sr);
+  const S ood3 = Vc::reciprocal(distsq * dist);
+  const S reld3 = corefac / ood3;
+  // 7 flops to here
+  S returnval = ood3;
+  returnval(reld3 < S(16.0)) = ood3 * (S(1.0) - Vc::exp(-reld3));
+  returnval(reld3 < S(0.001)) = corefac;
+  return returnval;
+}
+
 template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
@@ -107,6 +134,22 @@ inline void core_func (const double distsq, const double sr,
 #else
 
 template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S dist = std::sqrt(distsq);
+  const S corefac = S(1.0) / std::pow(sr,3);
+  const S ood3 = S(1.0) / (distsq * dist);
+  const S reld3 = corefac / ood3;
+
+  if (reld3 > S(16.0)) {
+    return ood3;
+  } else if (reld3 < S(0.001)) {
+    return corefac;
+  } else {
+    return ood3 * (S(1.0) - std::exp(-reld3));
+  }
+}
+
+template <class S>
 static inline void core_func (const S distsq, const S sr,
                               S* const __restrict__ r3, S* const __restrict__ bbb) {
   const S dist = std::sqrt(distsq);
@@ -134,6 +177,23 @@ static inline void core_func (const S distsq, const S sr,
 }
 #endif
 
+static inline int flops_tp_nograds () { return 9; }
 static inline int flops_tp_grads () { return 15; }
+#endif
+
+
+#ifdef USE_V2_KERNEL
+//
+// core functions - Vatistas n=2
+//
+template <class S>
+static inline S core_func (const S distsq, const S sr) {
+  const S s2 = sr*sr;
+  const S denom = distsq*distsq + s2*s2;
+  const S rsqd = my_rsqrt(denom);
+  return rsqd*my_sqrt(rsqd);
+}
+
+static inline int flops_tp_nograds () { return 7; }
 #endif
 

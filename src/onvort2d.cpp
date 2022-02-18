@@ -7,9 +7,8 @@
 #define STORE float
 #define ACCUM float
 
-#define USE_RM_KERNEL
-//#define USE_EXPONENTIAL_KERNEL
-//#define USE_EXPONENTIAL_KERNEL2
+#include "CoreFunc2d.h"
+#include "LeastSquares.h"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -27,9 +26,6 @@
 #include <iostream>
 #include <chrono>
 
-//#include "Polynomial.hh"
-#include "wlspoly.hpp"
-
 const char* progname = "onvort2d";
 
 #ifdef USE_VC
@@ -37,133 +33,6 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 #else
 template <class S> using Vector = std::vector<S>;
 #endif
-
-
-#ifdef USE_RM_KERNEL
-template <class S>
-static inline S core_func (const S distsq, const S sr) {
-  const S r2 = distsq + sr*sr;
-#ifdef USE_VC
-  return Vc::reciprocal(r2);
-#else
-  return S(1.0) / r2;
-#endif
-}
-
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <>
-inline float core_func (const float distsq, const float sr) {
-  return 1.0f / (distsq + sr*sr);
-}
-
-template <>
-inline double core_func (const double distsq, const double sr) {
-  return 1.0 / (distsq + sr*sr);
-}
-
-static inline int flops_tp_nograds () { return 3; }
-#endif
-
-#ifdef USE_EXPONENTIAL_KERNEL2
-template <class S>
-static inline S core_func (const S distsq, const S sr) {
-#ifdef USE_VC
-  const S ood2 = Vc::reciprocal(distsq);
-  const S corefac = Vc::reciprocal(sr*sr);
-#else
-  const S ood2 = S(1.0) / distsq;
-  const S corefac = S(1.0) / std::pow(sr,2);
-#endif
-  const S reld2 = corefac / ood2;
-  // 7 flops to here
-#ifdef USE_VC
-  S returnval = ood2;
-  returnval(reld2 < S(16.0)) = ood2 * (S(1.0) - Vc::exp(-reld2));
-  returnval(reld2 < S(0.001)) = corefac;
-  return returnval;
-#else
-  if (reld2 > S(16.0)) {
-    return ood2;
-  } else if (reld2 < S(0.001)) {
-    return corefac;
-  } else {
-    return ood2 * (S(1.0) - std::exp(-reld2));
-  }
-#endif
-}
-
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <>
-inline float core_func (const float distsq, const float sr) {
-  const float ood2 = 1.0f / distsq;
-  const float corefac = 1.0f / std::pow(sr,2);
-  const float reld2 = corefac / ood2;
-  if (reld2 > 16.0f) {
-    return ood2;
-  } else if (reld2 < 0.001f) {
-    return corefac;
-  } else {
-    return ood2 * (1.0f - std::exp(-reld2));
-  }
-}
-
-template <>
-inline double core_func (const double distsq, const double sr) {
-  const double ood2 = 1.0 / distsq;
-  const double corefac = 1.0 / std::pow(sr,2);
-  const double reld2 = corefac / ood2;
-  if (reld2 > 16.0) {
-    return ood2;
-  } else if (reld2 < 0.001) {
-    return corefac;
-  } else {
-    return ood2 * (1.0 - std::exp(-reld2));
-  }
-}
-
-static inline int flops_tp_nograds () { return 9; }
-#endif
-
-#ifdef USE_EXPONENTIAL_KERNEL
-template <class S>
-static inline S core_func (const S distsq, const S sr) {
-  const S d2 = distsq + S(1.e-10);
-#ifdef USE_VC
-  // this line generates nan results
-  return (S(1.0) - Vc::exp(-d2/(sr*sr))) / d2;
-#else
-  return (S(1.0) - std::exp(-d2/(sr*sr))) / d2;
-#endif
-}
-
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <>
-inline float core_func (const float distsq, const float sr) {
-  const float d2 = distsq + 1.e-10;
-  return (1.0f - std::exp(-d2/(sr*sr))) / d2;
-}
-
-template <>
-inline double core_func (const double distsq, const double sr) {
-  const double d2 = distsq + 1.e-14;
-  return (1.0 - std::exp(-d2/(sr*sr))) / d2;
-}
-
-static inline int flops_tp_nograds () { return 6; }
-#endif
-
-
-// casting from S to A
-template <class S, class A>
-#ifdef USE_VC
-static inline A mycast (const S _in) { return Vc::simd_cast<A>(_in); }
-#else
-static inline A mycast (const S _in) { return _in; }
-#endif
-// specialize, in case the non-vectorized version of nbody_kernel is called
-template <> inline float mycast (const float _in) { return _in; }
-template <> inline double mycast (const float _in) { return (double)_in; }
-template <> inline double mycast (const double _in) { return _in; }
 
 
 //
@@ -182,7 +51,7 @@ static inline void nbody_kernel(const S sx, const S sy,
     tv += mycast<S,A>(r2*dx);
 }
 
-static inline int nbody_kernel_flops() { return 12; }
+static inline int nbody_kernel_flops() { return 10 + flops_tp_nograds(); }
 
 template <class S, class A, int PD, int SD, int OD> class Parts;
 
@@ -300,45 +169,6 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 //
 
-//
-// Approximate a spatial derivative from a number of irregularly-spaced points
-//
-template <class S, class A>
-A least_squares_val(const S xt, const S yt,
-                    const Vector<S>& x, const Vector<S>& y,
-                    const Vector<A>& u,
-                    const size_t istart, const size_t iend) {
-
-    //printf("  target point at %g %g %g\n", xt, yt, zt);
-
-    // prepare the arrays for CxxPolyFit
-    std::vector<S> xs(2*(iend-istart));
-    std::vector<S> vs(iend-istart);
-
-    // fill the arrays
-    size_t icnt = 0;
-    for (size_t i=0; i<iend-istart; ++i) {
-        // eventually want weighted least squares
-        //const S dist = std::sqrt(dx*dx+dy*dy);
-        // we should really use radius to scale this weight!!!
-        //const S weight = 1.f / (0.001f + dist);
-        size_t idx = istart+i;
-
-        // but for now, keep it simple
-        xs[icnt++] = x[idx] - xt;
-        xs[icnt++] = y[idx] - yt;
-        vs[i] = u[idx];
-    }
-
-    // generate the least squares fit (not weighted yet)
-    // template params are type, dimensions, polynomial order
-    WLSPoly<S,2,1> lsfit;
-    lsfit.solve(xs, vs);
-
-    // evaluate at xt,yt, the origin
-    std::vector<S> xep = {0.0, 0.0};
-    return (S)lsfit.eval(xep);
-}
 
 //
 // Data structure for accumulating interaction counts
@@ -735,7 +565,7 @@ int main(int argc, char *argv[]) {
     treetime[4] += elapsed_seconds.count();
 
 
-    // don't need the target tree for treecode, but will for fast code
+    // need the target tree for boxwise treecode and fast code
     Tree<STORE,2,1> ttree(0);
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");
