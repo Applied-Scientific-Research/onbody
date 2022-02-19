@@ -77,8 +77,8 @@ N         | src tree | calc equivs |  direct  | pointwise | boxwise
 10000000  |  1.7031  |    6.1892   |  43739.  |   47.929  | 36.797
 100000000 |  20.830  |    62.212   |  5236300 |   639.84  | 461.25
 
-![Performance vs. N, png](doc/resNqd_t0p9.png)
-![Performance vs. N, eps](doc/resNqd_t0p9.eps)
+![Performance vs. N, theta=0.9](doc/resNqd_t0p9.png)
+![Performance vs. Error, varying order and theta](doc/res1Mqd_trad.png)
 
 ## Theory
 
