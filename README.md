@@ -77,6 +77,8 @@ N         | src tree | calc equivs |  direct  | pointwise | boxwise
 10000000  |  1.7031  |    6.1892   |  43739.  |   47.929  | 36.797
 100000000 |  20.830  |    62.212   |  5236300 |   639.84  | 461.25
 
+![Performance vs. N](https://github.com/Applied-Scientific-Research/onbody/doc/resNqd_t0p9.png)
+
 ## Theory
 
 #### VAM-split k-d trees
