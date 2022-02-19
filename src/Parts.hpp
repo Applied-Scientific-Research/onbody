@@ -79,8 +79,8 @@ void Parts<S,A,PD,SD,OD>::resize(const size_t _num) {
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::random_in_cube() {
-    for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = (S)rand()/(S)RAND_MAX; }
-    if (are_sources) for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0f + 2.0f*(S)rand()/(S)RAND_MAX) / (S)n; }
+    for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = -1.0 + 2.0*(S)rand()/(S)RAND_MAX; }
+    if (are_sources) for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = (-1.0 + 2.0*(S)rand()/(S)RAND_MAX) / (S)n; }
     for (auto& _r : r) { _r = std::pow((S)n, -1.0/(S)PD); }
 }
 

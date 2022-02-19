@@ -9,6 +9,7 @@
 
 #include "CoreFunc3d.hpp"
 #include "LeastSquares.hpp"
+#include "BarycentricLagrange.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -261,7 +262,8 @@ int main(int argc, char *argv[]) {
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t echonum = 1;
-    float theta = 4.0;
+    STORE theta = 4.0;
+    int32_t order = -1;
     std::vector<double> treetime(test_iterations.size(), 0.0);
 
     for (int i=1; i<argc; i++) {
@@ -271,9 +273,13 @@ int main(int argc, char *argv[]) {
             numSrcs = num;
             numTargs = num;
         } else if (strncmp(argv[i], "-t=", 3) == 0) {
-            float testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+3);
             if (testtheta < 0.0001) usage();
             theta = testtheta;
+        } else if (strncmp(argv[i], "-o=", 3) == 0) {
+            int32_t testorder = atoi(argv[i]+3);
+            if (testorder < 1) usage();
+            order = testorder;
         }
     }
 
@@ -345,7 +351,11 @@ int main(int argc, char *argv[]) {
 
     // then, march through arrays merging pairs as you go up
     start = std::chrono::system_clock::now();
-    (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    if (order < 0) {
+        (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    } else {
+        (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+    }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
@@ -353,7 +363,7 @@ int main(int argc, char *argv[]) {
     treetime[4] += elapsed_seconds.count();
 
 
-    // don't need the target tree for treecode, but will for fast code
+    // don't need the target tree for treecode, but will for boxwise and fast code
     Tree<STORE,3,3> ttree(0);
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");

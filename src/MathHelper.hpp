@@ -1,8 +1,8 @@
 /*
- * MathHelper.h - Non-class helper inlines for core functions, kernels, influences
+ * MathHelper.hpp - Non-class helper inlines for core functions, kernels, influences
  *
- * (c)2020 Applied Scientific Research, Inc.
- *         Mark J Stock <markjstock@gmail.com>
+ * (c)2020,2 Applied Scientific Research, Inc.
+ *           Mark J Stock <markjstock@gmail.com>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,6 +29,20 @@
 #endif
 
 #include <cmath>
+
+// integer power
+// from https://stackoverflow.com/questions/1505675/power-of-an-integer-in-c
+template <class INT>
+INT ipow(INT x, INT p)
+{
+  if (p == 0) return 1;
+  if (p == 1) return x;
+  
+  INT tmp = ipow(x, p/2);
+  if (p%2 == 0) return tmp * tmp;
+  else return x * tmp * tmp;
+}
+
 
 // helper functions: cast, exp, recip, sqrt, rsqrt, rcbrt, and others
 
