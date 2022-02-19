@@ -6,14 +6,14 @@ Test C++ code for equivalent particle approximation technique and O(NlogN) and O
 ## Summary
 
 `onbody` is a testbed C++ library and driver program for a single evaluation of the forces
-a system of target points from a system of source particles (an "N-body" problem).
+on a system of target points from a system of source particles (an "N-body" problem).
 
 This is easiest understood in the context of gravitation: all stars (masses) in a galaxy 
 attract all other stars; to find the forces between all of them on a computer, you would 
 need to compute, for each star, the distance, direction, and then force that every other
 star applies. This is a trivially easy algorithm to write, but it must perform about 
 20 * N * N arithmetic operations to find all of the stars' new accelerations (where N is the
-number of stars).
+number of stars). This is called direct summation, and is an O(N^2) method.
 
 In this software are "treecodes" that aim to make that calculation much faster, theoretically
 C * N * log(N) operations, where C is some constant number (generally larger than 20).
@@ -53,6 +53,9 @@ criterion "MAC") common to all treecodes is the reciprocal of what is commonly u
 Typically, theta=0.5 would mean that the source tree cell size is half of the distance
 to the target point/cluster. In the codes here, that would be `-t=2` - we think of it as
 the relative distance between the clusters is 2 times the cluster size.
+A normal call to the gravitation solver would then look like this:
+
+    ./ongrav3d -n=1000000 -t=2.0 -o=4
 
 ## Performance
 
@@ -62,8 +65,8 @@ and use a block size of 128.
 All reported times are in wall-clock seconds reported with the high resolution timer from `std::chrono`.
 Below is the performance of the `ongrav3d` program, coded to use charges instead of
 masses (it is much harder to get high accuracy with + and - charges than with
-always-positive masses), with my theta 1.11111 (MAC theta=0.9), and order 4
-(5^3 barycentric interpolation points per tree node) and double-precision numbers for
+always-positive masses), with my theta 1.11111 (MAC theta=0.9), 4th order interpolation
+(5^3 Chebyshev points per tree node) and double-precision numbers for
 storage and computation. RMS errors were around 1e-4.
 
 N         | src tree | calc equivs |  direct  | pointwise | boxwise
@@ -100,6 +103,7 @@ Indexing into such a tree is also easy, if the root node is index i, its childre
 The main difference between this and a standard octree is that the tree nodes are not
 arranged in a grid.
 
+#### Partial sorting for fast tree building
 Generating a spatial tree always involves sorting particles, generally along one 
 of the coordinate axes (if a collection of particles is much larger in the x direction
 than the y or z, we sort along x to find the first split).
