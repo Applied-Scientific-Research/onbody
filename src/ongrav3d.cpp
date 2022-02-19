@@ -524,8 +524,12 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
-    // comment out this line for electrostatics (charges can be + or -)
-    //for (auto& m : srcs.s[0]) { m = std::abs(m); }
+    if (true) {
+        for (auto& m : srcs.s[0]) { m = std::abs(m); }
+        printf("  gravitational simulation with random masses\n");
+    } else {
+        printf("  electrostatics simulation with random charges\n");
+    }
 
     Parts<STORE,ACCUM,3,1,3> targs(numTargs, false);
     // initialize particle data
@@ -588,25 +592,8 @@ int main(int argc, char *argv[]) {
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
 
-    // for the barycentric treecode, generate an alternate set of equivalent particles
-    if (false) {
-        printf("\nCalculating barycentric Lagrange particles with order %d\n", order);
-        //const size_t baryBlock = std::pow(order+1,3);
-        start = std::chrono::system_clock::now();
-        //Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * baryBlock, true);
-        Parts<STORE,ACCUM,3,1,3> barysrc((stree.numnodes/2) * blockSize, true);
-        printf("  need %ld particles\n", barysrc.n);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        printf("  allocate bary structures:\t[%.4f] seconds\n", elapsed_seconds.count());
-        start = std::chrono::system_clock::now();
-        // arguments are Parts, Parts, Tree, order, and first node
-        (void) calcBarycentricLagrange(srcs, barysrc, stree, order, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-        printf("  create barycentric parts:\t[%.4f] seconds\n", elapsed_seconds.count());
-    }
 
-
-    // don't need the target tree for treecode, but will for fast code
+    // don't need the target tree for treecode, but will for boxwise and fast code
     Tree<STORE,3,1> ttree(0);
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");

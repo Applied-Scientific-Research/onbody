@@ -8,6 +8,7 @@
 #define ACCUM float
 
 #include "CoreFunc3d.hpp"
+#include "BarycentricLagrange.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -254,8 +255,9 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          float* tuy, float* tvy, float* twy,
                                          float* tuz, float* tvz, float* twz) {
     float flops = 0.0;
+    const float theta = 1.5;
+    const int32_t order = 4;
     const bool silent = true;
-    const bool createTargTree = true;
     const bool blockwise = true;
 
     if (!silent) printf("Allocate and initialize\n");
@@ -332,13 +334,17 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
 
     // then, march through arrays merging pairs as you go up
     start = std::chrono::system_clock::now();
-    (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    if (order < 0) {
+        (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+    } else {
+        (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+    }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
 
 
     Tree<STORE,3,3> ttree(0);
-    if (createTargTree or blockwise) {
+    if (blockwise) {
         if (!silent) printf("\nBuilding the target tree\n");
         if (!silent) printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
 
@@ -357,9 +363,9 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     start = std::chrono::system_clock::now();
 
     if (blockwise) {
-        flops += nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, 2.5f);
+        flops += nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta);
     } else {
-        flops += nbody_treecode2(srcs, eqsrcs, stree, targs, 2.5f);
+        flops += nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
     }
 
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
@@ -368,7 +374,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
 
 
     // pull results from the object
-    if (createTargTree) {
+    if (blockwise) {
         // need to rearrange the results back in original order
         for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] += targs.u[0][i];
         for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] += targs.u[1][i];
@@ -383,6 +389,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         for (int i=0; i<*ntarg; ++i) tvz[targs.gidx[i]] += targs.u[10][i];
         for (int i=0; i<*ntarg; ++i) twz[targs.gidx[i]] += targs.u[11][i];
         //for (int i=0; i<*ntarg; ++i) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
+        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
     } else {
         // pull them out directly
         for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
@@ -397,6 +404,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         for (int i=0; i<*ntarg; ++i) tuz[i] += targs.u[9][i];
         for (int i=0; i<*ntarg; ++i) tvz[i] += targs.u[10][i];
         for (int i=0; i<*ntarg; ++i) twz[i] += targs.u[11][i];
+        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
     }
 
     return flops;
@@ -484,6 +492,8 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*ntarg; ++i) twy[i] += targs.u[8][i];
     for (int i=0; i<*ntarg; ++i) tuz[i] += targs.u[9][i];
     for (int i=0; i<*ntarg; ++i) tvz[i] += targs.u[10][i];
+
+    if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
 
     return flops;
 }
