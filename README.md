@@ -114,6 +114,10 @@ But it's easy to waste time by performing a full sort when only a partial sort i
 necessary. In the code here, we perform a very fast partial sort along the longest
 coordinate axis such that the left (low) portion of the collection has blocksize \* 2^n
 particles, where n depends on the level of the tree.
+This uses an algorithm more like Floyd-Rivest than QuickSelect, as the problem is identical
+to that of finding the k-th smallest element in an array (where k can be large).
+The pivots are almost always close to those predicted by linear interpolation because
+at each level, the node positions along that axis are effectively random.
 
 #### Equivalent particles
 Treecodes and fast codes must generate approximations of both the source terms on the 
