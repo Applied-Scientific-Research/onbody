@@ -4,8 +4,8 @@
  * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
  */
 
-#define STORE double
-#define ACCUM double
+#define STORE float
+#define ACCUM float
 
 #include "CoreFunc3d.hpp"
 #include "LeastSquares.hpp"
@@ -50,9 +50,9 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dz = sz - tz;
     S r3 = dx*dx + dy*dy + dz*dz + sr*sr;
     r3 = sm/(r3*std::sqrt(r3));
-    tax += r3 * dx;
-    tay += r3 * dy;
-    taz += r3 * dz;
+    tax += (A)(r3 * dx);
+    tay += (A)(r3 * dy);
+    taz += (A)(r3 * dz);
 }
 
 static inline int nbody_kernel_flops() { return 19; }
