@@ -1,15 +1,20 @@
 #
 # onbody
+# (c)2017-2022 Applied Scientific Research, Inc.
 #
 CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
 PROJECT ( onbody )
 
 # User-serviceable variables here
-SET (CMAKE_CONFIGURATION_TYPES "Debug" "Release" "RelWithDebInfo")
-SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build" )
+SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
+IF (NOT CMAKE_BUILD_TYPE)
+  SET (CMAKE_BUILD_TYPE "Release")
+ENDIF ()
+SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build")
 SET (USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
 SET (USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
 SET (CMAKE_VERBOSE_MAKEFILE on)
+SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
