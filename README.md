@@ -166,5 +166,5 @@ This restriction could be relaxed with some code changes.
 ## Credits
 
 This program was written by Mark Stock with help and thanks to Prof. Krasny and collaborators for
-the barycentric Lagrange interpolation method: [BaryTree on github](https://github.com/Treecodes/BaryTree/issues).
+the barycentric Lagrange interpolation method: [BaryTree on github](https://github.com/Treecodes/BaryTree).
 
