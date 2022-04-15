@@ -509,13 +509,12 @@ int main(int argc, char *argv[]) {
     // initialize particle data
     srcs.random_in_cube();
     //srcs.smooth_strengths();
-    srcs.wave_strengths();
+    //srcs.wave_strengths();
     //srcs.central_strengths();
 
     Parts<STORE,ACCUM,2,1,2> targs(numTargs, false);
     // initialize particle data
     targs.random_in_cube();
-    //for (auto& m : targs.m) { m = 1.0f; }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -568,7 +567,11 @@ int main(int argc, char *argv[]) {
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
     }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    if (order < 0) {
+        printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    } else {
+        printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();

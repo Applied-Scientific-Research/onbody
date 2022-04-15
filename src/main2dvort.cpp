@@ -1,7 +1,7 @@
 /*
  * main2dvort.cpp - driver for Barnes-Hut treecode
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #include <cstdlib>
@@ -65,19 +65,11 @@ int main(int argc, char *argv[]) {
     std::vector<float> sy(numSrcs);
     std::vector<float> ss(numSrcs);
     std::vector<float> sr(numSrcs);
-    for (auto& _x : sx) { _x = (float)rand()/(float)RAND_MAX; }
-    for (auto& _y : sy) { _y = (float)rand()/(float)RAND_MAX; }
-    for (auto& _r : sr) { _r = 1.0f / std::sqrt(numSrcs); }
+    for (auto& _x : sx) { _x = -1.0f + 2.0f*(float)rand()/(float)RAND_MAX; }
+    for (auto& _y : sy) { _y = -1.0f + 2.0f*(float)rand()/(float)RAND_MAX; }
     // totally random (unrealistic, but worst-case)
-    //for (auto& _m : ss) { _m = (-1.0f + 2.0f*(float)rand()/(float)RAND_MAX) / std::sqrt((float)numSrcs); }
-    // more realistic
-    //const float factor = 1.0 / std::sqrt((float)numSrcs);
-    const float factor = 1.0 / (float)numSrcs;
-    for (size_t i=0; i<numSrcs; i++) {
-        const float dist = std::sqrt(std::pow(sx[i]-0.5,2)+std::pow(sy[i]-0.5,2));
-        ss[i] = factor * std::cos(30.0*std::sqrt(dist)) / (5.0*dist+1.0);
-        ss[i] *= 0.75 + 0.5*(float)rand()/(float)RAND_MAX;
-    }
+    for (auto& _m : ss) { _m = (-1.0f + 2.0f*(float)rand()/(float)RAND_MAX) / (float)numSrcs; }
+    for (auto& _r : sr) { _r = 1.0f / std::sqrt(numSrcs); }
 
     std::vector<float> tx(numTargs);
     std::vector<float> ty(numTargs);
@@ -139,10 +131,10 @@ int main(int argc, char *argv[]) {
         for (size_t i=0; i<(size_t)ntn; ++i) {
             const size_t ifast = i * ntskip;
             float thiserr = tu[ifast]-tun[i];
-            //if (i<4) printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
-            //printf("      %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //if (i<4) printf("  %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //printf("  %ld %ld  %g %g   %g %g\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
             errsum += thiserr*thiserr;
-            //if (thiserr*thiserr > maxerr) printf("      %ld %ld  %g %g   %g %g  new max\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
+            //if (thiserr*thiserr > maxerr) printf("  %ld %ld  %g %g   %g %g  new max\n", i, ifast, tx[ifast], txn[i], tu[ifast], tun[i]);
             if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
             errcnt += tun[i]*tun[i];
         }
