@@ -1,7 +1,7 @@
 /*
  * interface3dvortgrads.cpp - interface code for Barnes-Hut treecode
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -255,7 +255,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          float* tuy, float* tvy, float* twy,
                                          float* tuz, float* tvz, float* twz) {
     float flops = 0.0;
-    const float theta = 1.5;
+    const float theta = 1.2;
     const int32_t order = 4;
     const bool silent = true;
     const bool blockwise = true;
@@ -263,24 +263,16 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
-    // allocate space for sources and targets  (but always a little more)
-    const int nsrclen = 8 * (*nsrc/8 + 1);
-    Parts<STORE,ACCUM,3,3,12> srcs(nsrclen, true);
+    // allocate space for sources and targets
+    Parts<STORE,ACCUM,3,3,12> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[2][i] = sz[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[2][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ssx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[1][i] = ssy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[2][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 1.0;
 
     Parts<STORE,ACCUM,3,3,12> targs(*ntarg, false);
     // initialize particle data
@@ -323,7 +315,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
-    // reorder tree until all parts are adjacent in space-filling curve
+    // first, reorder tree until all parts are adjacent in space-filling curve
     start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
@@ -340,9 +332,14 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
     }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    if (order < 0) {
+      if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    } else {
+      if (!silent) printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
 
 
+    // don't need the target tree for treecode, but will for boxwise and fast code
     Tree<STORE,3,3> ttree(0);
     if (blockwise) {
         if (!silent) printf("\nBuilding the target tree\n");
@@ -431,23 +428,15 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    const int nsrclen = 8 * (*nsrc/8 + 1);
-    Parts<STORE,ACCUM,3,3,12> srcs(nsrclen, true);
+    Parts<STORE,ACCUM,3,3,12> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[2][i] = sz[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[2][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ssx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[1][i] = ssy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[2][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 0.0;
 
     Parts<STORE,ACCUM,3,3,12> targs(*ntarg, false);
     // initialize particle data

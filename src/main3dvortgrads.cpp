@@ -1,7 +1,7 @@
 /*
  * main3dvortgrads.cpp - driver for Barnes-Hut treecode
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #include <cstdlib>
