@@ -1,7 +1,7 @@
 /*
  * interface2dvort.cpp - interface code for Barnes-Hut treecode
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -178,32 +178,26 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          const float* tx, const float* ty,
                                                float* tu,       float* tv) {
     float flops = 0.0;
-    const float theta = 1.25;
-    const int32_t order = 4;
+    const float theta = 1.0;
+    const int32_t order = 10;
     const bool silent = true;
     const bool blockwise = true;
 
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
-    // allocate space for sources and targets (but always a little more)
-    const int nsrclen = 8 * (*nsrc/8 + 1);
-    Parts<STORE,ACCUM,2,1,2> srcs(nsrclen, true);
+    // allocate space for sources and targets
+    Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 1.0;
 
     Parts<STORE,ACCUM,2,1,2> targs(*ntarg, false);
     // initialize particle data
     for (int i=0; i<*ntarg; ++i) targs.x[0][i] = tx[i];
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
-    //for (auto& m : targs.s[0]) { m = 1.0f/(float)(*ntarg); }
     for (auto& u : targs.u[0]) { u = 0.0f; }
     for (auto& u : targs.u[1]) { u = 0.0f; }
     auto end = std::chrono::system_clock::now();
@@ -229,7 +223,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
-    // reorder tree until all parts are adjacent in space-filling curve
+    // first, reorder tree until all parts are adjacent in space-filling curve
     start = std::chrono::system_clock::now();
     #pragma omp parallel
     #pragma omp single
@@ -246,9 +240,14 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
     }
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    if (order < 0) {
+      if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    } else {
+      if (!silent) printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
 
 
+    // don't need the target tree for treecode, but will for boxwise and fast code
     Tree<STORE,2,1> ttree(0);
     if (blockwise) {
         if (!silent) printf("\nBuilding the target tree\n");
@@ -284,7 +283,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         // need to rearrange the results back in original order
         for (int i=0; i<*ntarg; ++i) tu[targs.gidx[i]] += targs.u[0][i];
         for (int i=0; i<*ntarg; ++i) tv[targs.gidx[i]] += targs.u[1][i];
-        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
+        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g  %g %g\n", i, tx[i], ty[i], tu[i], tv[i]);
         //if (!silent) for (int i=0; i<*ntarg; ++i) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
         //for (int i=0; i<*nsrc; i+=100) printf("  %d  %g %g  %g %g\n", i, sx[i], sy[i], ss[i], sr[i]);
         //for (int i=0; i<*ntarg; i+=100) printf("  %d %ld  %g %g\n", i, targs.gidx[i], tu[i], tv[i]);
@@ -293,7 +292,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
         for (int i=0; i<*ntarg; ++i) tv[i] += targs.u[1][i];
         //if (!silent) for (int i=0; i<*ntarg; i+=10) printf("  %d  %g %g\n", i, tu[i], tv[i]);
-        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
+        if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g  %g %g\n", i, tx[i], ty[i], tu[i], tv[i]);
     }
 
     return flops;
@@ -303,28 +302,25 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
 //
 // same, but direct solver
 //
-extern "C" float external_vel_direct_f_ (const int* nsrc, const float* sx, const float* sy,
+extern "C" float external_vel_direct_f_ (const int* nsrc,
+                                         const float* sx, const float* sy,
                                          const float* ss, const float* sr,
-                                         const int* ntarg, const float* tx, const float* ty,
-                                         float* tu,       float* tv) {
+                                         const int* ntarg,
+                                         const float* tx, const float* ty,
+                                               float* tu,       float* tv) {
     float flops = 0.0;
-    bool silent = true;
+    const bool silent = true;
 
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
     // allocate space for sources and targets
-    const int nsrclen = 8 * (*nsrc/8 + 1);
-    Parts<STORE,ACCUM,2,1,2> srcs(nsrclen, true);
+    Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
     // initialize particle data
     for (int i=0; i<*nsrc; ++i) srcs.x[0][i] = sx[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.x[1][i] = sy[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.x[1][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.s[0][i] = ss[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.s[0][i] = 0.0;
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
-    for (int i=*nsrc; i<nsrclen; ++i) srcs.r[i] = 0.0;
 
     Parts<STORE,ACCUM,2,1,2> targs(*ntarg, false);
     // initialize particle data
@@ -350,7 +346,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc, const float* sx, const
     for (int i=0; i<*ntarg; ++i) tu[i] += targs.u[0][i];
     for (int i=0; i<*ntarg; ++i) tv[i] += targs.u[1][i];
 
-    if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
+    if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g  %g %g\n", i, tx[i], ty[i], tu[i], tv[i]);
 
     return flops;
 }
