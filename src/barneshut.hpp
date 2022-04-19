@@ -196,6 +196,8 @@ float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
     {
         struct treecode_stats threadstats = {0, 0};
 
+        // this is 1-3% slower
+        //#pragma omp for schedule(dynamic,blockSize/2)
         #pragma omp for schedule(dynamic,2*blockSize)
         for (size_t i=0; i<targs.n; ++i) {
             treecode2_block<S,A,PD,SD,OD>(srcs, eqsrcs, stree, (size_t)1, targs, i, theta, threadstats);
