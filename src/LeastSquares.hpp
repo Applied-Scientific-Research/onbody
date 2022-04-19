@@ -6,7 +6,6 @@
 
 #pragma once
 
-//#include "Polynomial.hh"
 #include "wlspoly.hpp"
 
 #ifdef USE_VC
