@@ -178,8 +178,12 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          const float* tx, const float* ty,
                                                float* tu,       float* tv) {
     float flops = 0.0;
-    const float theta = 1.0;
-    const int32_t order = 10;
+    // 1.2 and 3 for 1e-3 error (float-float OK)
+    // 1.3 and 4 for 1e-4 error (float-float OK)
+    // 1.4 and 5 for 1e-5 error (double-double, though)
+    // 1.5 and 6 for 1e-6 error (double-double, though)
+    const float theta = 1.3;
+    const int32_t order = 4;
     const bool silent = true;
     const bool blockwise = true;
 
