@@ -1,31 +1,33 @@
 #!/usr/bin/perl
 #
 
-$sep = " ";
+my $sep = " ";
 
 # put all results here
 open(OUT,">>new.dat") or die "Can't open $!";
 
 # which binary to run?
-$exe = "./onvort2d";
+my $exe = "./onvortgrad3d";
+#my $exe = "./onvort2d";
 
 # how many particles?
-$nump = 1000000;
+my $nump = 100000;
 # desired mean velocity error
-$desirederror = 1.e-3;
-$logdesired = log($desirederror);
-# how many runs over which to average the error?
-# for 40k and over, 1 is enough
-# for 10k, maybe 4?
-# for 1k, seems like 16 is barely enough
-$runs = 5;
+my $desirederror = 1.e-3;
+my $logdesired = log($desirederror);
 
-# bucket sizes
-@bucket = (128);
+# how many runs over which to average the error?
+my $runs = 5;
+
+# bucket sizes (this is compiled in)
+my @bucket = (128);
+
 # define the order range
-#@order = (1,2,3,4,5,6,7,8,9,10);
-@order = (2,3,4,5);
-#@order = (6,7,8);
+# 2D can go up to order 10
+#my @order = (1,2,3,4,5,6,7,8,9,10);
+# 3D can only do up to order 4
+my @order = (1,2,3,4);
+
 # for a given set of the above variables, find theta to minimize CPU time
 
 foreach $thisbucket (@bucket) {
@@ -33,12 +35,12 @@ foreach $thisbucket (@bucket) {
   foreach $thisorder (@order) {
 
     # find the rifa that returns the right error!
-    $rifa = -1.0;
-    $noupperbound = 1;
-    $nolowerbound = 1;
-    $errordiff = 1.0;
-    $numiters = 0;
-    $maxiters = 20;	# after 6 we really should have something close to the solution
+    my $rifa = -1.0;
+    my $noupperbound = 1;
+    my $nolowerbound = 1;
+    my $errordiff = 1.0;
+    my $numiters = 0;
+    my $maxiters = 20;	# after 6 we really should have something close to the solution
     print "Trying $thisway $thisbucket $thisorder\n";
 
     # run until we're within 2% of desired error
