@@ -255,7 +255,8 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
                                          float* tuy, float* tvy, float* twy,
                                          float* tuz, float* tvz, float* twz) {
     float flops = 0.0;
-    const float theta = 1.2;
+    // 1.5 and 4 gives 1e-4 mean vel error
+    const float theta = 1.5;
     const int32_t order = 4;
     const bool silent = true;
     const bool blockwise = true;
