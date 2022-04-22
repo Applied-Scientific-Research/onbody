@@ -1,7 +1,7 @@
 /*
  * onvort2d - testbed for an O(N) 2d vortex solver
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -534,6 +534,31 @@ int main(int argc, char *argv[]) {
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
 
+    // first, reorder tree until all parts are adjacent in space-filling curve
+    if (order < 0) {
+        start = std::chrono::system_clock::now();
+        #pragma omp parallel
+        #pragma omp single
+        (void) refineTree(srcs, stree, 1);
+        #pragma omp taskwait
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
+        treetime[2] += elapsed_seconds.count();
+        treetime[3] += elapsed_seconds.count();
+        treetime[4] += elapsed_seconds.count();
+    }
+    //for (size_t i=0; i<stree.num[1]; ++i)
+    //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
+
+    // buffer source arrays to accommodate vector length
+    start = std::chrono::system_clock::now();
+    (void) srcs.buffer_end(VecSize<STORE>);
+    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    printf("  add buffer at end of srcs:\t[%.4f] seconds\n", elapsed_seconds.count());
+    treetime[2] += elapsed_seconds.count();
+    treetime[3] += elapsed_seconds.count();
+    treetime[4] += elapsed_seconds.count();
+
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
@@ -545,31 +570,18 @@ int main(int argc, char *argv[]) {
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
 
-    // first, reorder tree until all parts are adjacent in space-filling curve
-    start = std::chrono::system_clock::now();
-    #pragma omp parallel
-    #pragma omp single
-    (void) refineTree(srcs, stree, 1);
-    #pragma omp taskwait
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
-    treetime[2] += elapsed_seconds.count();
-    treetime[3] += elapsed_seconds.count();
-    treetime[4] += elapsed_seconds.count();
-    //for (size_t i=0; i<stree.num[1]; ++i)
-    //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
-
-    // then, march through arrays merging pairs as you go up
-    start = std::chrono::system_clock::now();
+    // then, march through arrays calculating equivalents as you go up
     if (order < 0) {
+        // here they are hierarchical pairs
+        start = std::chrono::system_clock::now();
         (void) calcEquivalents(srcs, eqsrcs, stree, 1);
-    } else {
-        (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
-    }
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (order < 0) {
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     } else {
+        // here they are barycentric lagrange points
+        start = std::chrono::system_clock::now();
+        (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
     treetime[2] += elapsed_seconds.count();

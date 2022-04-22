@@ -308,6 +308,20 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
+    if (order < 0) {
+        // first, reorder tree until all parts are adjacent in space-filling curve
+        start = std::chrono::system_clock::now();
+        #pragma omp parallel
+        #pragma omp single
+        (void) refineTree(srcs, stree, 1);
+        #pragma omp taskwait
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        if (!silent) printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
+
+    // buffer source arrays to accommodate vector length
+    (void) srcs.buffer_end(VecSize<STORE>);
+
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
     start = std::chrono::system_clock::now();
@@ -316,27 +330,19 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
-    // first, reorder tree until all parts are adjacent in space-filling curve
-    start = std::chrono::system_clock::now();
-    #pragma omp parallel
-    #pragma omp single
-    (void) refineTree(srcs, stree, 1);
-    #pragma omp taskwait
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (!silent) printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
-
-    // then, march through arrays merging pairs as you go up
-    start = std::chrono::system_clock::now();
+    // generate the far-field approximations
     if (order < 0) {
+        // then, march through arrays merging pairs as you go up
+        start = std::chrono::system_clock::now();
         (void) calcEquivalents(srcs, eqsrcs, stree, 1);
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     } else {
+        // upward pass to compute barycentric lagrange particles
+        start = std::chrono::system_clock::now();
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
-    }
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    if (order < 0) {
-      if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
-    } else {
-      if (!silent) printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
+        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        if (!silent) printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
 
 
@@ -423,7 +429,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
                                          float* tuy, float* tvy, float* twy,
                                          float* tuz, float* tvz, float* twz) {
     float flops = 0.0;
-    bool silent = true;
+    const bool silent = true;
 
     if (!silent) printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
@@ -438,6 +444,9 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*nsrc; ++i) srcs.s[1][i] = ssy[i];
     for (int i=0; i<*nsrc; ++i) srcs.s[2][i] = ssz[i];
     for (int i=0; i<*nsrc; ++i) srcs.r[i] = sr[i];
+
+    // buffer source arrays to accommodate vector length
+    (void) srcs.buffer_end(VecSize<STORE>);
 
     Parts<STORE,ACCUM,3,3,12> targs(*ntarg, false);
     // initialize particle data

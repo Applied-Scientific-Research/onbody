@@ -32,8 +32,10 @@
 
 #ifdef USE_VC
 template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
+template <class S> size_t VecSize = Vc::Vector<S>::Size;
 #else
 template <class S> using Vector = std::vector<S>;
+using size_t VecSize = 1;
 #endif
 
 

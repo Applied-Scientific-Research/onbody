@@ -38,6 +38,7 @@ public:
     void wave_strengths();
     void zero_vels();
     void reorder_idx(const size_t, const size_t);
+    void buffer_end(const size_t);
 
     // state
     bool are_sources;
@@ -133,5 +134,27 @@ void Parts<S,A,PD,SD,OD>::reorder_idx(const size_t pfirst, const size_t plast) {
 
     // scatter values from the temp vector back into the original vector
     for (size_t i=pfirst; i<plast; ++i) gidx[i] = itemp[lidx[i]];
+}
+
+// because with Vc we can potentially read more than num entries...
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::buffer_end(const size_t _veclen) {
+
+    // if we are not using Vc, there's no need to buffer
+    if (_veclen == 1) return;
+    // if we already have an even multiple of the Vc vector length, also no need
+    if (n%_veclen == 0) return;
+
+    // we're here, so let's resize our arrays with sane values
+    const size_t bufferedSize = _veclen * (1 + (n-1)/_veclen);
+    const size_t lastidx = n-1;
+
+    // now we resize
+    for (int d=0; d<PD; ++d) x[d].resize(bufferedSize, x[d][lastidx]);
+    if (are_sources) for (int d=0; d<SD; ++d) s[d].resize(bufferedSize, 0.0);
+    r.resize(bufferedSize, 1.0);
+    if (not are_sources) for (int d=0; d<OD; ++d) u[d].resize(bufferedSize, 0.0);
+
+    // and keep n as-is!
 }
 
