@@ -157,8 +157,8 @@ This restriction could be relaxed with some code changes.
 
 ## To Do
 
-* Fix bugs hindering accuracy in `runNd` programs
 * Finish implementing the barycentric Lagrange interpolator into the fast (O(N)) method
+* Support different kernels more easily (like one which takes source and target radii)
 * Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code
 * Use smarter or faster data structures in the O(N) list-building system
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
