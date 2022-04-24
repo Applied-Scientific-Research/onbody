@@ -495,8 +495,10 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
+    const bool random_radii = false;
+    const bool use_charges = true;
     static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
-    bool just_build_trees = false;
+    const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t echonum = 1;
@@ -546,11 +548,12 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
-    if (false) {
+    if (random_radii) srcs.randomize_radii();
+    if (use_charges) {
+        printf("  electrostatics simulation with random charges\n");
+    } else {
         for (auto& m : srcs.s[0]) { m = std::abs(m); }
         printf("  gravitational simulation with random masses\n");
-    } else {
-        printf("  electrostatics simulation with random charges\n");
     }
 
     Parts<STORE,ACCUM,3,1,3> targs(numTargs, false);
@@ -670,7 +673,10 @@ int main(int argc, char *argv[]) {
         if (order < 0) {
             (void) calcEquivalents(targs, eqtargs, ttree, 1);
         } else {
+            #pragma omp parallel
+            #pragma omp single
             (void) calcBarycentricLagrange(targs, eqtargs, ttree, order, 1);
+            #pragma omp taskwait
         }
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());

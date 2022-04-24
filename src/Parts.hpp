@@ -34,6 +34,7 @@ public:
     void resize(const size_t);
     void random_in_cube();
     void smooth_strengths();
+    void randomize_radii();
     void central_strengths();
     void wave_strengths();
     void zero_vels();
@@ -94,6 +95,11 @@ void Parts<S,A,PD,SD,OD>::smooth_strengths() {
             s[d][i] = factor * (x[0][i] - x[1][i]);
         }
     }
+}
+
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::randomize_radii() {
+    for (auto& _r : r) { _r *= 0.5 + ((S)rand()/(S)RAND_MAX); }
 }
 
 template <class S, class A, int PD, int SD, int OD>
