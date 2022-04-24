@@ -1,7 +1,7 @@
 /*
  * CoreFunc2d.h - core functions useful for particle methods
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  *
  * Look in ~/asr/version3/Omega2D/src/CoreFunc.h for more
  */
@@ -24,6 +24,12 @@
 template <class S>
 static inline S core_func (const S distsq, const S sr) {
   const S r2 = distsq + sr*sr;
+  return my_recip(r2);
+}
+
+template <class S>
+static inline S core_func (const S distsq, const S sr, const S tr) {
+  const S r2 = distsq + sr*sr + tr*tr;
   return my_recip(r2);
 }
 
@@ -79,6 +85,15 @@ template <class S>
 static inline S core_func (const S distsq, const S sr) {
   const S ood2 = my_recip(distsq+S(1.e-6));
   const S corefac = my_recip(sr*sr);
+  const S reld2 = corefac / ood2;
+  // 4 flops to here
+  return exp_cond(ood2, corefac, reld2);
+}
+
+template <class S>
+static inline S core_func (const S distsq, const S sr, const S tr) {
+  const S ood2 = my_recip(distsq+S(1.e-6));
+  const S corefac = my_recip(sr*sr + tr*tr);
   const S reld2 = corefac / ood2;
   // 4 flops to here
   return exp_cond(ood2, corefac, reld2);

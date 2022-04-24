@@ -16,16 +16,24 @@
 #include <iostream>
 #include <chrono>
 
-// the fast solver
+// the fast solvers
 extern "C" float external_vel_solver_f_ (const int*, const float*, const float*,
                                                      const float*, const float*,
                                          const int*, const float*, const float*,
                                                            float*,       float*);
+extern "C" float external_vel_solver_tr_f_ (const int*, const float*, const float*,
+                                                     const float*, const float*,
+                                         const int*, const float*, const float*, const float*,
+                                                           float*,       float*);
 
-// the direct solver
+// the direct solvers
 extern "C" float external_vel_direct_f_ (const int*, const float*, const float*,
                                                      const float*, const float*,
                                          const int*, const float*, const float*,
+                                                           float*,       float*);
+extern "C" float external_vel_direct_tr_f_ (const int*, const float*, const float*,
+                                                     const float*, const float*,
+                                         const int*, const float*, const float*, const float*,
                                                            float*,       float*);
 
 const char* progname = "main2dvort";
@@ -69,14 +77,16 @@ int main(int argc, char *argv[]) {
     for (auto& _y : sy) { _y = -1.0f + 2.0f*(float)rand()/(float)RAND_MAX; }
     // totally random (unrealistic, but worst-case)
     for (auto& _m : ss) { _m = (-1.0f + 2.0f*(float)rand()/(float)RAND_MAX) / (float)numSrcs; }
-    for (auto& _r : sr) { _r = 1.0f / std::sqrt(numSrcs); }
+    for (auto& _r : sr) { _r = (0.6f + (float)rand()/(float)RAND_MAX) / std::sqrt(numSrcs); }
 
-    std::vector<float> tx(numTargs);
-    std::vector<float> ty(numTargs);
+    // targets are same as sources (a normal situation)
+    std::vector<float> tx = sx;
+    std::vector<float> ty = sy;
+    std::vector<float> tr = sr;
     std::vector<float> tu(numTargs);
     std::vector<float> tv(numTargs);
-    for (auto& _x : tx) { _x = (float)rand()/(float)RAND_MAX; }
-    for (auto& _y : ty) { _y = (float)rand()/(float)RAND_MAX; }
+    //for (auto& _x : tx) { _x = (float)rand()/(float)RAND_MAX; }
+    //for (auto& _y : ty) { _y = (float)rand()/(float)RAND_MAX; }
     for (auto& _u : tu) { _u = 0.0f; }
     for (auto& _v : tv) { _v = 0.0f; }
     auto end = std::chrono::system_clock::now();
@@ -90,8 +100,8 @@ int main(int argc, char *argv[]) {
     start = std::chrono::system_clock::now();
     int ns = numSrcs;
     int nt = numTargs;
-    flops = external_vel_solver_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
-                                   &nt, tx.data(), ty.data(), tu.data(), tv.data());
+    flops = external_vel_solver_tr_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                   &nt, tx.data(), ty.data(), tr.data(), tu.data(), tv.data());
 
     end = std::chrono::system_clock::now();
     elapsed_seconds = end-start;
@@ -107,18 +117,20 @@ int main(int argc, char *argv[]) {
         int ntn = numTargs / ntskip;
         std::vector<float> txn(ntn);
         std::vector<float> tyn(ntn);
+        std::vector<float> trn(ntn);
         std::vector<float> tun(ntn);
         std::vector<float> tvn(ntn);
         for (size_t i=0; i<(size_t)ntn; ++i) {
             const size_t ifast = i * ntskip;
             txn[i] = tx[ifast];
             tyn[i] = ty[ifast];
+            trn[i] = tr[ifast];
             tun[i] = 0.0f;
             tvn[i] = 0.0f;
         }
         start = std::chrono::system_clock::now();
-        flops = external_vel_direct_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
-                                       &ntn, txn.data(), tyn.data(), tun.data(), tvn.data());
+        flops = external_vel_direct_tr_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
+                                       &ntn, txn.data(), tyn.data(), trn.data(), tun.data(), tvn.data());
         end = std::chrono::system_clock::now();
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
@@ -138,8 +150,8 @@ int main(int argc, char *argv[]) {
             if (thiserr*thiserr > maxerr) maxerr = thiserr*thiserr;
             errcnt += tun[i]*tun[i];
         }
-        printf("    rms error in fast solver:\t%g\n", std::sqrt(errsum/errcnt));
         printf("    max error in fast solver:\t%g\n", std::sqrt(maxerr/(errcnt/(float)ntn)));
+        printf("    rms error in fast solver:\t%g\n", std::sqrt(errsum/errcnt));
     }
 
     return 0;
