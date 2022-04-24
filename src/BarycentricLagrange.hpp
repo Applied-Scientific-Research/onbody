@@ -56,6 +56,8 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                              const size_t tnode) {
 
     const bool dbg = false;
+    const bool interp_radii = true;
+
     if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
 
@@ -107,13 +109,20 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
     //for (size_t i=iepstart; i<iepstart+blockSize; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
 
-    // and set all equiv. particles weights and radii to zero
-    for (size_t i=iepstart; i<iepstop; ++i) {
+    // set all equiv. particles weights
+    for (size_t i=iepstart; i<iepstart+blockSize; ++i) {
         for (size_t d=0; d<SD; ++d) ep.s[d][i] = 0.0;
-        ep.r[i] = 0.0;
-        // or use given radius
-        ep.r[i] = p.r[t.ioffset[tnode]];
     }
+
+    // initialize radii to zero, or just copy the first particle radius
+    if (interp_radii) {
+        for (size_t i=iepstart; i<iepstart+blockSize; ++i) ep.r[i] = 0.0;
+    } else {
+        for (size_t i=iepstart; i<iepstart+blockSize; ++i) ep.r[i] = p.r[t.ioffset[tnode]];
+    }
+
+    // store a sum of weights
+    std::vector<S> wgtsum(blockSize, 0.0);
 
     // precompute these useful indices
     std::vector<std::array<S,PD>> kidx;
@@ -136,7 +145,9 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             if (dbg) printf("    from %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
 
             // this child is a non-leaf node and needs to make equivalent particles
+            #pragma omp task shared(p,ep,t)
             (void) calcBarycentricLagrange(p, ep, t, order, ichild);
+            // need to call both children here to gain any parallelism
 
             if (dbg) printf("  back in node %ld...\n", tnode);
 
@@ -203,10 +214,18 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                     }
                     // note the use of ep for both here!
                     for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * ep.s[d][ip];
+
+                    if (interp_radii) {
+                        ep.r[iep] += std::abs(wgt) * ep.r[ip];
+                        wgtsum[i] += std::abs(wgt);
+                    }
                 }
             }
 
-            if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i]);
+            // now adjust particle radii
+            //for (size_t i=0; i<numEqps; ++i) ep.r[iepstart+i] /= wgtsum[i];
+
+            //if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g rad %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i], ep.r[i]);
 
             t.epnum[tnode] = numEqps;
 
@@ -273,14 +292,24 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                         //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
                     }
                     for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * p.s[d][ip];
+
+                    if (interp_radii) {
+                        ep.r[iep] += std::abs(wgt) * p.r[ip];
+                        wgtsum[i] += std::abs(wgt);
+                    }
                 }
             }
-
-            if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i]);
 
             t.epnum[tnode] = numEqps;
         }
     }
+
+    // now adjust particle radii
+    if (interp_radii) {
+        for (size_t i=0; i<numEqps; ++i) ep.r[iepstart+i] /= wgtsum[i];
+    }
+
+    if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g rad %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i], ep.r[i]);
 
     //printf("  node %d finally has %d equivalent particles, offset %d\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
 
