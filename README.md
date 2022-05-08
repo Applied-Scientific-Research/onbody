@@ -8,19 +8,24 @@ Test C++ code for equivalent particle approximation technique and O(NlogN) and O
 `onbody` is a testbed C++ library and driver program for a single evaluation of the forces
 on a system of target points from a system of source particles (an "N-body" problem).
 
-This is easiest understood in the context of gravitation: all stars (masses) in a galaxy 
-attract all other stars; to find the forces between all of them on a computer, you would 
+This is most easily understood in the context of gravitation, where all stars (masses) in a galaxy 
+attract all other stars according to [Newton's law of universal gravitation](https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation).
+To find the forces between all of them on a computer, you would 
 need to compute, for each star, the distance, direction, and then force that every other
 star applies. This is a trivially easy algorithm to write, but it must perform about 
 20 * N * N arithmetic operations to find all of the stars' new accelerations (where N is the
-number of stars). This is called direct summation, and is an O(N^2) method.
+number of stars). This is called direct summation, and is an O(N^2) method, because the cost
+is the second power of the problem size. For N<10,000, this is still quite fast, but galaxies
+can easily contain 100 billion or more stars, not to even mention other forms of mass (planets,
+dark matter, uncoalesced gases).
 
-In this software are "treecodes" that aim to make that calculation much faster, theoretically
-C * N * log(N) operations, where C is some constant number (generally larger than 20).
-Treecode algorithms are still relatively easy to program, but it is a little challenging to 
+In this repository you'll find "treecodes"; these aim to make that calculation much faster,
+theoretically C * N * log(N) operations, where C is some constant number (generally larger than 20).
+Treecode algorithms, like the [Barnes-Hut](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation),
+are still relatively easy to program, but require some extra care to
 optimize their performance on current computer hardware.
-Finally, there are methods (Fast Multipole Method, dual-tree-traversal, etc.) that 
-can reduce that further to C * N operations (C is again a constant number, although 
+Finally, there are methods ([Fast Multipole Method](https://en.wikipedia.org/wiki/Fast_multipole_method), dual-tree-traversal, etc.) that 
+can reduce the cost further to C * N operations (C is again a constant number, although 
 it could be large), but at the cost of an even more intricate algorithm and more 
 difficulty optimizing the code for peak performance.
 
@@ -29,7 +34,9 @@ a variety of other problems. Solving for electrostatic forces is identical to gr
 with the exception that the "mass" of each source particle can be negative.
 Similarly, incompressible fluid dynamics allows solutions where source particles
 have a circulation property, and the same algorithms then solve for the resulting
-velocity of those particles (called "vortex particle methods").
+velocity of those particles (called "vortex particle methods"). These are all
+called [N-body problems](https://en.wikipedia.org/wiki/N-body_simulation),
+hence the name of this repository.
 
 Each of the codes in this package will set up a system of source and target points and
 perform the naive direct summation, three treecodes, and ultimately a "fast" (O(N)) 
