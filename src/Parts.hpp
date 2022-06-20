@@ -45,10 +45,10 @@ public:
     bool are_sources;
     size_t n;
     alignas(32) std::array<Vector<S>, PD> x;
+    alignas(32) Vector<S> r;
 
     // actuator (needed by sources)
     alignas(32) std::array<Vector<S>, SD> s;
-    alignas(32) Vector<S> r;
 
     // results (needed by targets)
     alignas(32) std::array<Vector<A>, OD> u;

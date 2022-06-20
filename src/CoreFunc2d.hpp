@@ -26,14 +26,15 @@ static inline S core_func (const S distsq, const S sr) {
   const S r2 = distsq + sr*sr;
   return my_recip(r2);
 }
+static inline int flops_tp_nograds () { return 3; }
 
 template <class S>
 static inline S core_func (const S distsq, const S sr, const S tr) {
   const S r2 = distsq + sr*sr + tr*tr;
   return my_recip(r2);
 }
+static inline int flops_tpr_nograds () { return 5; }
 
-static inline int flops_tp_nograds () { return 3; }
 #endif
 
 #ifdef USE_EXPONENTIAL_KERNEL
@@ -89,6 +90,7 @@ static inline S core_func (const S distsq, const S sr) {
   // 4 flops to here
   return exp_cond(ood2, corefac, reld2);
 }
+static inline int flops_tp_nograds () { return 9; }
 
 template <class S>
 static inline S core_func (const S distsq, const S sr, const S tr) {
@@ -98,7 +100,6 @@ static inline S core_func (const S distsq, const S sr, const S tr) {
   // 4 flops to here
   return exp_cond(ood2, corefac, reld2);
 }
-
-static inline int flops_tp_nograds () { return 9; }
+static inline int flops_tpr_nograds () { return 11; }
 #endif
 

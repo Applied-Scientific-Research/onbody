@@ -42,17 +42,17 @@ template <class S> using Vector = std::vector<S>;
 template <class S, class A>
 static inline void nbody_kernel(const S sx, const S sy,
                                 const S sr, const S ss,
-                                const S tx, const S ty,
+                                const S tx, const S ty, const S tr,
                                 A& __restrict__ tu, A& __restrict__ tv) {
     // 12 flops
     const S dx = tx - sx;
     const S dy = ty - sy;
-    const S r2 = ss * core_func<S>(dx*dx + dy*dy, sr);
+    const S r2 = ss * core_func<S>(dx*dx + dy*dy, sr, tr);
     tu -= mycast<S,A>(r2*dy);
     tv += mycast<S,A>(r2*dx);
 }
 
-static inline int nbody_kernel_flops() { return 10 + flops_tp_nograds(); }
+static inline int nbody_kernel_flops() { return 10 + flops_tpr_nograds(); }
 
 template <class S, class A, int PD, int SD, int OD> class Parts;
 
@@ -74,6 +74,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     // spread this target over a vector
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
+    const Vc::Vector<S> vtr = targs.r[i];
     VecA vtu0(0.0f);
     VecA vtu1(0.0f);
     // reference source data as Vc::Vector<A>
@@ -84,7 +85,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     for (size_t j=0; j<nSrcVec; ++j) {
         nbody_kernel<Vc::Vector<S>,VecA>(
                      *sxit, *syit, *srit, *ssit,
-                     vtx, vty, vtu0, vtu1);
+                     vtx, vty, vtr, vtu0, vtu1);
         // advance the source iterators
         ++sxit;
         ++syit;
@@ -98,7 +99,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 #else
     for (size_t j=jstart; j<jend; ++j) {
         nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.s[0][j],
-                     targs.x[0][i], targs.x[1][i],
+                     targs.x[0][i], targs.x[1][i], targs.r[i],
                      targs.u[0][i], targs.u[1][i]);
     }
 #endif
@@ -120,6 +121,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         // spread this target over a vector
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
+        const Vc::Vector<S> vtr = targs.r[i];
         VecA vtu0(0.0f);
         VecA vtu1(0.0f);
         // convert source data to Vc::Vector<S>
@@ -130,7 +132,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         for (size_t j=0; j<nSrcVec; ++j) {
             nbody_kernel<Vc::Vector<S>,VecA>(
                          *sxit, *syit, *srit, *ssit,
-                         vtx, vty, vtu0, vtu1);
+                         vtx, vty, vtr, vtu0, vtu1);
             // advance the source iterators
             ++sxit;
             ++syit;
@@ -145,7 +147,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
             nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.r[j], srcs.s[0][j],
-                         targs.x[0][i], targs.x[1][i],
+                         targs.x[0][i], targs.x[1][i], targs.r[i],
                          targs.u[0][i], targs.u[1][i]);
         }
     }
@@ -159,7 +161,7 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
                    Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
     nbody_kernel<S,A>(stree.x[0][j], stree.x[1][j], stree.pr[j], stree.s[0][j],
-                 targs.x[0][i], targs.x[1][i],
+                 targs.x[0][i], targs.x[1][i], targs.r[i],
                  targs.u[0][i], targs.u[1][i]);
 }
 
@@ -188,7 +190,7 @@ struct fastsumm_stats {
 template <class S, class A, int PD, int SD, int OD>
 struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Parts<S,A,PD,SD,OD>& eqsrcs, const Tree<S,PD,SD>& stree,
                     Parts<S,A,PD,SD,OD>& targs, Parts<S,A,PD,SD,OD>& eqtargs, const Tree<S,PD,SD>& ttree,
-                    const size_t ittn, std::vector<size_t> istv_in, const float theta) {
+                    const size_t ittn, std::vector<size_t> istv_in, const S theta) {
 
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
@@ -312,7 +314,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
             for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
             for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
                 nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
-                             targs.x[0][i], targs.x[1][i],
+                             targs.x[0][i], targs.x[1][i], targs.r[i],
                              targs.u[0][i], targs.u[1][i]);
             }
             }
@@ -337,7 +339,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
                     nbody_kernel(srcs.x[0][j],    srcs.x[1][j],  srcs.r[j], srcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i],
+                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.r[i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }
@@ -348,7 +350,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
                 for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
                     nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.r[j], eqsrcs.s[0][j],
-                                 targs.x[0][i],  targs.x[1][i],
+                                 targs.x[0][i],  targs.x[1][i],  targs.r[i],
                                  targs.u[0][i], targs.u[1][i]);
                 }
                 }
@@ -359,7 +361,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
                 for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
                 for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
                     nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.r[j], eqsrcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i],
+                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.r[i],
                                  eqtargs.u[0][i], eqtargs.u[1][i]);
                 }
                 }
@@ -457,8 +459,9 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
+    const bool random_radii = false;
     static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
-    bool just_build_trees = false;
+    const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t echonum = 1;
@@ -508,6 +511,7 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,2,1,2> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
+    if (random_radii) srcs.randomize_radii();
     //srcs.smooth_strengths();
     //srcs.wave_strengths();
     //srcs.central_strengths();
@@ -626,7 +630,15 @@ int main(int argc, char *argv[]) {
 
         // then, march through arrays merging pairs as you go up
         start = std::chrono::system_clock::now();
-        (void) calcEquivalents(targs, eqtargs, ttree, 1);
+        //if (order < 0) {
+            (void) calcEquivalents(targs, eqtargs, ttree, 1);
+        //} else {
+            //assert(false && "Barycentric code incomplete");
+            //#pragma omp parallel
+            //#pragma omp single
+            //(void) calcBarycentricLagrange(targs, eqtargs, ttree, order, 1);
+            //#pragma omp taskwait
+        //}
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
