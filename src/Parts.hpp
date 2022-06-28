@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <vector>
+#include <array>
 
 
 #ifdef USE_VC

@@ -35,7 +35,7 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 template <class S> size_t VecSize = Vc::Vector<S>::Size;
 #else
 template <class S> using Vector = std::vector<S>;
-using size_t VecSize = 1;
+template <class S> size_t VecSize = 1;
 #endif
 
 
@@ -410,7 +410,7 @@ void sortIndexesSection(const int recursion_level,
 // Find min and max values along an axis
 //
 template <class S>
-std::pair<S,S> minMaxValue(const Vector<S> &x, size_t istart, size_t iend) {
+std::pair<S,S> minMaxValue(const Vector<S> &x, const size_t istart, const size_t iend) {
 
     auto itbeg = x.begin() + istart;
     auto itend = x.begin() + iend;
@@ -522,7 +522,7 @@ void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx,
 // Split this segment of the particles on its longest axis
 //
 template <class S, class A, int PD, int SD, int OD>
-void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD>& t, size_t tnode) {
+void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, Tree<S,PD,SD>& t, const size_t tnode) {
 
     //printf("splitNode %ld  %ld %ld\n", tnode, pfirst, plast);
 
@@ -619,7 +619,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, size_t pfirst, size_t plast, Tree<S,PD,SD
 // Finish up the tree with a downward pass
 //
 template <class S, class A, int PD, int SD, int OD>
-void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
+void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, const size_t tnode) {
 
     // if we're not a leaf node...
     if (t.num[tnode] > blockSize) {
@@ -762,7 +762,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
 // Code is borrowed from splitNode above
 //
 template <class S, class A, int PD, int SD, int OD>
-void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t pfirst, size_t plast) {
+void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD> const & t, const size_t pfirst, const size_t plast) {
 
     // if there are 1 or 2 particles, then they are already in "order"
     if (plast-pfirst < 3) return;
@@ -801,7 +801,7 @@ void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t pfirst, size_t 
 // Loop over all leaf nodes in the tree and call the refine function on them
 //
 template <class S, class A, int PD, int SD, int OD>
-void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
+void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD> const & t, const size_t tnode) {
 
     if (tnode == 1) {
         // allocate temporaries
@@ -847,7 +847,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, size_t tnode) {
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
 template <class S, class A, int PD, int SD, int OD>
-void calcEquivalents(Parts<S,A,PD,SD,OD>& p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, size_t tnode) {
+void calcEquivalents(Parts<S,A,PD,SD,OD> const & p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, const size_t tnode) {
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
 
