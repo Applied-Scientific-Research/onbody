@@ -79,7 +79,8 @@ public:
 };
 
 template <class S, int PD, int SD>
-Tree<S,PD,SD>::Tree(size_t _num) {
+Tree<S,PD,SD>::Tree(const size_t _num) {
+    if (_num==0) return;
     // _num is number of elements this tree needs to store
     uint32_t numLeaf = 1 + ((_num-1)/blockSize);
     //printf("  %d nodes at leaf level\n", numLeaf);
@@ -91,7 +92,7 @@ Tree<S,PD,SD>::Tree(size_t _num) {
 }
 
 template <class S, int PD, int SD>
-void Tree<S,PD,SD>::resize(size_t _num) {
+void Tree<S,PD,SD>::resize(const size_t _num) {
     numnodes = _num;
     for (int d=0; d<PD; ++d) x[d].resize(numnodes);
     for (int d=0; d<PD; ++d) nc[d].resize(numnodes);
@@ -107,7 +108,7 @@ void Tree<S,PD,SD>::resize(size_t _num) {
 }
 
 template <class S, int PD, int SD>
-void Tree<S,PD,SD>::print(size_t _num) {
+void Tree<S,PD,SD>::print(const size_t _num) {
     printf("\n%dD tree with %d levels\n", PD, levels);
     for (size_t i=1; i<numnodes && i<_num; ++i) {
         printf("  %ld  %ld %ld  %g\n",i, num[i], ioffset[i], s[i]);
