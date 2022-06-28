@@ -26,9 +26,20 @@ IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -g -ggdb3")
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14 -stdlib=libc++")
+  # The Cray compiler reports as Clang to most versions of CMake
+  EXECUTE_PROCESS(COMMAND ${CMAKE_CXX_COMPILER} --version
+                  COMMAND grep -c Cray
+                  OUTPUT_VARIABLE INTERNAL_HAVE_CRAY_COMPILER
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  IF (INTERNAL_HAVE_CRAY_COMPILER) #not actually Clang
+    # cray compiler misidentifies as Clang and needs this instead
+    SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14")
+  ELSE()
+    # real clang needs this
+    SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14 -stdlib=libc++")
+  ENDIF()
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
-  SET (CMAKE_CXX_FLAGS_RELEASE "-O3")
+  SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -ggdb")
 ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
@@ -97,7 +108,8 @@ ELSEIF ( UNIX )
     SET (VC_LIBS "")
   ENDIF()
 
-  INCLUDE_DIRECTORIES ( "/usr/include/eigen3" )
+  SET (EIGEN_ROOT "/usr/include/eigen3" CACHE STRING "Eigen root" )
+  INCLUDE_DIRECTORIES ( "${EIGEN_ROOT}" )
 
 ENDIF ()
 
