@@ -6,8 +6,8 @@
 
 #include <cstdlib>
 #include <cstdint>
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <cmath>
 #ifdef _OPENMP
 #include <omp.h>

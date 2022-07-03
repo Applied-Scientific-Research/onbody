@@ -13,7 +13,7 @@
 #endif
 
 #include <cstdint>
-#include <stdio.h>
+#include <cstdio>
 #include <cmath>
 #include <vector>
 
