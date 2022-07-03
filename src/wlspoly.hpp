@@ -193,6 +193,7 @@ void WLSPoly<T,NDIM,NORDER>::solve(const std::vector<T>& pts,
 
 template <class T, int32_t NDIM, int32_t NORDER>
 T WLSPoly<T,NDIM,NORDER>::eval(const std::vector<T>& xtest) {
-    return 0.0;
+    // we're not using this method, so return something to suppress errors
+    return xtest[0];
 }
 

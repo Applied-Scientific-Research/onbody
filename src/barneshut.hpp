@@ -403,7 +403,9 @@ void sortIndexesSection(const int recursion_level,
        [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
 
   // sort indexes based on comparing values in v, possibly with forking
-  //splitSort(recursion_level, v, idx, istart, istop);
+  if (false) {
+    splitSort(recursion_level, v, idx, istart, istop);
+  }
 }
 
 //

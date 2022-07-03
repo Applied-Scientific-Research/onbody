@@ -491,6 +491,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*ntarg; ++i) twy[i] += targs.u[8][i];
     for (int i=0; i<*ntarg; ++i) tuz[i] += targs.u[9][i];
     for (int i=0; i<*ntarg; ++i) tvz[i] += targs.u[10][i];
+    for (int i=0; i<*ntarg; ++i) twz[i] += targs.u[11][i];
 
     if (!silent) for (int i=0; i<std::min(10,*ntarg); ++i) printf("  %d  %g %g\n", i, tu[i], tv[i]);
 

@@ -83,10 +83,16 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     // map the Chebyshev nodes to this cluster's bounds
 
     // make a local copy of the sk coordinates
-    S lsk[PD][ncp];
-    for (size_t d=0; d<PD; ++d) {
-        for (size_t k=0; k<ncp; ++k) {
-            lsk[d][k] = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
+    //S lsk[PD][ncp];
+    std::vector<S> lsk(PD*ncp);
+    {
+        auto lsk_iter = std::begin(lsk);
+        for (size_t d=0; d<PD; ++d) {
+            for (size_t k=0; k<ncp; ++k) {
+                //lsk[d][k] = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
+                *lsk_iter = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
+                ++lsk_iter;
+            }
         }
     }
 
@@ -176,10 +182,13 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                 for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
 
                 // loop over coord indices and Cheby points to compute a
+                auto lsk_iter = std::begin(lsk);
                 for (size_t d=0; d<PD; ++d) {
                 for (size_t k=0; k<ncp; ++k) {
                     // note the use of ep here!
-                    const S dist = ep.x[d][ip] - lsk[d][k];
+                    //const S dist = ep.x[d][ip] - lsk[d][k];
+                    const S dist = ep.x[d][ip] - *lsk_iter;
+                    ++lsk_iter;
                     if (std::abs(dist) < 1.e-10) {
                         flag[d] = k;
                     } else {
@@ -254,9 +263,12 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                 for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
 
                 // loop over coord indices and Cheby points to compute a
+                auto lsk_iter = std::begin(lsk);
                 for (size_t d=0; d<PD; ++d) {
                 for (size_t k=0; k<ncp; ++k) {
-                    const S dist = p.x[d][ip] - lsk[d][k];
+                    //const S dist = p.x[d][ip] - lsk[d][k];
+                    const S dist = p.x[d][ip] - *lsk_iter;
+                    ++lsk_iter;
                     if (std::abs(dist) < 1.e-10) {
                         flag[d] = k;
                     } else {

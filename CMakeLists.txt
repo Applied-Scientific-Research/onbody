@@ -21,7 +21,7 @@ IF (NOT CMAKE_BUILD_TYPE)
 ENDIF ()
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
-  SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14")
+  SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14")
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -g -ggdb3")
@@ -33,10 +33,10 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
   IF (INTERNAL_HAVE_CRAY_COMPILER) #not actually Clang
     # cray compiler misidentifies as Clang and needs this instead
-    SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14")
+    SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14")
   ELSE()
     # real clang needs this
-    SET (CMAKE_CXX_FLAGS "-Wall -Wformat -std=c++14 -stdlib=libc++")
+    SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14 -stdlib=libc++")
   ENDIF()
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
