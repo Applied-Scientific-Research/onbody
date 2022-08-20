@@ -164,11 +164,15 @@ This restriction could be relaxed with some code changes.
 
 ## To Do
 
-* Finish implementing the barycentric Lagrange interpolator into the fast (O(N)) method
+* Implement the barycentric Lagrange interpolator into the fast (O(N)) method
+* Save memory in the barycentric Lagrange case by allocating only enough for the proxy particles; this has the added benefit of allowing higher orders than 11 (in 2D) and 4 (in 3D).
 * Support different kernels more easily (like one which takes source and target radii)
+* Finish porting templated functions and casts to allow float/double/Vc classes in kernel functions
+* Would it be a benefit to adjust the proxy particles' radii in addition to strength?
 * Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code
 * Use smarter or faster data structures in the O(N) list-building system
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
+* More generally, consider how to port this entire code to HIP
 
 ## Credits
 
