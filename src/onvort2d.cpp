@@ -450,7 +450,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: %s [-n=<nparticles>]\n", progname);
+    fprintf(stderr, "Usage: %s [-h] [-n=<nparticles>] [-t=<theta>] [-o=<order>]\n", progname);
     exit(1);
 }
 
@@ -483,6 +483,8 @@ int main(int argc, char *argv[]) {
             int32_t testorder = atoi(argv[i]+3);
             if (testorder < 1) usage();
             order = testorder;
+        } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
+            usage();
         }
     }
 

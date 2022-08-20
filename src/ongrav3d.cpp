@@ -1,5 +1,5 @@
 /*
- * ongrav3d - testbed for an O(N) 3d gravitational solver
+ * ongrav3d - testbed for an O(N) 3d gravitational/electrostatics solver
  *
  * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
@@ -78,6 +78,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
     const Vc::Vector<S> vtx = targs.x[0][i];
     const Vc::Vector<S> vty = targs.x[1][i];
     const Vc::Vector<S> vtz = targs.x[2][i];
+    //const Vc::Vector<S> vtr = targs.r[i];
     VecA vtu0(0.0f);
     VecA vtu1(0.0f);
     VecA vtu2(0.0f);
@@ -129,6 +130,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
         const Vc::Vector<S> vtx = targs.x[0][i];
         const Vc::Vector<S> vty = targs.x[1][i];
         const Vc::Vector<S> vtz = targs.x[2][i];
+        //const Vc::Vector<S> vtr = targs.r[i];
         VecA vtu0(0.0f);
         VecA vtu1(0.0f);
         VecA vtu2(0.0f);
@@ -486,7 +488,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: %s [-n=<nparticles>]\n", progname);
+    fprintf(stderr, "Usage: %s [-h] [-n=<nparticles>] [-t=<theta>] [-o=<order>]\n", progname);
     exit(1);
 }
 
@@ -520,6 +522,8 @@ int main(int argc, char *argv[]) {
             int32_t testorder = atoi(argv[i]+3);
             if (testorder < 1) usage();
             order = testorder;
+        } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
+            usage();
         }
     }
 

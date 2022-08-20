@@ -492,7 +492,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs, const Part
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: %s [-n=<nparticles>]\n", progname);
+    fprintf(stderr, "Usage: %s [-h] [-n=<nparticles>] [-t=<theta>] [-o=<order>]\n", progname);
     exit(1);
 }
 
@@ -501,8 +501,9 @@ static void usage() {
 //
 int main(int argc, char *argv[]) {
 
+    const bool random_radii = false;
     static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
-    bool just_build_trees = false;
+    const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t echonum = 1;
@@ -524,6 +525,8 @@ int main(int argc, char *argv[]) {
             int32_t testorder = atoi(argv[i]+3);
             if (testorder < 1) usage();
             order = testorder;
+        } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
+            usage();
         }
     }
 
@@ -552,6 +555,7 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,3,3> srcs(numSrcs, true);
     // initialize particle data
     srcs.random_in_cube();
+    if (random_radii) srcs.randomize_radii();
     //srcs.smooth_strengths();
     srcs.wave_strengths();
     //srcs.central_strengths();
@@ -647,7 +651,7 @@ int main(int argc, char *argv[]) {
         treetime[4] += elapsed_seconds.count();
     }
 
-    // find equivalent points
+    // find equivalent targets
     Parts<STORE,ACCUM,3,3,3> eqtargs(0, false);
     if (test_iterations[4] > 0) {
         printf("\nCalculating equivalent targ points\n");
