@@ -2,10 +2,9 @@
 # onbody
 # (c)2017-2022 Applied Scientific Research, Inc.
 #
-CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
 PROJECT ( onbody )
+CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
 
-# User-serviceable variables here
 SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
@@ -23,8 +22,8 @@ ENDIF ()
 IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14")
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
-  SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
-  SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -g -ggdb3")
+  SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math -flto")
+  SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -ffast-math -flto -g -ggdb3")
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # The Cray compiler reports as Clang to most versions of CMake
   EXECUTE_PROCESS(COMMAND ${CMAKE_CXX_COMPILER} --version
@@ -39,7 +38,7 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14 -stdlib=libc++")
   ENDIF()
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
-  SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math")
+  SET (CMAKE_CXX_FLAGS_RELEASE "-Ofast -march=native -ffast-math -flto")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -ggdb")
 ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
