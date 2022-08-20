@@ -214,9 +214,10 @@ float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
 
     //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
     //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
-    //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
+    //printf("  sltp %ld  sbtp %ld  epnum %ld\n", stats.sltp, stats.sbtp, stree.epnum[1]);
 
-    return (float)nbody_kernel_flops() * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize;
+    return (float)nbody_kernel_flops() * 
+           ((float)stats.sltp*(float)blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
 }
 
 
@@ -322,9 +323,10 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
 
     //printf("  %ld target particles averaged %g leaf-part and %g equiv-part interactions\n",
     //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
-    //printf("  sltp %ld  sbtp %ld\n", stats.sltp, stats.sbtp);
+    //printf("  sltp %ld  sbtp %ld  epnum %ld\n", stats.sltp, stats.sbtp, stree.epnum[1]);
 
-    return (float)nbody_kernel_flops() * ((float)stats.sltp + (float)stats.sbtp) * (float)blockSize * (float)blockSize;
+    return (float)nbody_kernel_flops() * (float)blockSize *
+           ((float)stats.sltp*(float)blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
 }
 
 
