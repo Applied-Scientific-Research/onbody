@@ -128,7 +128,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
             nbody_kernel<Vc::Vector<S>,VecA>(
                          *sxit, *syit, *srit, *ssit,
                          vtx, vty, vtu0, vtu1);
-            if (false and std::abs(vtu0.sum())>100.0 or std::abs(vtu1.sum())>100.0) {
+            if (false and (std::abs(vtu0.sum())>100.0 or std::abs(vtu1.sum())>100.0)) {
                 std::cout << "die in ppinter targ " << i << " srcvec " << j << "\n " << *sxit << "\n " << *syit << "\n " << *ssit << "\n " << *srit << "\n";
                 for (size_t k=0; k<Vc::Vector<S>::Size; ++k) {
                     size_t idx = Vc::Vector<S>::Size * (sxit - srcs.x[0].begin()) + k;
