@@ -1,9 +1,10 @@
 #
 # onbody
+#
 # (c)2017-2022 Applied Scientific Research, Inc.
 #
-PROJECT ( onbody )
-CMAKE_MINIMUM_REQUIRED ( VERSION 2.6 )
+PROJECT( onbody CXX )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.4 )
 
 SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
 IF (NOT CMAKE_BUILD_TYPE)
@@ -18,12 +19,21 @@ SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
 ENDIF ()
+SET (EXTRA_LINK "")
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14")
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -ffast-math -flto")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -march=native -ffast-math -flto -g -ggdb3")
+  # need the following for -flto to work
+  # see https://stackoverflow.com/questions/39236917/using-gccs-link-time-optimization-with-static-linked-libraries
+  SET (CMAKE_AR "gcc-ar")
+  SET (CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
+  SET (CMAKE_CXX_ARCHIVE_FINISH true)
+  # which also requires this
+  SET (EXTRA_LINK "-static-libstdc++")
+
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # The Cray compiler reports as Clang to most versions of CMake
   EXECUTE_PROCESS(COMMAND ${CMAKE_CXX_COMPILER} --version
@@ -40,6 +50,7 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   SET (CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb")
   SET (CMAKE_CXX_FLAGS_RELEASE "-Ofast -march=native -ffast-math -flto")
   SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -ggdb")
+
 ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
 ENDIF ()
@@ -118,24 +129,30 @@ ADD_DEFINITIONS (${CPREPROCDEFS})
 # original targets
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
 TARGET_LINK_LIBRARIES( "onvort2d" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "onvort2d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvort3d" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "onvort3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
 TARGET_LINK_LIBRARIES( "ongrav3d" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "ongrav3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 # new targets
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" "src/interface2dvorttr.cpp" )
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
 TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
 TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${VC_LIBS} )
+SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 #TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
 
