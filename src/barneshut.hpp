@@ -1,7 +1,7 @@
 /*
  * barneshut.h - parameterized Barnes-Hut O(NlogN) treecode solver
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #pragma once
@@ -28,6 +28,7 @@
 #include <numeric>	// for iota
 #include <future>	// for async
 
+// use a fast partial sort (select) algorithm for tree-building
 #define PARTIAL_SORT
 
 #ifdef USE_VC
@@ -416,22 +417,58 @@ void sortIndexesSection(const int recursion_level,
 template <class S>
 std::pair<S,S> minMaxValue(const Vector<S> &x, const size_t istart, const size_t iend) {
 
-    auto itbeg = x.begin() + istart;
-    auto itend = x.begin() + iend;
-
-    auto range = std::minmax_element(itbeg, itend);
-    return std::pair<S,S>(x[range.first+istart-itbeg], x[range.second+istart-itbeg]);
+    auto range = std::minmax_element(x.begin() + istart, x.begin() + iend);
+    return std::pair<S,S>(x[range.first-x.begin()], x[range.second-x.begin()]);
 
     // what's an initializer list?
     //return std::minmax(itbeg, itend);
+}
+
+// do it in parallel
+template <class S>
+std::pair<S,S> minMaxValue(const Vector<S> &x, const size_t istart, const size_t iend, const int nthreads) {
+
+    S xmin = 9.9e+9;
+    S xmax = -9.9e+9;
+
+    #pragma omp taskloop if(nthreads>1) shared(x) reduction(min:xmin) reduction(max:xmax)
+    for (int i=0; i<nthreads; ++i) {
+        const size_t ifirst = istart + i*(iend-istart)/nthreads;
+        const size_t ilast = istart + (i+1)*(iend-istart)/nthreads;
+        auto range = std::minmax_element(x.begin()+ifirst, x.begin()+ilast);
+        S thisxmin = x[range.first-x.begin()];
+        S thisxmax = x[range.second-x.begin()];
+        // need to compare to xmin! 
+        if (thisxmin < xmin) xmin = thisxmin;
+        if (thisxmax > xmax) xmax = thisxmax;
+        //std::cout << "chunk " << i << " from " << ifirst << " to " << ilast << " has min " << (range.first-x.begin()) << " " << thisxmin << " max " << (range.second-x.begin()) << " " << thisxmax << std::endl;
+    }
+
+    return std::pair<S,S>(xmin, xmax);
+}
+
+// do it in parallel, slowly
+template <class S>
+std::pair<S,S> minMaxValue_slow(const Vector<S> &x, const size_t istart, const size_t iend, const int nthreads) {
+
+    S xmin = 9.9e+9;
+    S xmax = -9.9e+9;
+
+    //#pragma omp for num_threads(nthreads) reduction(min:xmin) reduction(max:xmax)
+    for (size_t i=istart; i<iend; ++i) {
+        if (x[i] < xmin) xmin = x[i];
+        if (x[i] > xmax) xmax = x[i];
+    }
+
+    return std::pair<S,S>(xmin, xmax);
 }
 
 //
 // Helper function to reorder a segment of a vector
 //
 template <class S>
-void reorder(Vector<S> &x, Vector<S> &t,
-             const std::vector<size_t> &idx,
+void reorder(Vector<S>& x, Vector<S>& t,
+             const std::vector<size_t>& idx,
              const size_t pfirst, const size_t plast) {
 
     // copy the original input float vector x into a temporary vector
@@ -441,11 +478,26 @@ void reorder(Vector<S> &x, Vector<S> &t,
     for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
 }
 
+// only barely faster
+template <class S>
+void reorder(Vector<S>& x, Vector<S>& t,
+             const std::vector<size_t>& idx,
+             const size_t pfirst, const size_t plast,
+             const int nthreads) {
+
+    // copy the original input float vector x into a temporary vector
+    std::copy(x.begin()+pfirst, x.begin()+plast, t.begin()+pfirst);
+
+    // scatter values from the temp vector back into the original vector
+    #pragma omp taskloop if(nthreads>1) num_tasks(nthreads) shared(x,t,idx)
+    for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
+}
+
 //
 // Perform an experimental partial sort
 //
 template <class S>
-void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx,
+void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<S,S> in_minmax,
                         const size_t istart, const size_t nless, const size_t istop) {
 
   assert(v.size() == idx.size() && "Array size mismatch in partialSortIndexes");
@@ -461,12 +513,20 @@ void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx,
   size_t pfirst = istart;
   size_t plast = istop-1;
   int iters = 0;
-  float cutoff_ideal = (float)(nless-istart) / (float)(istop-istart);
+  S cutoff_ideal = (S)(nless-istart) / (S)(istop-istart);
+
+  // use passed-in min/max as first range bounds
+  std::pair<S,S> minmax = in_minmax;
 
   while (plast > pfirst and iters < 100) {
 
-    // find min/max of range
-    auto minmax = minMaxValue(v, pfirst, plast+1);
+    if (iters > 0) {
+      //auto start = std::chrono::system_clock::now();
+      minmax = minMaxValue(v, pfirst, plast+1);
+      //auto end = std::chrono::system_clock::now();
+      //std::chrono::duration<double> elapsed_seconds = end-start;
+      //if (plast-pfirst>10000000) printf("        sort minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
 
     // estimate value at cutoff
     S frac = (S)(nless-0.5-pfirst) / (S)(plast-pfirst);
@@ -530,14 +590,14 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
 
     //printf("splitNode %ld  %ld %ld\n", tnode, pfirst, plast);
 
-    #ifndef PARTIAL_SORT
+    // must know how many threads we are allowed to play with
     #ifdef _OPENMP
     const int thislev = log_2(tnode);
     const int sort_recursion = std::max(0, (int)log_2(::omp_get_num_threads()) - thislev);
     #else
     const int sort_recursion = 0;
     #endif
-    #endif
+    const int threads_per_node = std::pow(2, sort_recursion);
 
     // debug print - starting condition
     //for (size_t i=pfirst; i<pfirst+10 and i<plast; ++i) printf("  node %d %g %g %g\n", i, p.x[i], p.y[i], p.z[i]);
@@ -548,12 +608,19 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     //if (pfirst == 0) printf("  splitNode at level %d with 1 threads, %d recursions\n", thislev, sort_recursion);
     #endif
 
-    // find the min/max of the three axes
+    auto start = std::chrono::system_clock::now();
+
+    // find the min/max of the three axes and save them
+    std::array<std::pair<S,S>,PD> boxbounds;
     for (int d=0; d<PD; ++d) {
-        auto minmax = minMaxValue(p.x[d], pfirst, plast);
-        t.ns[d][tnode] = minmax.second - minmax.first;
-        t.nc[d][tnode] = 0.5 * (minmax.second + minmax.first);
+        boxbounds[d] = minMaxValue(p.x[d], pfirst, plast, threads_per_node);
+        t.ns[d][tnode] = boxbounds[d].second - boxbounds[d].first;
+        t.nc[d][tnode] = 0.5 * (boxbounds[d].second + boxbounds[d].first);
     }
+
+    auto end = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    //if (tnode==1) printf("      1st minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // write particle data to the tree node
     t.ioffset[tnode] = pfirst;
@@ -590,25 +657,44 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
     //printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
 
+    // temporary list of vectors to be sorted - oh, then we'll need many new temp vectors
+    //std::vector<Vector<S>&> jumble;
+
+    start = std::chrono::system_clock::now();
+
     // sort this portion of the array along the big axis
 #ifdef PARTIAL_SORT
-    (void) partialSortIndexes(p.x[maxaxis], p.lidx, pfirst, pmiddle, plast);
-    // note, this also sorts the values
-    for (int d=0; d<PD; ++d) if (d != maxaxis) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    (void) partialSortIndexes(p.x[maxaxis], p.lidx, boxbounds[maxaxis], pfirst, pmiddle, plast);
+
+    end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    //if (tnode==1) printf("      1st partial sort:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    start = std::chrono::system_clock::now();
+    // note, this also sorts the values - don't parallelize, we share ftemp!
+    //#pragma omp taskloop if(threads_per_node>1) shared(p)
+    for (int d=0; d<PD; ++d) {
+        if (d != maxaxis) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast, threads_per_node);
+    }
 #else
     (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.lidx, pfirst, plast);
-    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast);
+    for (int d=0; d<PD; ++d) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast, threads_per_node);
 #endif
 
+
     // rearrange the elements - parallel sections did not make things faster
-    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast);
-    reorder(p.r, p.ftemp, p.lidx, pfirst, plast);
+    if (p.are_sources) for (int d=0; d<SD; ++d) reorder(p.s[d], p.ftemp, p.lidx, pfirst, plast, threads_per_node);
+    reorder(p.r, p.ftemp, p.lidx, pfirst, plast, threads_per_node);
     p.reorder_idx(pfirst, plast);
 
-    // recursively call this routine for this node's new children
-    #pragma omp task shared(p,t)
+    end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    //if (tnode==1) printf("      1st reorder:\t[%.4f] seconds\n", elapsed_seconds.count());
+
+    // recursively call this routine for this node's new children, but only spawn new tasks if we have some to spare
+    #pragma omp task if(threads_per_node>1) shared(p,t)
     (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
-    #pragma omp task shared(p,t)
+    #pragma omp task if(threads_per_node>1) shared(p,t)
     (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
 
     // we don't need a taskwait directive here, because we don't use an upward pass, though it may
@@ -723,6 +809,7 @@ template <class S, class A, int PD, int SD, int OD>
 void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
 
     // allocate temporaries
+    auto start = std::chrono::system_clock::now();
     p.lidx.resize(p.n);
     p.itemp.resize(p.n);
     p.ftemp.resize(p.n);
@@ -730,11 +817,10 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     std::iota(p.gidx.begin(), p.gidx.end(), 0);
 
     // allocate
-    auto start = std::chrono::system_clock::now();
     t = Tree<S,PD,SD>(p.n);
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // upward pass, starting at node 1 (root) and recursing
     start = std::chrono::system_clock::now();
@@ -743,7 +829,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) splitNode(p, 0, p.n, t, 1);
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    //printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // downward pass, calculate masses, etc.
     start = std::chrono::system_clock::now();
@@ -752,7 +838,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) finishTree(p, t, 1);
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // de-allocate temporaries
     p.lidx.resize(0);
@@ -777,6 +863,7 @@ void refineLeaf(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD> const & t, const size_t pf
     // find the min/max of the three axes
     std::array<S,PD> boxsizes;
     for (int d=0; d<PD; ++d) {
+        //auto minmax = minMaxValue(p.x[d], pfirst, plast, 1);
         auto minmax = minMaxValue(p.x[d], pfirst, plast);
         boxsizes[d] = minmax.second - minmax.first;
     }
@@ -851,7 +938,11 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD> const & t, const size_t tn
 //       another: we are a non-leaf node taking eq parts from one leaf and one non-leaf node
 //
 template <class S, class A, int PD, int SD, int OD>
-void calcEquivalents(Parts<S,A,PD,SD,OD> const & p, Parts<S,A,PD,SD,OD>& ep, Tree<S,PD,SD>& t, const size_t tnode) {
+void calcEquivalents(Parts<S,A,PD,SD,OD> const & p,
+                     Parts<S,A,PD,SD,OD>& ep,
+                     Tree<S,PD,SD>& t,
+                     const size_t tnode) {
+
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
 
@@ -910,6 +1001,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD> const & p, Parts<S,A,PD,SD,OD>& ep, Tre
                 ep.r[iep] = ep.r[ip-1];
             }
             t.epnum[tnode] += numEqps;
+
         } else {
             // this child is a leaf node
             //printf("    child leaf node has particles %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
