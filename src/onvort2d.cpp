@@ -25,6 +25,7 @@
 #endif
 #include <vector>
 #include <iostream>
+#include <random>
 #include <chrono>
 
 const char* progname = "onvort2d";
@@ -509,18 +510,21 @@ int main(int argc, char *argv[]) {
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
+    // create the random engine with constant seed
+    std::mt19937 mt_engine(12345);
+
     // allocate space for sources and targets
     Parts<STORE,ACCUM,2,1,2> srcs(numSrcs, true);
     // initialize particle data
-    srcs.random_in_cube();
-    if (random_radii) srcs.randomize_radii();
+    srcs.random_in_cube(mt_engine);
+    if (random_radii) srcs.randomize_radii(mt_engine);
     //srcs.smooth_strengths();
     //srcs.wave_strengths();
     //srcs.central_strengths();
 
     Parts<STORE,ACCUM,2,1,2> targs(numTargs, false);
     // initialize particle data
-    targs.random_in_cube();
+    targs.random_in_cube(mt_engine);
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -632,15 +636,14 @@ int main(int argc, char *argv[]) {
 
         // then, march through arrays merging pairs as you go up
         start = std::chrono::system_clock::now();
-        //if (order < 0) {
+        if (order < 0) {
             (void) calcEquivalents(targs, eqtargs, ttree, 1);
-        //} else {
-            //assert(false && "Barycentric code incomplete");
-            //#pragma omp parallel
-            //#pragma omp single
-            //(void) calcBarycentricLagrange(targs, eqtargs, ttree, order, 1);
-            //#pragma omp taskwait
-        //}
+        } else {
+            #pragma omp parallel
+            #pragma omp single
+            (void) calcBarycentricLagrange(targs, eqtargs, ttree, order, 1);
+            #pragma omp taskwait
+        }
         end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();

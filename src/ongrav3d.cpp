@@ -25,6 +25,7 @@
 #endif
 #include <vector>
 #include <iostream>
+#include <random>
 #include <chrono>
 
 const char* progname = "ongrav3d";
@@ -548,11 +549,14 @@ int main(int argc, char *argv[]) {
     printf("Allocate and initialize\n");
     auto start = std::chrono::system_clock::now();
 
+    // create the random engine with constant seed
+    std::mt19937 mt_engine(12345);
+
     // allocate space for sources and targets
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true);
     // initialize particle data
-    srcs.random_in_cube();
-    if (random_radii) srcs.randomize_radii();
+    srcs.random_in_cube(mt_engine);
+    if (random_radii) srcs.randomize_radii(mt_engine);
     if (use_charges) {
         printf("  electrostatics simulation with random charges\n");
     } else {
@@ -562,7 +566,7 @@ int main(int argc, char *argv[]) {
 
     Parts<STORE,ACCUM,3,1,3> targs(numTargs, false);
     // initialize particle data
-    targs.random_in_cube();
+    targs.random_in_cube(mt_engine);
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());

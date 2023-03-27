@@ -1,7 +1,7 @@
 /*
  * Parts.h - Set of particles
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
  */
 
 #pragma once
@@ -13,6 +13,7 @@
 #include <cmath>
 #include <vector>
 #include <array>
+#include <random>
 
 
 #ifdef USE_VC
@@ -34,8 +35,10 @@ public:
     Parts(const size_t, const bool);
     void resize(const size_t);
     void random_in_cube();
+    void random_in_cube(std::mt19937);
     void smooth_strengths();
     void randomize_radii();
+    void randomize_radii(std::mt19937);
     void central_strengths();
     void wave_strengths();
     void zero_vels();
@@ -88,6 +91,18 @@ void Parts<S,A,PD,SD,OD>::random_in_cube() {
 }
 
 template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::random_in_cube(std::mt19937 _engine) {
+    std::uniform_real_distribution<S> zmean_dist(-1.0, 1.0);
+    for (int d=0; d<PD; ++d) for (auto& _x : x[d]) { _x = zmean_dist(_engine); }
+    if (are_sources) {
+        const S factor = 1.0 / (S)n;
+        for (int d=0; d<SD; ++d) for (auto& _s : s[d]) { _s = zmean_dist(_engine) * factor; }
+    }
+    const S thisrad = std::pow((S)n, -1.0/(S)PD);
+    for (auto& _r : r) { _r = thisrad; }
+}
+
+template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::smooth_strengths() {
     if (not are_sources) return;
     const S factor = 1.0 / (S)n;
@@ -101,6 +116,12 @@ void Parts<S,A,PD,SD,OD>::smooth_strengths() {
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::randomize_radii() {
     for (auto& _r : r) { _r *= 0.5 + ((S)rand()/(S)RAND_MAX); }
+}
+
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::randomize_radii(std::mt19937 _engine) {
+    std::uniform_real_distribution<S> zmean_dist(0.5, 1.5);
+    for (auto& _r : r) { _r *= zmean_dist(_engine); }
 }
 
 template <class S, class A, int PD, int SD, int OD>
