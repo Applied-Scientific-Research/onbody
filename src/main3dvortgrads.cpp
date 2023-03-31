@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // set up the problem
 
@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
     for (auto& _x : tx) { _x = (float)rand()/(float)RAND_MAX; }
     for (auto& _y : ty) { _y = (float)rand()/(float)RAND_MAX; }
     for (auto& _z : tz) { _z = (float)rand()/(float)RAND_MAX; }
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     float flops = (float)numSrcs*12.f + (float)numTargs*4.f;
     float gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
 
     // and call the solver
 
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     int ns = numSrcs;
     int nt = numTargs;
     flops = external_vel_solver_f_(&ns, sx.data(), sy.data(), sz.data(),
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
                                         tuy.data(), tvy.data(), twy.data(),
                                         tuz.data(), tvz.data(), twz.data());
 
-    end = std::chrono::system_clock::now();
+    end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
     printf("    external_vel_solver_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
@@ -174,7 +174,7 @@ int main(int argc, char *argv[]) {
             tyn[i] = ty[ifast];
             tzn[i] = tz[ifast];
         }
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = external_vel_direct_f_(&ns, sx.data(), sy.data(), sz.data(),
                                             ssx.data(), ssy.data(), ssz.data(), sr.data(),
                                        &ntn, txn.data(), tyn.data(), tzn.data(),
@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
                                              tuxn.data(), tvxn.data(), twxn.data(),
                                              tuyn.data(), tvyn.data(), twyn.data(),
                                              tuzn.data(), tvzn.data(), twzn.data());
-        end = std::chrono::system_clock::now();
+        end = std::chrono::steady_clock::now();
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
         printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)ntskip*(float)elapsed_seconds.count(), gflops);

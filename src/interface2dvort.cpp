@@ -196,7 +196,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     const bool blockwise = true;
 
     if (!silent) printf("Allocate and initialize\n");
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // allocate space for sources and targets
     Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
@@ -212,7 +212,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
     for (auto& u : targs.u[0]) { u = 0.0f; }
     for (auto& u : targs.u[1]) { u = 0.0f; }
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -220,21 +220,21 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // initialize and generate tree
     if (!silent) printf("\nBuilding the source tree\n");
     if (!silent) printf("  with %d particles and block size of %ld\n", *nsrc, blockSize);
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     Tree<STORE,2,1> stree(0);
     // split this node and recurse
     (void) makeTree(srcs, stree);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
     if (order < 0) {
         // first, reorder tree until all parts are adjacent in space-filling curve
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         #pragma omp parallel
         #pragma omp single
         (void) refineTree(srcs, stree, 1);
         #pragma omp taskwait
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         if (!silent) printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
 
@@ -243,24 +243,24 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
 
     // find equivalent particles
     if (!silent) printf("\nCalculating equivalent particles\n");
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     Parts<STORE,ACCUM,2,1,2> eqsrcs((stree.numnodes/2) * blockSize, true);
     if (!silent) printf("  need %ld particles\n", eqsrcs.n);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     if (!silent) printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // generate the far-field approximations
     if (order < 0) {
         // then, march through arrays merging pairs as you go up
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         (void) calcEquivalents(srcs, eqsrcs, stree, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         if (!silent) printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     } else {
         // upward pass to compute barycentric lagrange particles
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         if (!silent) printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
 
@@ -271,10 +271,10 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         if (!silent) printf("\nBuilding the target tree\n");
         if (!silent) printf("  with %d particles and block size of %ld\n", *ntarg, blockSize);
 
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         // split this node and recurse
         (void) makeTree(targs, ttree);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         if (!silent) printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
     }
 
@@ -283,7 +283,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
     if (!silent) printf("\nRun the treecode O(NlogN) with equivalent particles\n");
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
 
     if (blockwise) {
         flops += nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta);
@@ -291,7 +291,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
         flops += nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
     }
 
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     double dt = elapsed_seconds.count();
     if (!silent) printf("  treecode summations:\t\t[%.4f] seconds\n\n", dt);
 
@@ -330,7 +330,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     const bool silent = true;
 
     if (!silent) printf("Allocate and initialize\n");
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // allocate space for sources and targets
     Parts<STORE,ACCUM,2,1,2> srcs(*nsrc, true);
@@ -349,7 +349,7 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     for (int i=0; i<*ntarg; ++i) targs.x[1][i] = ty[i];
     for (auto& u : targs.u[0]) { u = 0.0f; }
     for (auto& u : targs.u[1]) { u = 0.0f; }
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     if (!silent) printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -357,9 +357,9 @@ extern "C" float external_vel_direct_f_ (const int* nsrc,
     // Run a naive O(N^2) summation
     //
     if (!silent) printf("\nRun the direct O(N^2) summation\n");
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     flops += nbody_naive(srcs, targs, 1);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     double dt = elapsed_seconds.count();
     if (!silent) printf("  direct summations:\t\t[%.4f] seconds\n\n", dt);
 

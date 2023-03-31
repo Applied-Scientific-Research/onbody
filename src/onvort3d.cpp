@@ -550,7 +550,7 @@ int main(int argc, char *argv[]) {
 #endif
 
     printf("Allocate and initialize\n");
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // create the random engine with constant seed
     std::mt19937 mt_engine(12345);
@@ -567,7 +567,7 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,3,3> targs(numTargs, false);
     // initialize particle data
     targs.random_in_cube(mt_engine);
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -575,11 +575,11 @@ int main(int argc, char *argv[]) {
     // initialize and generate tree
     printf("\nBuilding the source tree\n");
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     Tree<STORE,3,3> stree(0);
     // split this node and recurse
     (void) makeTree(srcs, stree);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[1] += elapsed_seconds.count();
     treetime[2] += elapsed_seconds.count();
@@ -588,12 +588,12 @@ int main(int argc, char *argv[]) {
 
     // first, reorder tree until all parts are adjacent in space-filling curve
     if (order < 0) {
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         #pragma omp parallel
         #pragma omp single
         (void) refineTree(srcs, stree, 1);
         #pragma omp taskwait
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[2] += elapsed_seconds.count();
         treetime[3] += elapsed_seconds.count();
@@ -603,9 +603,9 @@ int main(int argc, char *argv[]) {
     //    printf("%d %g %g %g\n", i, srcs.x[i], srcs.y[i], srcs.z[i]);
 
     // buffer source arrays to accommodate vector length
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     (void) srcs.buffer_end(VecSize<STORE>);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     printf("  add buffer at end of srcs:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
@@ -613,10 +613,10 @@ int main(int argc, char *argv[]) {
 
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     Parts<STORE,ACCUM,3,3,3> eqsrcs((stree.numnodes/2) * blockSize, true);
     printf("  need %ld particles\n", eqsrcs.n);
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
@@ -625,15 +625,15 @@ int main(int argc, char *argv[]) {
     // then, march through arrays calculating equivalents as you go up
     if (order < 0) {
         // here they are hierarchical pairs
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         (void) calcEquivalents(srcs, eqsrcs, stree, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     } else {
         // here they are barycentric lagrange points
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
     treetime[2] += elapsed_seconds.count();
@@ -646,10 +646,10 @@ int main(int argc, char *argv[]) {
     if (test_iterations[3] > 0 or test_iterations[4] > 0) {
         printf("\nBuilding the target tree\n");
         printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         // split this node and recurse
         (void) makeTree(targs, ttree);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  build tree time:\t\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[3] += elapsed_seconds.count();
         treetime[4] += elapsed_seconds.count();
@@ -659,27 +659,27 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,3,3> eqtargs(0, false);
     if (test_iterations[4] > 0) {
         printf("\nCalculating equivalent targ points\n");
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         eqtargs = Parts<STORE,ACCUM,3,3,3>((ttree.numnodes/2) * blockSize, false);
         printf("  need %ld particles\n", eqtargs.n);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
 
         // first, reorder tree until all parts are adjacent in space-filling curve
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         #pragma omp parallel
         #pragma omp single
         (void) refineTree(targs, ttree, 1);
         #pragma omp taskwait
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  refine within leaf nodes:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
 
         // then, march through arrays merging pairs as you go up
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         (void) calcEquivalents(targs, eqtargs, ttree, 1);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
     }
@@ -694,9 +694,9 @@ int main(int argc, char *argv[]) {
     float flops = 0.0;
     for (int i = 0; i < test_iterations[0]; ++i) {
         targs.zero_vels();
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = nbody_naive(srcs, targs, ntskip);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minNaive = std::min(minNaive, dt);
@@ -719,9 +719,9 @@ int main(int argc, char *argv[]) {
     double minTreecode = 1e30;
     for (int i = 0; i < test_iterations[1]; ++i) {
         targs.zero_vels();
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = nbody_treecode1(srcs, stree, targs, theta);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minTreecode = std::min(minTreecode, dt);
@@ -754,9 +754,9 @@ int main(int argc, char *argv[]) {
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         targs.zero_vels();
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minTreecode2 = std::min(minTreecode2, dt);
@@ -789,9 +789,9 @@ int main(int argc, char *argv[]) {
     double minTreecode3 = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         targs.zero_vels();
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta);
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minTreecode3 = std::min(minTreecode3, dt);
@@ -824,7 +824,7 @@ int main(int argc, char *argv[]) {
     double minFast = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         targs.zero_vels();
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         std::vector<size_t> source_boxes = {1};
         // theta=0.82f roughly matches treecode2's 1.4f re: num of leaf-leaf interactions
         // theta=1.5f roughly matches treecode2's 1.4f re: RMS error
@@ -833,7 +833,7 @@ int main(int argc, char *argv[]) {
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
                               1, source_boxes, theta);
         #pragma omp taskwait
-        end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
         minFast = std::min(minFast, dt);

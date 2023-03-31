@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // set up the problem
 
@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
     //for (auto& _y : ty) { _y = (float)rand()/(float)RAND_MAX; }
     for (auto& _u : tu) { _u = 0.0f; }
     for (auto& _v : tv) { _v = 0.0f; }
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     float flops = (float)numSrcs*12.f + (float)numTargs*4.f;
     float gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
@@ -97,13 +97,13 @@ int main(int argc, char *argv[]) {
 
     // and call the solver
 
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     int ns = numSrcs;
     int nt = numTargs;
     flops = external_vel_solver_tr_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
                                    &nt, tx.data(), ty.data(), tr.data(), tu.data(), tv.data());
 
-    end = std::chrono::system_clock::now();
+    end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
     printf("    external_vel_solver_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)elapsed_seconds.count(), gflops);
@@ -128,10 +128,10 @@ int main(int argc, char *argv[]) {
             tun[i] = 0.0f;
             tvn[i] = 0.0f;
         }
-        start = std::chrono::system_clock::now();
+        start = std::chrono::steady_clock::now();
         flops = external_vel_direct_tr_f_(&ns, sx.data(), sy.data(), ss.data(), sr.data(),
                                        &ntn, txn.data(), tyn.data(), trn.data(), tun.data(), tvn.data());
-        end = std::chrono::system_clock::now();
+        end = std::chrono::steady_clock::now();
         elapsed_seconds = end-start;
         gflops = 1.e-9 * flops / (float)elapsed_seconds.count();
         printf("    external_vel_direct_f_:\t[%.4f] seconds at %.3f GFlop/s\n", (float)ntskip*(float)elapsed_seconds.count(), gflops);

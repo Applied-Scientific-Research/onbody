@@ -521,9 +521,9 @@ void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<
   while (plast > pfirst and iters < 100) {
 
     if (iters > 0) {
-      //auto start = std::chrono::system_clock::now();
+      //auto start = std::chrono::steady_clock::now();
       minmax = minMaxValue(v, pfirst, plast+1);
-      //auto end = std::chrono::system_clock::now();
+      //auto end = std::chrono::steady_clock::now();
       //std::chrono::duration<double> elapsed_seconds = end-start;
       //if (plast-pfirst>10000000) printf("        sort minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
@@ -608,7 +608,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     //if (pfirst == 0) printf("  splitNode at level %d with 1 threads, %d recursions\n", thislev, sort_recursion);
     #endif
 
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // find the min/max of the three axes and save them
     std::array<std::pair<S,S>,PD> boxbounds;
@@ -618,7 +618,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
         t.nc[d][tnode] = 0.5 * (boxbounds[d].second + boxbounds[d].first);
     }
 
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     //if (tnode==1) printf("      1st minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -660,17 +660,17 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     // temporary list of vectors to be sorted - oh, then we'll need many new temp vectors
     //std::vector<Vector<S>&> jumble;
 
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
 
     // sort this portion of the array along the big axis
 #ifdef PARTIAL_SORT
     (void) partialSortIndexes(p.x[maxaxis], p.lidx, boxbounds[maxaxis], pfirst, pmiddle, plast);
 
-    end = std::chrono::system_clock::now();
+    end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     //if (tnode==1) printf("      1st partial sort:\t[%.4f] seconds\n", elapsed_seconds.count());
 
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     // note, this also sorts the values - don't parallelize, we share ftemp!
     //#pragma omp taskloop if(threads_per_node>1) shared(p)
     for (int d=0; d<PD; ++d) {
@@ -687,7 +687,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     reorder(p.r, p.ftemp, p.lidx, pfirst, plast, threads_per_node);
     p.reorder_idx(pfirst, plast);
 
-    end = std::chrono::system_clock::now();
+    end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
     //if (tnode==1) printf("      1st reorder:\t[%.4f] seconds\n", elapsed_seconds.count());
 
@@ -809,7 +809,7 @@ template <class S, class A, int PD, int SD, int OD>
 void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
 
     // allocate temporaries
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
     p.lidx.resize(p.n);
     p.itemp.resize(p.n);
     p.ftemp.resize(p.n);
@@ -818,26 +818,26 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
 
     // allocate
     t = Tree<S,PD,SD>(p.n);
-    auto end = std::chrono::system_clock::now();
+    auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // upward pass, starting at node 1 (root) and recursing
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) splitNode(p, 0, p.n, t, 1);
     #pragma omp taskwait
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     //printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // downward pass, calculate masses, etc.
-    start = std::chrono::system_clock::now();
+    start = std::chrono::steady_clock::now();
     #pragma omp parallel
     #pragma omp single
     (void) finishTree(p, t, 1);
     #pragma omp taskwait
-    end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
+    end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // de-allocate temporaries
