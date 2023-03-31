@@ -820,7 +820,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     t = Tree<S,PD,SD>(p.n);
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
+    //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // upward pass, starting at node 1 (root) and recursing
     start = std::chrono::system_clock::now();
@@ -829,7 +829,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) splitNode(p, 0, p.n, t, 1);
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    //printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // downward pass, calculate masses, etc.
     start = std::chrono::system_clock::now();
@@ -838,7 +838,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) finishTree(p, t, 1);
     #pragma omp taskwait
     end = std::chrono::system_clock::now(); elapsed_seconds = end-start;
-    printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // de-allocate temporaries
     p.lidx.resize(0);
