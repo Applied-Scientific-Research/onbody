@@ -21,7 +21,7 @@ dark matter, uncoalesced gases).
 
 In this repository you'll find "treecodes"; these aim to make that calculation much faster,
 theoretically C * N * log(N) operations, where C is some constant number (generally larger than 20).
-Treecode algorithms, like the [Barnes-Hut](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation),
+Treecode algorithms, like [Barnes-Hut](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation),
 are still relatively easy to program, but require some extra care to
 optimize their performance on current computer hardware.
 Finally, there are methods ([Fast Multipole Method](https://en.wikipedia.org/wiki/Fast_multipole_method), dual-tree-traversal, etc.) that 
@@ -176,6 +176,6 @@ This restriction could be relaxed with some code changes.
 
 ## Credits
 
-This program was written by Mark Stock with help and thanks to Prof. Krasny and collaborators for
-the barycentric Lagrange interpolation method: [BaryTree on github](https://github.com/Treecodes/BaryTree).
+This program was written by Mark Stock; though thanks go to Prof. Krasny and collaborators for
+their documentation of the barycentric Lagrange interpolation method: [BaryTree on github](https://github.com/Treecodes/BaryTree).
 
