@@ -3,16 +3,18 @@
 #
 # (c)2017-2022 Applied Scientific Research, Inc.
 #
+CMAKE_MINIMUM_REQUIRED( VERSION 3.5 )
 PROJECT( onbody CXX )
-CMAKE_MINIMUM_REQUIRED( VERSION 3.4 )
+
+INCLUDE( FetchContent )
 
 SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
 ENDIF ()
 SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build")
-SET (USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
-SET (USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
+SET (ONBODY_USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
+SET (ONBODY_USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
 SET (CMAKE_VERBOSE_MAKEFILE on)
 SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 
@@ -55,12 +57,28 @@ ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
 ENDIF ()
 
+# Fetch 3rd party libraries (Vc for now)
+
+# optional libraries
+FetchContent_Declare(
+  Vc
+  URL https://github.com/VcDevel/Vc/archive/refs/tags/1.4.5.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP true
+)
+IF( ONBODY_USE_VC )
+  FetchContent_MakeAvailable(Vc)
+ENDIF ()
+
+# Split on platform
+
 IF ( WIN32 )
 
   SET ( PLATFORM_LIBS ${FRAMEWORK_LIBS} )
 
+  SET( ONBODY_USE_VC FALSE )
+
   # OpenMP for multithreading
-  IF( USE_OMP )
+  IF( ONBODY_USE_OMP )
     FIND_PACKAGE (OpenMP REQUIRED)
     IF (OPENMP_FOUND)
       #MESSAGE ("OPENMP FOUND")
@@ -79,8 +97,10 @@ ELSEIF ( APPLE )
 
   SET (PLATFORM_LIBS ${FRAMEWORK_LIBS} ${COCOA_LIBRARY} ${IOKIT_LIBRARY})
 
+  SET( ONBODY_USE_VC FALSE )
+
   # OpenMP for multithreading
-  IF( USE_OMP )
+  IF( ONBODY_USE_OMP )
     FIND_PACKAGE (OpenMP REQUIRED)
     IF (OPENMP_FOUND)
       #MESSAGE ("OPENMP FOUND")
@@ -93,7 +113,7 @@ ELSEIF ( APPLE )
 ELSEIF ( UNIX )
 
   # OpenMP for multithreading
-  IF( USE_OMP )
+  IF( ONBODY_USE_OMP )
     FIND_PACKAGE( OpenMP REQUIRED )
     IF( OPENMP_FOUND )
       #message("OPENMP FOUND")
@@ -109,11 +129,12 @@ ELSEIF ( UNIX )
   ENDIF()
 
   # Vc for explicit vectorization
-  IF( USE_VC )
+  IF( ONBODY_USE_VC )
     SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
-    SET (VC_ROOT "/opt/Vc" CACHE STRING "Vc root" )
-    INCLUDE_DIRECTORIES( "${VC_ROOT}/include" )
-    FIND_LIBRARY( VC_LIBS NAMES Vc PATHS "${VC_ROOT}/lib" )
+    #SET (VC_ROOT "/opt/Vc" CACHE STRING "Vc root" )
+    #INCLUDE_DIRECTORIES( "${VC_ROOT}/include" )
+    #FIND_LIBRARY( VC_LIBS NAMES Vc PATHS "${VC_ROOT}/lib" )
+    SET (VC_LIBS Vc)
   ELSE()
     SET (VC_LIBS "")
   ENDIF()
@@ -145,11 +166,17 @@ SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 # new targets
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" "src/interface2dvorttr.cpp" )
+TARGET_INCLUDE_DIRECTORIES( "bh2dvort" PUBLIC "src" )
+TARGET_LINK_LIBRARIES( "bh2dvort" ${VC_LIBS} )
+
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
 TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${VC_LIBS} )
 SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
+TARGET_INCLUDE_DIRECTORIES( "bh3dvortgrads" PUBLIC "src" )
+TARGET_LINK_LIBRARIES( "bh3dvortgrads" ${VC_LIBS} )
+
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
 TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${VC_LIBS} )
 SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
