@@ -1,9 +1,9 @@
 #
 # onbody
 #
-# (c)2017-2022 Applied Scientific Research, Inc.
+# (c)2017-24 Applied Scientific Research, Inc.
 #
-CMAKE_MINIMUM_REQUIRED( VERSION 3.5 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.9 )
 PROJECT( onbody CXX )
 
 INCLUDE( FetchContent )
@@ -70,6 +70,7 @@ IF( ONBODY_USE_VC )
 ENDIF ()
 
 # Split on platform
+SET (ONBODY_LIBS "")
 
 IF ( WIN32 )
 
@@ -81,10 +82,7 @@ IF ( WIN32 )
   IF( ONBODY_USE_OMP )
     FIND_PACKAGE (OpenMP REQUIRED)
     IF (OPENMP_FOUND)
-      #MESSAGE ("OPENMP FOUND")
-      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
     ENDIF ()
   ENDIF()
 
@@ -103,10 +101,7 @@ ELSEIF ( APPLE )
   IF( ONBODY_USE_OMP )
     FIND_PACKAGE (OpenMP REQUIRED)
     IF (OPENMP_FOUND)
-      #MESSAGE ("OPENMP FOUND")
-      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
     ENDIF ()
   ENDIF()
 
@@ -116,10 +111,7 @@ ELSEIF ( UNIX )
   IF( ONBODY_USE_OMP )
     FIND_PACKAGE( OpenMP REQUIRED )
     IF( OPENMP_FOUND )
-      #message("OPENMP FOUND")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
     ENDIF()
   ELSE()
     # suppress the warning
@@ -131,12 +123,7 @@ ELSEIF ( UNIX )
   # Vc for explicit vectorization
   IF( ONBODY_USE_VC )
     SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
-    #SET (VC_ROOT "/opt/Vc" CACHE STRING "Vc root" )
-    #INCLUDE_DIRECTORIES( "${VC_ROOT}/include" )
-    #FIND_LIBRARY( VC_LIBS NAMES Vc PATHS "${VC_ROOT}/lib" )
-    SET (VC_LIBS Vc)
-  ELSE()
-    SET (VC_LIBS "")
+    SET( ONBODY_LIBS ${ONBODY_LIBS} Vc )
   ENDIF()
 
   SET (EIGEN_ROOT "/usr/include/eigen3" CACHE STRING "Eigen root" )
@@ -147,39 +134,37 @@ ENDIF ()
 INCLUDE_DIRECTORIES ( "src" )
 ADD_DEFINITIONS (${CPREPROCDEFS})
 
-# original targets
+# main applications
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
-TARGET_LINK_LIBRARIES( "onvort2d" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "onvort2d" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "onvort2d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
-TARGET_LINK_LIBRARIES( "onvort3d" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "onvort3d" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "onvort3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
-TARGET_LINK_LIBRARIES( "ongrav3d" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "ongrav3d" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "ongrav3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
-TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "onvortgrad3d" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
-# new targets
+# linkable libraries and test programs
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" "src/interface2dvorttr.cpp" )
 TARGET_INCLUDE_DIRECTORIES( "bh2dvort" PUBLIC "src" )
-TARGET_LINK_LIBRARIES( "bh2dvort" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "bh2dvort" ${ONBODY_LIBS} )
 
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
-TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
 TARGET_INCLUDE_DIRECTORIES( "bh3dvortgrads" PUBLIC "src" )
-TARGET_LINK_LIBRARIES( "bh3dvortgrads" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES( "bh3dvortgrads" ${ONBODY_LIBS} )
 
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
-TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${VC_LIBS} )
+TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${ONBODY_LIBS} )
 SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
-
-#TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
 
