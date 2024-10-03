@@ -3,7 +3,7 @@
 #
 # (c)2017-24 Applied Scientific Research, Inc.
 #
-CMAKE_MINIMUM_REQUIRED( VERSION 3.9 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.11 )
 PROJECT( onbody CXX )
 
 INCLUDE( FetchContent )
@@ -57,7 +57,12 @@ ELSEIF (MSVC)
   SET (CMAKE_CXX_FLAGS "/Ox")
 ENDIF ()
 
-# Fetch 3rd party libraries (Vc for now)
+# 3rd party libraries
+SET (ONBODY_LIBS "")
+
+# required libraries
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+SET( ONBODY_LIBS ${ONBODY_LIBS} Eigen3::Eigen )
 
 # optional libraries
 FetchContent_Declare(
@@ -69,22 +74,21 @@ IF( ONBODY_USE_VC )
   FetchContent_MakeAvailable(Vc)
 ENDIF ()
 
+# OpenMP for multithreading
+IF( ONBODY_USE_OMP )
+  FIND_PACKAGE (OpenMP REQUIRED)
+  IF (OPENMP_FOUND)
+    SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
+  ENDIF ()
+ENDIF()
+
 # Split on platform
-SET (ONBODY_LIBS "")
 
 IF ( WIN32 )
 
   SET ( PLATFORM_LIBS ${FRAMEWORK_LIBS} )
 
   SET( ONBODY_USE_VC FALSE )
-
-  # OpenMP for multithreading
-  IF( ONBODY_USE_OMP )
-    FIND_PACKAGE (OpenMP REQUIRED)
-    IF (OPENMP_FOUND)
-      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
-    ENDIF ()
-  ENDIF()
 
 ELSEIF ( APPLE )
 
@@ -97,22 +101,10 @@ ELSEIF ( APPLE )
 
   SET( ONBODY_USE_VC FALSE )
 
-  # OpenMP for multithreading
-  IF( ONBODY_USE_OMP )
-    FIND_PACKAGE (OpenMP REQUIRED)
-    IF (OPENMP_FOUND)
-      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
-    ENDIF ()
-  ENDIF()
-
 ELSEIF ( UNIX )
 
   # OpenMP for multithreading
   IF( ONBODY_USE_OMP )
-    FIND_PACKAGE( OpenMP REQUIRED )
-    IF( OPENMP_FOUND )
-      SET( ONBODY_LIBS ${ONBODY_LIBS} OpenMP::OpenMP_CXX )
-    ENDIF()
   ELSE()
     # suppress the warning
     SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
@@ -125,9 +117,6 @@ ELSEIF ( UNIX )
     SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
     SET( ONBODY_LIBS ${ONBODY_LIBS} Vc )
   ENDIF()
-
-  SET (EIGEN_ROOT "/usr/include/eigen3" CACHE STRING "Eigen root" )
-  INCLUDE_DIRECTORIES ( "${EIGEN_ROOT}" )
 
 ENDIF ()
 
