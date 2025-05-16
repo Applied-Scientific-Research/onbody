@@ -36,6 +36,7 @@ public:
     void resize(const size_t);
     void random_in_cube();
     void random_in_cube(std::mt19937);
+    void random_in_disk(std::mt19937);
     void smooth_strengths();
     void randomize_radii();
     void randomize_radii(std::mt19937);
@@ -100,6 +101,31 @@ void Parts<S,A,PD,SD,OD>::random_in_cube(std::mt19937 _engine) {
     }
     const S thisrad = std::pow((S)n, -1.0/(S)PD);
     for (auto& _r : r) { _r = thisrad; }
+}
+
+template <class S, class A, int PD, int SD, int OD>
+void Parts<S,A,PD,SD,OD>::random_in_disk(std::mt19937 _engine) {
+    // first one is the central star
+    x[0][0] = 0.0; x[1][0] = 0.0; x[2][0] = 0.0; s[0][0] = 1.0;
+
+    // subsequent ones are low-mass orbiters
+    std::uniform_real_distribution<S> theta_dist(0.0, 2.0*3.14159265358979);
+    for (size_t i=1; i<n; i++) {
+        const S rad = 0.1 + 5.0*(S)i/(S)n;
+        const S theta = theta_dist(_engine);
+        x[0][i] = rad * std::cos(theta);
+        x[1][i] = rad * std::sin(theta);
+        for (int d=2; d<PD; ++d) x[d][i] = 0.0;
+    }
+    if (are_sources) {
+        const S mass = 0.1 / (S)n;
+        for (auto& _s : s[0]) { _s = mass; }
+        for (int d=1; d<SD; ++d) for (auto& _s : s[d]) { _s = 0.0; }
+        s[0][0] = 1.0;
+    }
+    const S thisrad = std::pow(0.1/(S)n, 2);
+    for (auto& _r : r) { _r = thisrad; }
+    r[0] = 0.00465;
 }
 
 template <class S, class A, int PD, int SD, int OD>
