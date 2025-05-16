@@ -164,8 +164,11 @@ This restriction could be relaxed with some code changes.
 
 ## To Do
 
+* Specialize the general Parts class inside of each program, like ongrav3d should have a MassParts : Parts
+* Allow the Parts constructor to take another Parts object and re-use its data? or otherwise have sources and targets be the same data (make it easier on the cache)
+* Create a standard Barnes-Hut NlogN method with boxwise interactions (to complete the set of 4 basic treecodes)
 * Implement the barycentric Lagrange interpolator into the fast (O(N)) method
-* Save memory in the barycentric Lagrange case by allocating only enough for the proxy particles; this has the added benefit of allowing higher orders than 11 (in 2D) and 4 (in 3D).
+* Save memory in the barycentric Lagrange case by allocating only enough for the proxy particles; this has the added benefit of allowing higher orders than 11 (in 2D) and 4 (in 3D). IMPORTANT
 * Support different kernels more easily (like one which takes source and target radii)
 * Finish porting templated functions and casts to allow float/double/Vc classes in kernel functions
 * Would it be a benefit to adjust the proxy particles' radii in addition to strength?
