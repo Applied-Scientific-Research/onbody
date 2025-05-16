@@ -1,18 +1,19 @@
 #
 # onbody
 #
-# (c)2017-2022 Applied Scientific Research, Inc.
+# (c)2017-2025 Applied Scientific Research, Inc.
 #
-PROJECT( onbody CXX )
-CMAKE_MINIMUM_REQUIRED( VERSION 3.4 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.5 )
+PROJECT( onbody LANGUAGES CXX )
 
 SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
 ENDIF ()
 SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build")
-SET (USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
-SET (USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
+SET (ONBODY_USE_OMP FALSE CACHE BOOL "Use OpenMP multithreading")
+SET (ONBODY_USE_VC FALSE CACHE BOOL "Use Vc for vector arithmetic")
+SET (ONBODY_PROFILE FALSE CACHE BOOL "Enable instrumentation of user functions")
 SET (CMAKE_VERBOSE_MAKEFILE on)
 SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 
@@ -31,8 +32,8 @@ IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_AR "gcc-ar")
   SET (CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
   SET (CMAKE_CXX_ARCHIVE_FINISH true)
-  # which also requires this
-  SET (EXTRA_LINK "-static-libstdc++")
+  # which also requires this, but not gcc 14.2.1
+  #SET (EXTRA_LINK "-static-libstdc++")
 
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # The Cray compiler reports as Clang to most versions of CMake
@@ -59,17 +60,6 @@ IF ( WIN32 )
 
   SET ( PLATFORM_LIBS ${FRAMEWORK_LIBS} )
 
-  # OpenMP for multithreading
-  IF( USE_OMP )
-    FIND_PACKAGE (OpenMP REQUIRED)
-    IF (OPENMP_FOUND)
-      #MESSAGE ("OPENMP FOUND")
-      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-    ENDIF ()
-  ENDIF()
-
 ELSEIF ( APPLE )
 
   INCLUDE_DIRECTORIES ( /System/Library/Frameworks )
@@ -79,80 +69,71 @@ ELSEIF ( APPLE )
 
   SET (PLATFORM_LIBS ${FRAMEWORK_LIBS} ${COCOA_LIBRARY} ${IOKIT_LIBRARY})
 
-  # OpenMP for multithreading
-  IF( USE_OMP )
-    FIND_PACKAGE (OpenMP REQUIRED)
-    IF (OPENMP_FOUND)
-      #MESSAGE ("OPENMP FOUND")
-      SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      SET (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-    ENDIF ()
-  ENDIF()
-
 ELSEIF ( UNIX )
-
-  # OpenMP for multithreading
-  IF( USE_OMP )
-    FIND_PACKAGE( OpenMP REQUIRED )
-    IF( OPENMP_FOUND )
-      #message("OPENMP FOUND")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-    ENDIF()
-  ELSE()
-    # suppress the warning
-    SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
-    # need to find pthreads (for std::async?)
-    FIND_PACKAGE( Threads REQUIRED )
-  ENDIF()
-
-  # Vc for explicit vectorization
-  IF( USE_VC )
-    SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
-    SET (VC_ROOT "/opt/Vc" CACHE STRING "Vc root" )
-    INCLUDE_DIRECTORIES( "${VC_ROOT}/include" )
-    FIND_LIBRARY( VC_LIBS NAMES Vc PATHS "${VC_ROOT}/lib" )
-  ELSE()
-    SET (VC_LIBS "")
-  ENDIF()
 
   SET (EIGEN_ROOT "/usr/include/eigen3" CACHE STRING "Eigen root" )
   INCLUDE_DIRECTORIES ( "${EIGEN_ROOT}" )
 
 ENDIF ()
 
+IF( ONBODY_PROFILE )
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
+ENDIF ()
+
 INCLUDE_DIRECTORIES ( "src" )
 ADD_DEFINITIONS (${CPREPROCDEFS})
 
+IF( NOT ONBODY_USE_OMP )
+  # silence the warnings
+  # this line must appear BEFORE defining the executables
+  ADD_COMPILE_OPTIONS( -Wno-unknown-pragmas )
+  # need to find pthreads (for std::async?)
+  FIND_PACKAGE( Threads REQUIRED )
+ENDIF()
+
 # original targets
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
-TARGET_LINK_LIBRARIES( "onvort2d" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "onvort2d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
-
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
-TARGET_LINK_LIBRARIES( "onvort3d" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "onvort3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
-
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
-TARGET_LINK_LIBRARIES( "ongrav3d" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "ongrav3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
-
 ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
-TARGET_LINK_LIBRARIES( "onvortgrad3d" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
-# new targets
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" "src/interface2dvorttr.cpp" )
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
-TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+TARGET_LINK_LIBRARIES( "run2dvort" PUBLIC "bh2dvort")
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
-TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${VC_LIBS} )
-SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+TARGET_LINK_LIBRARIES( "run3dvortgrads" PUBLIC "bh3dvortgrads")
 
-#TARGET_LINK_LIBRARIES ( ${PROJECT_NAME} ${PLATFORM_LIBS} )
+# OpenMP for multithreading
+IF( ONBODY_USE_OMP )
+  FIND_PACKAGE( OpenMP REQUIRED )
+  TARGET_LINK_LIBRARIES( "onvort2d" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "onvort3d" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "onvortgrad3d" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "ongrav3d" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "bh2dvort" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "run2dvort" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "bh3dvortgrads" PUBLIC OpenMP::OpenMP_CXX)
+  TARGET_LINK_LIBRARIES( "run3dvortgrads" PUBLIC OpenMP::OpenMP_CXX)
+  ADD_COMPILE_OPTIONS( ${OpenMP_CXX_FLAGS} )
+ENDIF()  # OpenMP for multithreading
+
+# Vc for explicit vectorization
+IF( ONBODY_USE_VC )
+  FIND_PACKAGE( Vc REQUIRED )
+  ADD_DEFINITIONS(-DUSE_VC)
+  INCLUDE_DIRECTORIES( ${Vc_INCLUDE_DIR} )
+  # these lines must appear AFTER defining the executables
+  TARGET_LINK_LIBRARIES( "onvort2d" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "onvort3d" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "onvortgrad3d" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "ongrav3d" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "bh2dvort" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "run2dvort" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "bh3dvortgrads" PUBLIC ${Vc_LIBRARIES} )
+  TARGET_LINK_LIBRARIES( "run3dvortgrads" PUBLIC ${Vc_LIBRARIES} )
+ENDIF()  # Vc for explicit vectorization
 
