@@ -21,7 +21,6 @@ SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 IF (NOT CMAKE_BUILD_TYPE)
   SET (CMAKE_BUILD_TYPE "Release")
 ENDIF ()
-SET (EXTRA_LINK "")
 
 IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Wformat -std=c++14")
@@ -34,7 +33,9 @@ IF (CMAKE_COMPILER_IS_GNUCXX)
   SET (CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>")
   SET (CMAKE_CXX_ARCHIVE_FINISH true)
   # which also requires this
-  SET (EXTRA_LINK "-static-libstdc++")
+  IF (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15)
+    SET (EXTRA_LINK "-static-libstdc++")
+  ENDIF()
 
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # The Cray compiler reports as Clang to most versions of CMake
@@ -126,19 +127,15 @@ ADD_DEFINITIONS (${CPREPROCDEFS})
 # main applications
 ADD_EXECUTABLE ( "onvort2d" "src/onvort2d.cpp" )
 TARGET_LINK_LIBRARIES( "onvort2d" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "onvort2d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvort3d" "src/onvort3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvort3d" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "onvort3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "ongrav3d" "src/ongrav3d.cpp" )
 TARGET_LINK_LIBRARIES( "ongrav3d" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "ongrav3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_EXECUTABLE ( "onvortgrad3d" "src/onvortgrad3d.cpp" )
 TARGET_LINK_LIBRARIES( "onvortgrad3d" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 # linkable libraries and test programs
 ADD_LIBRARY ( "bh2dvort" STATIC "src/interface2dvort.cpp" "src/interface2dvorttr.cpp" )
@@ -147,7 +144,6 @@ TARGET_LINK_LIBRARIES( "bh2dvort" ${ONBODY_LIBS} )
 
 ADD_EXECUTABLE ( "run2dvort" "src/main2dvort.cpp" )
 TARGET_LINK_LIBRARIES ( "run2dvort" "bh2dvort" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
 ADD_LIBRARY ( "bh3dvortgrads" STATIC "src/interface3dvortgrads.cpp" )
 TARGET_INCLUDE_DIRECTORIES( "bh3dvortgrads" PUBLIC "src" )
@@ -155,5 +151,13 @@ TARGET_LINK_LIBRARIES( "bh3dvortgrads" ${ONBODY_LIBS} )
 
 ADD_EXECUTABLE ( "run3dvortgrads" "src/main3dvortgrads.cpp" )
 TARGET_LINK_LIBRARIES ( "run3dvortgrads" "bh3dvortgrads" ${ONBODY_LIBS} )
-SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
 
+# Do we need the extra link flag? (GCC versions ?-14 with LTO)
+IF ( DEFINED EXTRA_LINK )
+  SET_TARGET_PROPERTIES( "onvort2d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+  SET_TARGET_PROPERTIES( "onvort3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+  SET_TARGET_PROPERTIES( "ongrav3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+  SET_TARGET_PROPERTIES( "onvortgrad3d" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+  SET_TARGET_PROPERTIES( "run2dvort" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+  SET_TARGET_PROPERTIES( "run3dvortgrads" PROPERTIES LINK_FLAGS ${EXTRA_LINK})
+ENDIF()
