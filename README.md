@@ -45,6 +45,7 @@ summation of all particles for that particular problem.
 
 ## Build and run
 
+    sudo dnf install eigen3-devel cmake gcc-c++ libgomp
     mkdir Release
     cd Release
     cmake -DCMAKE_BUILD_TYPE=Release ..
