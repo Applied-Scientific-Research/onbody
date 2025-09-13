@@ -12,7 +12,7 @@
 
 #include <cassert>
 
-const int32_t maxorder = 15;
+const int32_t maxorder = 20;
 
 // "global" variables, the locations of the Chebyshev nodes of the 2nd kind
 template <class S>
@@ -71,10 +71,10 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     const size_t ncp = order+1;		// number of Chebyshev points in each direction
     const size_t numEqps = ipow<size_t>(ncp,PD);
     //printf("    ncp %ld and numEqps %ld\n", ncp, numEqps);
-    assert(numEqps <= blockSize && "ERROR (calcBarycentricLagrange): requested order too large for blockSize");
+    assert(numEqps <= ep.blockSize && "ERROR (calcBarycentricLagrange): requested order too large for blockSize");
 
     // continue using blockSize for offset
-    t.epoffset[tnode] = tnode * blockSize;
+    t.epoffset[tnode] = tnode * ep.blockSize;
     t.epnum[tnode] = 0;
     const size_t iepstart = t.epoffset[tnode];
     const size_t iepstop = iepstart + numEqps;
@@ -108,27 +108,27 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     }
 
     // and locate the remainder of the particles (unused) to the cell center
-    for (size_t i=iepstop; i<iepstart+blockSize; ++i) {
+    for (size_t i=iepstop; i<iepstart+ep.blockSize; ++i) {
         for (size_t d=0; d<PD; ++d) ep.x[d][i] = t.nc[d][tnode];
     }
 
     if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
-    //for (size_t i=iepstart; i<iepstart+blockSize; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
+    //for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
 
     // set all equiv. particles weights
-    for (size_t i=iepstart; i<iepstart+blockSize; ++i) {
+    for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) {
         for (size_t d=0; d<SD; ++d) ep.s[d][i] = 0.0;
     }
 
     // initialize radii to zero, or just copy the first particle radius
     if (interp_radii) {
-        for (size_t i=iepstart; i<iepstart+blockSize; ++i) ep.r[i] = 0.0;
+        for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) ep.r[i] = 0.0;
     } else {
-        for (size_t i=iepstart; i<iepstart+blockSize; ++i) ep.r[i] = p.r[t.ioffset[tnode]];
+        for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) ep.r[i] = p.r[t.ioffset[tnode]];
     }
 
     // store a sum of weights
-    std::vector<S> wgtsum(blockSize, 0.0);
+    std::vector<S> wgtsum(ep.blockSize, 0.0);
 
     // precompute these useful indices
     std::vector<std::array<S,PD>> kidx;
@@ -145,7 +145,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         if (dbg) printf("  child %ld has %ld particles\n", ichild, t.num[ichild]);
 
         // split on whether this child is a leaf node or not
-        if (t.num[ichild] > blockSize) {
+        if (t.num[ichild] > p.blockSize) {
 
             // not a leaf node
             if (dbg) printf("    from %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);

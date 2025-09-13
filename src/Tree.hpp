@@ -1,7 +1,7 @@
 /*
  * Tree.h - simple tree for onbody
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-25, Mark J Stock <markjstock@gmail.com>
  */
 
 #pragma once
@@ -23,9 +23,6 @@ template <class S> using Vector = std::vector<S, Vc::Allocator<S>>;
 template <class S> using Vector = std::vector<S>;
 #endif
 
-// the basic unit of direct sum work is blockSize by blockSize
-const size_t blockSize = 128;
-
 //
 // Find index of msb of uint32
 // from http://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
@@ -34,7 +31,6 @@ static inline uint32_t log_2(const uint32_t x) {
     if (x == 0) return 0;
     return (31 - __builtin_clz (x));
 }
-
 
 //
 // A tree, made of a structure of arrays
@@ -48,7 +44,7 @@ static inline uint32_t log_2(const uint32_t x) {
 template <class S, int PD, int SD>
 class Tree {
 public:
-    Tree(size_t);
+    Tree(const size_t _num, const size_t _blocksize=128);
     void resize(size_t);
     void print(size_t);
 
@@ -56,6 +52,7 @@ public:
     int levels;
     // number of nodes in the tree (always 2^l)
     int numnodes;
+    // the basic unit of direct sum work (blockSize) is stored in Parts
 
     // tree node centers of mass
     alignas(32) std::array<Vector<S>, PD> x;
@@ -79,10 +76,11 @@ public:
 };
 
 template <class S, int PD, int SD>
-Tree<S,PD,SD>::Tree(const size_t _num) {
+Tree<S,PD,SD>::Tree(const size_t _num, const size_t _blocksize) {
     if (_num==0) return;
+    if (_blocksize<2) return;
     // _num is number of elements this tree needs to store
-    uint32_t numLeaf = 1 + ((_num-1)/blockSize);
+    uint32_t numLeaf = 1 + ((_num-1)/_blocksize);
     //printf("  %d nodes at leaf level\n", numLeaf);
     levels = 1 + log_2(2*numLeaf-1);
     //printf("  makes %d levels in tree\n", levels);

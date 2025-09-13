@@ -72,7 +72,7 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
                      struct treecode_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
-    if (st.num[snode] <= blockSize) {
+    if (st.num[snode] <= sp.blockSize) {
         // box is too close and is a leaf node, look at individual particles
         (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode], tp, ip);
         stats.sltp++;
@@ -116,7 +116,7 @@ float nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs,
     {
         struct treecode_stats threadstats = {0, 0};
 
-        #pragma omp for schedule(dynamic,2*blockSize)
+        #pragma omp for schedule(dynamic,2*srcs.blockSize)
         for (size_t i=0; i<targs.n; ++i) {
             treecode1_block<S,A,PD,SD,OD>(srcs, stree, (size_t)1, targs, i, theta, threadstats);
         }
@@ -128,7 +128,7 @@ float nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs,
         }
     }
 
-    return (float)nbody_kernel_flops() * ((float)stats.sbtp + (float)stats.sltp*(float)blockSize);
+    return (float)nbody_kernel_flops() * ((float)stats.sbtp + (float)stats.sltp*(float)srcs.blockSize);
 }
 
 //
@@ -145,7 +145,7 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
                      struct treecode_stats& stats) {
 
     // if box is a leaf node, just compute the influence and return
-    if (st.num[snode] <= blockSize) {
+    if (st.num[snode] <= sp.blockSize) {
         // box is too close and is a leaf node, look at individual particles
         (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode], tp, ip);
         stats.sltp++;
@@ -200,8 +200,8 @@ float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
         struct treecode_stats threadstats = {0, 0};
 
         // this is 1-3% slower
-        //#pragma omp for schedule(dynamic,blockSize/2)
-        #pragma omp for schedule(dynamic,2*blockSize)
+        //#pragma omp for schedule(dynamic,srcs.blockSize/2)
+        #pragma omp for schedule(dynamic,2*srcs.blockSize)
         for (size_t i=0; i<targs.n; ++i) {
             treecode2_block<S,A,PD,SD,OD>(srcs, eqsrcs, stree, (size_t)1, targs, i, theta, threadstats);
         }
@@ -218,7 +218,7 @@ float nbody_treecode2(const Parts<S,A,PD,SD,OD>& srcs,
     //printf("  sltp %ld  sbtp %ld  epnum %ld\n", stats.sltp, stats.sbtp, stree.epnum[1]);
 
     return (float)nbody_kernel_flops() * 
-           ((float)stats.sltp*(float)blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
+           ((float)stats.sltp*(float)srcs.blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
 }
 
 
@@ -239,7 +239,8 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
     //printf("    vs src box %ld with %ld parts starting at %ld\n", snode, st.num[snode], st.ioffset[snode]);
 
     // if box is a leaf node, just compute the influence and return
-    if (st.num[snode] <= blockSize) {
+    if (st.num[snode] <= sp.blockSize) {
+        //printf("    vs src box %ld with %ld parts starting at %ld\n", snode, st.num[snode], st.ioffset[snode]);
         (void) ppinter(sp, st.ioffset[snode], st.ioffset[snode]+st.num[snode],
                        tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
         stats.sltp++;
@@ -273,9 +274,14 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
         //dist = std::sqrt(dist);
     }
 
+    // note that we MUST use the sizes of both source and target boxes
+    //const S testrad = st.nr[snode]+tt.nr[tnode];
+    //const S testrad = std::max(st.nr[snode],tt.nr[tnode]);
+    const S testrad = std::max(st.nr[snode],tt.nr[tnode]) + (S)0.25*std::min(st.nr[snode],tt.nr[tnode]);
+
     // is source tree node far enough away?
-    //if (dist / (st.nr[snode]+tt.nr[tnode]) > theta) {
-    if (dist / (2.0*st.nr[snode]) > theta) {
+    if (dist / ((S)2.0*testrad) > theta) {
+        //printf("    vs eqs box %ld with %ld parts starting at %ld (representing %ld parts)\n", snode, st.epnum[snode], st.epoffset[snode],st.num[snode]);
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode],
                        tp, tt.ioffset[tnode], tt.ioffset[tnode]+tt.num[tnode]);
@@ -306,7 +312,7 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
 
         #pragma omp for schedule(dynamic,8)
         for (size_t ib=0; ib<(size_t)ttree.numnodes; ++ib) {
-            if (ttree.num[ib] <= blockSize and ttree.num[ib] > 0) {
+            if (ttree.num[ib] <= targs.blockSize and ttree.num[ib] > 0) {
                 //printf("  targ box %ld has %ld parts starting at %ld\n", ib, ttree.num[ib], ttree.ioffset[ib]);
                 //for (size_t ip=ttree.ioffset[ib]; ip<ttree.ioffset[ib]+ttree.num[ib]; ++ip) {
                 //    for (int d=0; d<OD; ++d) targs.u[d][ip] = 0.0;
@@ -326,8 +332,8 @@ float nbody_treecode3(const Parts<S,A,PD,SD,OD>& srcs,
     //       targs.n, stats.sltp/(float)targs.n, stats.sbtp/(float)targs.n);
     //printf("  sltp %ld  sbtp %ld  epnum %ld\n", stats.sltp, stats.sbtp, stree.epnum[1]);
 
-    return (float)nbody_kernel_flops() * (float)blockSize *
-           ((float)stats.sltp*(float)blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
+    return (float)nbody_kernel_flops() * (float)targs.blockSize *
+           ((float)stats.sltp*(float)srcs.blockSize + (float)stats.sbtp*(float)stree.epnum[1]);
 }
 
 
@@ -635,7 +641,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     //printf("  box %ld size %g and rad %g\n", tnode, t.s[tnode], t.r[tnode]);
 
     // no need to split or compute further
-    if (t.num[tnode] <= blockSize) {
+    if (t.num[tnode] <= p.blockSize) {
         // we are at block size!
         //printf("  tree node %ld position %g %g size %g %g\n", tnode, t.x[tnode], t.y[tnode], boxsizes[0], boxsizes[1]);
         return;
@@ -654,7 +660,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
 
     // determine where the split should be
-    size_t pmiddle = pfirst + blockSize * (1 << log_2((t.num[tnode]-1)/blockSize));
+    size_t pmiddle = pfirst + p.blockSize * (1 << log_2((t.num[tnode]-1)/p.blockSize));
     //printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
 
     // temporary list of vectors to be sorted - oh, then we'll need many new temp vectors
@@ -712,7 +718,7 @@ template <class S, class A, int PD, int SD, int OD>
 void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, const size_t tnode) {
 
     // if we're not a leaf node...
-    if (t.num[tnode] > blockSize) {
+    if (t.num[tnode] > p.blockSize) {
         const size_t child1 = 2*tnode;
         const size_t child2 = 2*tnode+1;
 
@@ -817,7 +823,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     std::iota(p.gidx.begin(), p.gidx.end(), 0);
 
     // allocate
-    t = Tree<S,PD,SD>(p.n);
+    t = Tree<S,PD,SD>(p.n, p.blockSize);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -906,7 +912,7 @@ void refineTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD> const & t, const size_t tn
     }
 
     //printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
-    if (t.num[tnode] <= blockSize) {
+    if (t.num[tnode] <= p.blockSize) {
         // make the equivalent particles for this node
         (void) refineLeaf(p, t, t.ioffset[tnode], t.ioffset[tnode]+t.num[tnode]);
         //for (size_t i=t.ioffset[tnode]; i<t.ioffset[tnode]+t.num[tnode]; ++i)
@@ -946,7 +952,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD> const & p,
     //printf("  node %d has %d particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
 
-    t.epoffset[tnode] = tnode * blockSize;
+    t.epoffset[tnode] = tnode * ep.blockSize;
     t.epnum[tnode] = 0;
     //printf("    equivalent particles start at %ld\n", t.epoffset[tnode]);
 
@@ -955,7 +961,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD> const & p,
         //printf("  child %ld has %ld particles\n", ichild, t.num[ichild]);
 
         // split on whether this child is a leaf node or not
-        if (t.num[ichild] > blockSize) {
+        if (t.num[ichild] > p.blockSize) {
             // this child is a non-leaf node and needs to make equivalent particles
             (void) calcEquivalents(p, ep, t, ichild);
 
@@ -966,7 +972,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD> const & p,
 
             // merge pairs of child's equivalent particles until we have half
             size_t numEqps = (t.epnum[ichild]+1) / 2;
-            size_t istart = (blockSize/2) * ichild;
+            size_t istart = (ep.blockSize/2) * ichild;
             size_t istop = istart + numEqps;
             //printf("    making %ld equivalent particles %ld to %ld\n", numEqps, istart, istop);
 
@@ -1008,7 +1014,7 @@ void calcEquivalents(Parts<S,A,PD,SD,OD> const & p,
 
             // if we're a leaf node, merge pairs of particles until we have half
             size_t numEqps = (t.num[ichild]+1) / 2;
-            size_t istart = (blockSize/2) * ichild;
+            size_t istart = (ep.blockSize/2) * ichild;
             size_t istop = istart + numEqps;
             //printf("    making %ld equivalent particles %ld to %ld\n", numEqps, istart, istop);
 

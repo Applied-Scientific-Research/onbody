@@ -32,7 +32,7 @@ template <class S> using Vector = std::vector<S>;
 template <class S, class A, int PD, int SD, int OD>
 class Parts {
 public:
-    Parts(const size_t, const bool);
+    Parts(const size_t _num, const bool _aresrcs, const size_t _blocksize=128);
     void resize(const size_t);
     void random_in_cube();
     void random_in_cube(std::mt19937);
@@ -49,6 +49,10 @@ public:
     // state
     bool are_sources;
     size_t n;
+    // the basic unit of direct sum work
+    size_t blockSize;
+
+    // all points
     alignas(32) std::array<Vector<S>, PD> x;
     alignas(32) Vector<S> r;
 
@@ -70,8 +74,9 @@ public:
 };
 
 template <class S, class A, int PD, int SD, int OD>
-Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs) {
+Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs, const size_t _blocksize) {
     are_sources = _aresrcs;
+    blockSize = _blocksize;
     resize(_num);
 }
 
