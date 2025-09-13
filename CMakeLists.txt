@@ -1,10 +1,10 @@
 #
 # onbody
 #
-# (c)2017-24 Applied Scientific Research, Inc.
+# (c)2017-2025 Applied Scientific Research, Inc.
 #
 CMAKE_MINIMUM_REQUIRED( VERSION 3.11 )
-PROJECT( onbody CXX )
+PROJECT( onbody LANGUAGES CXX )
 
 INCLUDE( FetchContent )
 
@@ -15,6 +15,7 @@ ENDIF ()
 SET (CMAKE_BUILD_TYPE "Release" CACHE STRING "Select which configuration to build")
 SET (ONBODY_USE_OMP TRUE CACHE BOOL "Use OpenMP multithreading")
 SET (ONBODY_USE_VC TRUE CACHE BOOL "Use Vc for vector arithmetic")
+SET (ONBODY_PROFILE FALSE CACHE BOOL "Enable instrumentation of user functions")
 SET (CMAKE_VERBOSE_MAKEFILE on)
 SET (CMAKE_EXPORT_COMPILE_COMMANDS on)
 
@@ -118,7 +119,12 @@ ELSEIF ( UNIX )
     SET (CPREPROCDEFS ${CPREPROCDEFS} -DUSE_VC)
     SET( ONBODY_LIBS ${ONBODY_LIBS} Vc )
   ENDIF()
+ENDIF ()
 
+IF( ONBODY_PROFILE )
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -finstrument-functions -fprofile-exclude-files=/usr/.* -finstrument-functions-exclude-file-list=include")
 ENDIF ()
 
 INCLUDE_DIRECTORIES ( "src" )
