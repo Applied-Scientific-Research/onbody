@@ -174,6 +174,9 @@ This restriction could be relaxed with some code changes.
 * Use smarter or faster data structures in the O(N) list-building system
 * Start pulling the various algorithms (naive, tree1, tree2, fast) into separate...what, classes?
 * More generally, consider how to port this entire code to HIP
+* Use C++20 concepts to restrict typenames to std::floating_point and std::integral
+* Maybe also use std::span to pass non-owning array subsections to tree-builder routines?
+* Finally, consider C++26 std::simd instead of Vc, when it gets more widely supported
 
 ## Credits
 
