@@ -500,6 +500,7 @@ int main(int argc, char *argv[]) {
 
     const bool random_radii = false;
     const bool use_charges = true;
+    const bool random_cube = true;
     static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
     const bool just_build_trees = false;
     size_t numSrcs = 10000;
@@ -526,6 +527,26 @@ int main(int argc, char *argv[]) {
         } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
             usage();
         }
+    }
+
+    // using test_iterations, toggle some parts of the build
+    bool do_direct_sum = false;
+    if (test_iterations[0] > 0) do_direct_sum = true;
+    bool make_source_tree = false;
+    if (test_iterations[1]+test_iterations[2]+test_iterations[3]+test_iterations[4] > 0) make_source_tree = true;
+    if (just_build_trees) make_source_tree = true;
+    bool arrange_source_parts = false;
+    if (test_iterations[2]+test_iterations[3]+test_iterations[4] > 0) arrange_source_parts = true;
+    bool make_target_tree = false;
+    if (test_iterations[3]+test_iterations[4] > 0) make_target_tree = true;
+    bool arrange_target_parts = false;
+    if (test_iterations[4] > 0) arrange_target_parts = true;
+
+    std::string withwhat;
+    if (order < 0) {
+        withwhat = "equivalent particles";
+    } else {
+        withwhat = "a barycentric grid";
     }
 
     printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
@@ -555,7 +576,11 @@ int main(int argc, char *argv[]) {
     // allocate space for sources and targets
     Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true);
     // initialize particle data
-    srcs.random_in_cube(mt_engine);
+    if (random_cube) {
+        srcs.random_in_cube(mt_engine);
+    } else {
+        srcs.random_in_disk(mt_engine);
+    }
     if (random_radii) srcs.randomize_radii(mt_engine);
     if (use_charges) {
         printf("  electrostatics simulation with random charges\n");
@@ -573,10 +598,12 @@ int main(int argc, char *argv[]) {
 
 
     // initialize and generate tree
+    Tree<STORE,3,1> stree(0);
+    Parts<STORE,ACCUM,3,1,3> eqsrcs(0,true);
+    if (make_source_tree) {
     printf("\nBuilding the source tree\n");
     printf("  with %ld particles and block size of %ld\n", numSrcs, blockSize);
     start = std::chrono::steady_clock::now();
-    Tree<STORE,3,1> stree(0);
     // split this node and recurse
     (void) makeTree(srcs, stree);
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
@@ -586,6 +613,7 @@ int main(int argc, char *argv[]) {
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
 
+    if (arrange_source_parts) {
     // first, reorder tree until all parts are adjacent in space-filling curve
     if (order < 0) {
         start = std::chrono::steady_clock::now();
@@ -614,7 +642,7 @@ int main(int argc, char *argv[]) {
     // find equivalent particles
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::steady_clock::now();
-    Parts<STORE,ACCUM,3,1,3> eqsrcs((stree.numnodes/2) * blockSize, true);
+    eqsrcs.resize((stree.numnodes/2) * blockSize);
     printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
@@ -640,10 +668,12 @@ int main(int argc, char *argv[]) {
     treetime[3] += elapsed_seconds.count();
     treetime[4] += elapsed_seconds.count();
 
+    } // end if arrange_source_parts
+    } // end if make_source_tree
 
     // don't need the target tree for treecode, but will for boxwise and fast code
     Tree<STORE,3,1> ttree(0);
-    if (test_iterations[3] > 0 or test_iterations[4] > 0) {
+    if (make_target_tree) {
         printf("\nBuilding the target tree\n");
         printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
         start = std::chrono::steady_clock::now();
@@ -657,7 +687,7 @@ int main(int argc, char *argv[]) {
 
     // find equivalent points
     Parts<STORE,ACCUM,3,1,3> eqtargs(0, false);
-    if (test_iterations[4] > 0) {
+    if (arrange_target_parts) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::steady_clock::now();
         eqtargs = Parts<STORE,ACCUM,3,1,3>((ttree.numnodes/2) * blockSize, false);
@@ -693,12 +723,14 @@ int main(int argc, char *argv[]) {
 
     if (just_build_trees) exit(0);
 
+    float flops = 0.0;
+
     //
     // Run the O(N^2) implementation
     //
+    if (test_iterations[0] > 0) {
     printf("\nRun the naive O(N^2) method (every %ld particles)\n", ntskip);
     double minNaive = 1e30;
-    float flops = 0.0;
     for (int i = 0; i < test_iterations[0]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
@@ -712,6 +744,7 @@ int main(int argc, char *argv[]) {
     printf("  GFlop: %.2f and GFlop/s: %.3f\n", flops*1.e-9*(float)ntskip, flops*1.e-9/minNaive);
     // write sample results
     for (size_t i=0; i<echonum*ntskip; i+=ntskip) printf("  particle %ld vel %g %g %g\n",i,targs.u[0][i],targs.u[1][i],targs.u[2][i]);
+    }
     std::vector<ACCUM> naiveu(targs.u[0].begin(), targs.u[0].end());
 
     ACCUM errsum = 0.0;
@@ -742,6 +775,7 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
+    if (do_direct_sum) {
     errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu[i]-naiveu[i];
@@ -751,13 +785,14 @@ int main(int argc, char *argv[]) {
     }
     printf("error in treecode (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
+    }
 
 
     //
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
     if (test_iterations[2] > 0) {
-    printf("\nRun the treecode O(NlogN) with equivalent particles\n");
+    printf("\nRun the treecode O(NlogN) with %s\n", withwhat.c_str());
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         targs.zero_vels();
@@ -777,6 +812,7 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu2(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
+    if (do_direct_sum) {
     errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu2[i]-naiveu[i];
@@ -786,13 +822,14 @@ int main(int argc, char *argv[]) {
     }
     printf("error in treecode2 (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
     }
+    }
 
 
     //
     // Run a better O(NlogN) treecode - boxes use equivalent particles - lists are boxwise
     //
     if (test_iterations[3] > 0) {
-    printf("\nRun the treecode O(NlogN) with equivalent particles and boxwise interactions\n");
+    printf("\nRun the treecode O(NlogN) with %s and boxwise interactions\n", withwhat.c_str());
     double minTreecode3 = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         targs.zero_vels();
@@ -812,6 +849,7 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> treecodeu3(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
+    if (do_direct_sum) {
     errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = treecodeu3[i]-naiveu[i];
@@ -820,6 +858,7 @@ int main(int argc, char *argv[]) {
         errcnt += naiveu[i]*naiveu[i];
     }
     printf("error in treecode3 (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
+    }
     }
 
 
@@ -853,6 +892,7 @@ int main(int argc, char *argv[]) {
     std::vector<ACCUM> fastu(targs.u[0].begin(), targs.u[0].end());
 
     // compare accuracy
+    if (do_direct_sum) {
     errsum = 0.0; errcnt = 0.0; maxerr = 0.0;
     for (size_t i=0; i<numTargs; i+=ntskip) {
         ACCUM thiserr = fastu[i]-naiveu[i];
@@ -861,6 +901,7 @@ int main(int argc, char *argv[]) {
         errcnt += naiveu[i]*naiveu[i];
     }
     printf("error in fastsumm (max/rms):\t%g / %g\n", std::sqrt(maxerr/(ntskip*errcnt/(float)numTargs)), std::sqrt(errsum/errcnt));
+    }
     }
 
     printf("\nDone.\n");
