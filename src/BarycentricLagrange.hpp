@@ -56,7 +56,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
                              const size_t tnode) {
 
     const bool dbg = false;
-    const bool interp_radii = true;
+    const bool interp_radii = false;
 
     if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
     if (not p.are_sources or not ep.are_sources) return;
@@ -90,20 +90,32 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         for (size_t d=0; d<PD; ++d) {
             for (size_t k=0; k<ncp; ++k) {
                 //lsk[d][k] = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
-                *lsk_iter = t.nc[d][tnode] + 0.5 * sk<S>[k] * t.ns[d][tnode];
+                *lsk_iter = t.nc[d][tnode] + (S)0.5 * sk<S>[k] * t.ns[d][tnode];
                 ++lsk_iter;
             }
         }
     }
 
+    // precompute these useful indices - this should be a once-and-done thing, not every tree node
+    std::vector<std::array<S,PD>> kidx;
+    kidx.resize(numEqps);
+    for (size_t d=0; d<PD; ++d) {
+        const size_t divisor = ipow<size_t>(ncp,d);
+        for (size_t i=0; i<numEqps; ++i) {
+            kidx[i][d] = (i/divisor) % ncp;
+        }
+    }
+    // really, why can't we just keep track of (d*i) and increment from 0 to ncp-1 ?
+
     // note that t.x[d][tnode] is the center of mass - not the center of the cluster!!!
     // the cluster size is t.ns[d][tnode]
     // geometric center is t.nc[d][tnode]
     for (size_t d=0; d<PD; ++d) {
-        const size_t divisor = ipow<size_t>(ncp,d);
+        //const size_t divisor = ipow<size_t>(ncp,d);
         //printf("    d %ld and divisor %ld\n", d, divisor);
         for (size_t i=0; i<numEqps; ++i) {
-            ep.x[d][iepstart+i] = t.nc[d][tnode] + 0.5 * sk<S>[(i/divisor)%ncp] * t.ns[d][tnode];
+            //ep.x[d][iepstart+i] = t.nc[d][tnode] + (S)0.5 * sk<S>[(i/divisor)%ncp] * t.ns[d][tnode];
+            ep.x[d][iepstart+i] = t.nc[d][tnode] + (S)0.5 * sk<S>[kidx[i][d]] * t.ns[d][tnode];
         }
     }
 
@@ -129,16 +141,6 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
     // store a sum of weights
     std::vector<S> wgtsum(ep.blockSize, 0.0);
-
-    // precompute these useful indices
-    std::vector<std::array<S,PD>> kidx;
-    kidx.resize(numEqps);
-    for (size_t d=0; d<PD; ++d) {
-        const size_t divisor = ipow<size_t>(ncp,d);
-        for (size_t i=0; i<numEqps; ++i) {
-            kidx[i][d] = (i/divisor) % ncp;
-        }
-    }
 
     // loop over children, adding equivalent particles to our list
     for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
@@ -175,42 +177,39 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             for (size_t ip=istart; ip<istop; ++ip) {
                 //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
 
-                int32_t flag[PD];
-                for (size_t d=0; d<PD; ++d) flag[d] = -1;
-                S sum[PD];
-                for (size_t d=0; d<PD; ++d) sum[d] = 0.0;
-                for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+                S denom = (S)1.0;
 
                 // loop over coord indices and Cheby points to compute a
                 auto lsk_iter = std::begin(lsk);
                 for (size_t d=0; d<PD; ++d) {
-                for (size_t k=0; k<ncp; ++k) {
-                    // note the use of ep here!
-                    //const S dist = ep.x[d][ip] - lsk[d][k];
-                    const S dist = ep.x[d][ip] - *lsk_iter;
-                    ++lsk_iter;
-                    if (std::abs(dist) < 1.e-10) {
-                        flag[d] = k;
-                    } else {
-                        amat[d][k] = wk<S>[k] / dist;
-                        sum[d] += amat[d][k];
+                    int32_t flag = -1;
+                    S sum = (S)0.0;
+                    for (size_t k=0; k<ncp; ++k) {
+                        amat[d][k] = (S)0.0;
+                        // note the use of ep here!
+                        //const S dist = ep.x[d][ip] - lsk[d][k];
+                        const S dist = ep.x[d][ip] - *lsk_iter;
+                        ++lsk_iter;
+                        if (std::abs(dist) < 1.e-10) {
+                            flag = k;
+                        } else {
+                            amat[d][k] = wk<S>[k] / dist;
+                            sum += amat[d][k];
+                        }
                     }
-                }
-                }
 
-                // if a flag was set, remove singularity
-                for (size_t d=0; d<PD; ++d) {
-                    if (flag[d] > -1) {
-                        sum[d] = 1.0;
-                        for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
-                        amat[d][flag[d]] = 1.0;
+                    // if a flag was set, remove singularity
+                    if (flag > -1) {
+                        sum = (S)1.0;
+                        for (size_t k=0; k<ncp; ++k) amat[d][k] = (S)0.0;
+                        amat[d][flag] = (S)1.0;
                     }
+
+                    denom *= sum;
                 }
 
                 // can compute denominator now
-                S denom = 1.0;
-                for (size_t d=0; d<PD; ++d) denom *= sum[d];
-                denom = 1.0/denom;
+                denom = (S)1.0/denom;
 
                 // final loop to accumulate into equivalent weights
                 for (size_t i=0; i<numEqps; ++i) {
@@ -256,47 +255,47 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             for (size_t ip=istart; ip<istop; ++ip) {
                 //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
 
-                int32_t flag[PD];
-                for (size_t d=0; d<PD; ++d) flag[d] = -1;
-                S sum[PD];
-                for (size_t d=0; d<PD; ++d) sum[d] = 0.0;
-                for (size_t d=0; d<PD; ++d) for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
+                S denom = (S)1.0;
 
                 // loop over coord indices and Cheby points to compute a
                 auto lsk_iter = std::begin(lsk);
                 for (size_t d=0; d<PD; ++d) {
-                for (size_t k=0; k<ncp; ++k) {
-                    //const S dist = p.x[d][ip] - lsk[d][k];
-                    const S dist = p.x[d][ip] - *lsk_iter;
-                    ++lsk_iter;
-                    if (std::abs(dist) < 1.e-10) {
-                        flag[d] = k;
-                    } else {
-                        amat[d][k] = wk<S>[k] / dist;
-                        sum[d] += amat[d][k];
-                    }
-                    //printf("      d %ld k %ld x %g lsk %g flag %d amat %g\n", d, k, p.x[d][ip], lsk[d][k], flag[d], amat[d][k]);
-                }
-                }
+                    int32_t flag = -1;
+                    S sum = (S)0.0;
 
-                // if a flag was set, remove singularity
-                for (size_t d=0; d<PD; ++d) {
-                    if (flag[d] > -1) {
-                        sum[d] = 1.0;
-                        for (size_t k=0; k<ncp; ++k) amat[d][k] = 0.0;
-                        amat[d][flag[d]] = 1.0;
+                    for (size_t k=0; k<ncp; ++k) {
+                        amat[d][k] = (S)0.0;
+                        //const S dist = p.x[d][ip] - lsk[d][k];
+                        const S dist = p.x[d][ip] - *lsk_iter;
+                        ++lsk_iter;
+                        if (std::abs(dist) < 1.e-10) {
+                            flag = k;
+                        } else {
+                            amat[d][k] = wk<S>[k] / dist;
+                            sum += amat[d][k];
+                        }
+                        //printf("      d %ld k %ld x %g lsk %g flag %d amat %g\n", d, k, p.x[d][ip], lsk[d][k], flag[d], amat[d][k]);
                     }
-                }
 
-                // can compute denominator now
-                S denom = 1.0;
-                for (size_t d=0; d<PD; ++d) denom *= sum[d];
-                denom = 1.0/denom;
+                    // if a flag was set, remove singularity
+                    if (flag > -1) {
+                        sum = (S)1.0;
+                        for (size_t k=0; k<ncp; ++k) amat[d][k] = (S)0.0;
+                        amat[d][flag] = (S)1.0;
+                    }
+
+                    // scale denominator
+                    denom *= sum;
+                }
+                denom = (S)1.0/denom;
 
                 // final loop to accumulate into equivalent weights
                 for (size_t i=0; i<numEqps; ++i) {
                     const size_t iep = iepstart + i;
                     S wgt = denom;
+                    //S wgt = denom * amat[0][i%ncp];
+                    //if (PD>1) wgt *= amat[1][(i/ncp)%ncp];
+                    //if (PD>2) wgt *= amat[2][(i/(ncp*ncp))%ncp];
                     for (size_t d=0; d<PD; ++d) {
                         //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
                         //wgt *= amat[d][k];
