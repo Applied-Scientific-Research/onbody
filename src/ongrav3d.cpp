@@ -673,7 +673,10 @@ int main(int argc, char *argv[]) {
     } else {
         // here they are barycentric lagrange points
         start = std::chrono::steady_clock::now();
+        #pragma omp parallel
+        #pragma omp single
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+        #pragma omp taskwait
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }

@@ -142,14 +142,23 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     const bool dbg = false;
     const bool interp_radii = false;
 
-    if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
+    // this this a leaf node or are these not source particles?
     if (not p.are_sources or not ep.are_sources) return;
+    if (t.num[tnode] <= p.blockSize) return;
+    if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
 
     // set the locations and weights of the barycentric particles
     if (tnode == 1) {
         (void) set_sk<S>(order);
         (void) set_wk<S>(order);
     }
+
+    // make sure the children are done before proceeding
+    #pragma omp task shared(p,ep,t)
+    (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode);
+    #pragma omp task shared(p,ep,t)
+    (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode+1);
+    #pragma omp taskwait
 
     // set some constants
     const size_t ncp = order+1;		// number of Chebyshev points in each direction
@@ -223,7 +232,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) ep.r[i] = p.r[t.ioffset[tnode]];
     }
 
-    // store a sum of weights
+    // store a sum of weights to be used for particle radii
     std::vector<S> wgtsum(ep.blockSize, 0.0);
 
     // loop over children, adding equivalent particles to our list
@@ -234,16 +243,6 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         if (t.num[ichild] > p.blockSize) {
 
             // not a leaf node
-            if (dbg) printf("    from %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
-
-            // this child is a non-leaf node and needs to make equivalent particles
-            //#pragma omp task shared(p,ep,t)
-            (void) calcBarycentricLagrange(p, ep, t, order, ichild);
-            // need to call both children here to gain any parallelism
-            //#pragma omp taskwait
-
-            if (dbg) printf("  back in node %ld...\n", tnode);
-
             // now we read those equivalent particles and make higher-level equivalents
 
             // here istart and istop are the previous equivalent particles
