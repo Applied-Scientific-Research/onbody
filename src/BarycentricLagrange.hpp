@@ -46,6 +46,90 @@ void set_wk(const int32_t _n) {
 
 
 //
+// Loop over all parts in one tree node and calculate the n^d barycentric equivalent parts
+//
+// sp are source points, either equivalent or particles
+// tp are target points, always euivalent points
+//
+template <class S, class A, int PD, int SD, int OD>
+void calcBarycentricOneNode(const Parts<S,A,PD,SD,OD>& sp,
+                            Parts<S,A,PD,SD,OD>& tp,
+                            const std::vector<S>& lsk,
+                            const std::vector<std::array<S,PD>>& kidx,
+                            std::vector<S>& wgtsum,
+                            const size_t ncp, const size_t numEqps,
+                            const size_t istart, const size_t istop,
+                            const size_t iepstart, const bool interp_radii) {
+            //calcBarycentricOneNode(p, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+
+    // generate a reusable 2D array
+    std::array<std::vector<S>,PD> amat;
+    for (size_t d=0; d<PD; ++d) amat[d].resize(ncp);
+
+    // now do the work
+    for (size_t ip=istart; ip<istop; ++ip) {
+        //printf("      child part %ld at %g %g %g mass %g\n", ip, sp.x[0][ip], sp.x[1][ip], sp.x[2][ip], sp.s[0][ip]);
+
+        S denom = (S)1.0;
+
+        // loop over coord indices and Cheby points to compute a
+        auto lsk_iter = std::begin(lsk);
+        for (size_t d=0; d<PD; ++d) {
+            int32_t flag = -1;
+            S sum = (S)0.0;
+
+            for (size_t k=0; k<ncp; ++k) {
+                amat[d][k] = (S)0.0;
+                //const S dist = p.x[d][ip] - lsk[d][k];
+                const S dist = sp.x[d][ip] - *lsk_iter;
+                ++lsk_iter;
+                if (std::abs(dist) < 1.e-10) {
+                    flag = k;
+                } else {
+                    amat[d][k] = wk<S>[k] / dist;
+                    sum += amat[d][k];
+                }
+                //printf("      d %ld k %ld x %g lsk %g flag %d amat %g\n", d, k, p.x[d][ip], lsk[d][k], flag[d], amat[d][k]);
+            }
+
+            // if a flag was set, remove singularity
+            if (flag > -1) {
+                sum = (S)1.0;
+                for (size_t k=0; k<ncp; ++k) amat[d][k] = (S)0.0;
+                amat[d][flag] = (S)1.0;
+            }
+
+            // scale denominator
+            denom *= sum;
+        }
+        denom = (S)1.0/denom;
+
+        // final loop to accumulate into equivalent weights
+        for (size_t i=0; i<numEqps; ++i) {
+            const size_t iep = iepstart + i;
+            S wgt = denom;
+            //S wgt = denom * amat[0][i%ncp];
+            //if (PD>1) wgt *= amat[1][(i/ncp)%ncp];
+            //if (PD>2) wgt *= amat[2][(i/(ncp*ncp))%ncp];
+            for (size_t d=0; d<PD; ++d) {
+                //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
+                //wgt *= amat[d][k];
+                wgt *= amat[d][kidx[i][d]];
+                //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
+            }
+            for (size_t d=0; d<SD; ++d) tp.s[d][iep] += wgt * sp.s[d][ip];
+
+            if (interp_radii) {
+                tp.r[iep] += std::abs(wgt) * sp.r[ip];
+                wgtsum[i] += std::abs(wgt);
+            }
+        }
+    }
+}
+
+
+
+//
 // Loop over all nodes in the tree and calculate the n^d barycentric equivalent particles
 //
 template <class S, class A, int PD, int SD, int OD>
@@ -153,9 +237,10 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             if (dbg) printf("    from %ld to %ld\n", t.ioffset[ichild], t.ioffset[ichild]+t.num[ichild]);
 
             // this child is a non-leaf node and needs to make equivalent particles
-            #pragma omp task shared(p,ep,t)
+            //#pragma omp task shared(p,ep,t)
             (void) calcBarycentricLagrange(p, ep, t, order, ichild);
             // need to call both children here to gain any parallelism
+            //#pragma omp taskwait
 
             if (dbg) printf("  back in node %ld...\n", tnode);
 
@@ -169,66 +254,8 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             // and here is the range of new equivalent particles
             if (dbg) printf("    putting into %ld new equiv particles %ld to %ld\n", numEqps, iepstart, iepstop);
 
-            // generate a reusable 2D array
-            std::array<std::vector<S>,PD> amat;
-            for (size_t d=0; d<PD; ++d) amat[d].resize(ncp);
-
             // now do the work
-            for (size_t ip=istart; ip<istop; ++ip) {
-                //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
-
-                S denom = (S)1.0;
-
-                // loop over coord indices and Cheby points to compute a
-                auto lsk_iter = std::begin(lsk);
-                for (size_t d=0; d<PD; ++d) {
-                    int32_t flag = -1;
-                    S sum = (S)0.0;
-                    for (size_t k=0; k<ncp; ++k) {
-                        amat[d][k] = (S)0.0;
-                        // note the use of ep here!
-                        //const S dist = ep.x[d][ip] - lsk[d][k];
-                        const S dist = ep.x[d][ip] - *lsk_iter;
-                        ++lsk_iter;
-                        if (std::abs(dist) < 1.e-10) {
-                            flag = k;
-                        } else {
-                            amat[d][k] = wk<S>[k] / dist;
-                            sum += amat[d][k];
-                        }
-                    }
-
-                    // if a flag was set, remove singularity
-                    if (flag > -1) {
-                        sum = (S)1.0;
-                        for (size_t k=0; k<ncp; ++k) amat[d][k] = (S)0.0;
-                        amat[d][flag] = (S)1.0;
-                    }
-
-                    denom *= sum;
-                }
-
-                // can compute denominator now
-                denom = (S)1.0/denom;
-
-                // final loop to accumulate into equivalent weights
-                for (size_t i=0; i<numEqps; ++i) {
-                    const size_t iep = iepstart + i;
-                    S wgt = denom;
-                    for (size_t d=0; d<PD; ++d) {
-                        //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
-                        //wgt *= amat[d][k];
-                        wgt *= amat[d][kidx[i][d]];
-                    }
-                    // note the use of ep for both here!
-                    for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * ep.s[d][ip];
-
-                    if (interp_radii) {
-                        ep.r[iep] += std::abs(wgt) * ep.r[ip];
-                        wgtsum[i] += std::abs(wgt);
-                    }
-                }
-            }
+            calcBarycentricOneNode<S,A,PD,SD,OD>(ep, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
 
             // now adjust particle radii
             //for (size_t i=0; i<numEqps; ++i) ep.r[iepstart+i] /= wgtsum[i];
@@ -247,69 +274,8 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             // and here is the range of equivalent particles
             if (dbg) printf("    putting into %ld equivalent particles %ld to %ld\n", numEqps, iepstart, iepstop);
 
-            // generate a reusable 2D array
-            std::array<std::vector<S>,PD> amat;
-            for (size_t d=0; d<PD; ++d) amat[d].resize(ncp);
-
             // now do the work
-            for (size_t ip=istart; ip<istop; ++ip) {
-                //printf("      child part %ld at %g %g %g mass %g\n", ip, p.x[0][ip], p.x[1][ip], p.x[2][ip], p.s[0][ip]);
-
-                S denom = (S)1.0;
-
-                // loop over coord indices and Cheby points to compute a
-                auto lsk_iter = std::begin(lsk);
-                for (size_t d=0; d<PD; ++d) {
-                    int32_t flag = -1;
-                    S sum = (S)0.0;
-
-                    for (size_t k=0; k<ncp; ++k) {
-                        amat[d][k] = (S)0.0;
-                        //const S dist = p.x[d][ip] - lsk[d][k];
-                        const S dist = p.x[d][ip] - *lsk_iter;
-                        ++lsk_iter;
-                        if (std::abs(dist) < 1.e-10) {
-                            flag = k;
-                        } else {
-                            amat[d][k] = wk<S>[k] / dist;
-                            sum += amat[d][k];
-                        }
-                        //printf("      d %ld k %ld x %g lsk %g flag %d amat %g\n", d, k, p.x[d][ip], lsk[d][k], flag[d], amat[d][k]);
-                    }
-
-                    // if a flag was set, remove singularity
-                    if (flag > -1) {
-                        sum = (S)1.0;
-                        for (size_t k=0; k<ncp; ++k) amat[d][k] = (S)0.0;
-                        amat[d][flag] = (S)1.0;
-                    }
-
-                    // scale denominator
-                    denom *= sum;
-                }
-                denom = (S)1.0/denom;
-
-                // final loop to accumulate into equivalent weights
-                for (size_t i=0; i<numEqps; ++i) {
-                    const size_t iep = iepstart + i;
-                    S wgt = denom;
-                    //S wgt = denom * amat[0][i%ncp];
-                    //if (PD>1) wgt *= amat[1][(i/ncp)%ncp];
-                    //if (PD>2) wgt *= amat[2][(i/(ncp*ncp))%ncp];
-                    for (size_t d=0; d<PD; ++d) {
-                        //const size_t k = (i/ipow<size_t>(ncp,d)) % ncp;
-                        //wgt *= amat[d][k];
-                        wgt *= amat[d][kidx[i][d]];
-                        //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
-                    }
-                    for (size_t d=0; d<SD; ++d) ep.s[d][iep] += wgt * p.s[d][ip];
-
-                    if (interp_radii) {
-                        ep.r[iep] += std::abs(wgt) * p.r[ip];
-                        wgtsum[i] += std::abs(wgt);
-                    }
-                }
-            }
+            calcBarycentricOneNode<S,A,PD,SD,OD>(p, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
 
             t.epnum[tnode] = numEqps;
         }
