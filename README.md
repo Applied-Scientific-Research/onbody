@@ -67,26 +67,44 @@ A normal call to the gravitation solver would then look like this:
 
 ## Performance
 
-The tests below were run on an AMD Ryzen 9 3950X 16 core processor, generally at ~4GHz.
-The programs are multi-threaded with OpenMP, compiled with GCC 9.3.1 using `-Ofast -march=native`
-and use a block size of 128.
+The tests below were run on an AMD Threadripper 3945WX 12-core processor using the Sept 2025
+version of this code compiled with GCC 14.3.1 with Vc and OpenMP and use a block size of 128 (`-b=128`).
 All reported times are in wall-clock seconds reported with the high resolution timer from `std::chrono`.
 Below is the performance of the `ongrav3d` program, coded to use charges instead of
 masses (it is much harder to get high accuracy with + and - charges than with
-always-positive masses), with my theta 1.11111 (MAC theta=0.9), 4th order interpolation
-(5^3 Chebyshev points per tree node) and double-precision numbers for
+always-positive masses), with `-t=1.11111` (MAC theta=0.9), 4th order interpolation
+(`-o=4` or 5^3 Chebyshev points per tree node) and single-precision numbers for
 storage and computation. RMS errors were around 1e-4.
 
-N         | src tree | calc equivs |  direct  | pointwise | boxwise
-----------|----------|-------------|----------|-----------|--------
-10000     |  0.0020  |    0.0063   |  0.0137  |   0.0071  | 0.0092
-100000    |  0.0099  |    0.0622   |  0.7850  |   0.1569  | 0.1365
-1000000   |  0.1043  |    0.6065   |  413.46  |   3.0210  | 2.3598
-10000000  |  1.7031  |    6.1892   |  43739.  |   47.929  | 36.797
-100000000 |  20.830  |    62.212   |  5236300 |   639.84  | 461.25
+N      | src tree | calc equivs |  direct  | pointwise | boxwise
+-------|----------|-------------|----------|-----------|--------
+1000   |  0.0017  |    0.0004   |  0.00003 |   0.0024  | 0.0033
+10000  |  0.0023  |    0.0013   |  0.0033  |   0.0072  | 0.0149
+100000 |  0.0088  |    0.0072   |  0.3289  |   0.0947  | 0.1111
+1e+6   |  0.0879  |    0.0585   |  39.704  |   1.5827  | 1.5646
+1e+7   |  0.9067  |    0.4713   |  20020.  |   23.652  | 21.128
+1e+8   |  8.2903  |    4.6498   |  2.39e+6 |   303.74  | 256.06
+1e+9   |  85.149  |    46.754   |  2.11e+8 |   3979.8  | 3174.4
 
-![Performance vs. N, theta=0.9](doc/resNqd_t0p9.png)
-![Performance vs. Error, varying order and theta](doc/res1Mqd_trad.png)
+![Performance vs. N, theta=0.9](doc/resNqd_t0p9_rip.png)
+
+The following two figures represent work performed on a 16-core AMD Ryzen 3950X with
+`ongrav3d` compiled with GCC 13.2.0.
+The first shows the effect of varying theta, the box-opening criterion, for 
+the same example. Note that the theta mentioned here is the inverse of the `-t` argument.
+This shows that a generous box-opening criterion can be used to achieve RMS errors
+less than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 1e-4 to 1e-5.
+The error asymptotes at 6e-6 because all storage and accumulations are done using 
+32-bit `float` numbers.
+
+![Performance vs. theta, 1M charges in a cube](doc/resNqd_trad.png)
+
+Finally, we see the effect of changing the floating-point precision for data storage
+and arithmetic accumulation. 32-bit floats are fastest down to about 1e-5 RMS error, 
+then performing accumulations in fp64 allows the RMS error to drop to about 4e-6,
+finally to achieve the most accurate results, numbers should also be stored as fp64.
+
+![Performance vs. precision, 1M charges in a cube](doc/res1Mqd_prec.png)
 
 ## Theory
 
@@ -157,6 +175,7 @@ And to use the barycentric Lagrange interpolation, include it:
 
 ## To Do
 
+* Add logic that compares the number of equivalent points to the number of actual particles in a box and uses the particles for summation if there are fewer
 * Specialize the general Parts class inside of each program, like ongrav3d should have a MassParts : Parts
 * Allow the Parts constructor to take another Parts object and re-use its data? or otherwise have sources and targets be the same data (make it easier on the cache)
 * Create a standard Barnes-Hut NlogN method with boxwise interactions (to complete the set of 4 basic treecodes)
