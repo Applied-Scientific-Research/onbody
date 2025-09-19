@@ -97,7 +97,7 @@ less than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 
 The error asymptotes at 6e-6 because all storage and accumulations are done using 
 32-bit `float` numbers.
 
-![Performance vs. theta, 1M charges in a cube](doc/resNqd_trad.png)
+![Performance vs. theta, 1M charges in a cube](doc/res1Mqd_trad.png)
 
 Finally, we see the effect of changing the floating-point precision for data storage
 and arithmetic accumulation. 32-bit floats are fastest down to about 1e-5 RMS error, 
