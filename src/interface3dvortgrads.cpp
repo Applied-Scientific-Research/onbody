@@ -258,6 +258,7 @@ extern "C" float external_vel_solver_f_ (const int* nsrc,
     // 1.5 and 4 gives 1e-4 mean vel error
     const float theta = 1.5;
     const int32_t order = 4;
+    const size_t blockSize = 128;
     const bool silent = true;
     const bool blockwise = true;
 

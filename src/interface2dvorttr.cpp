@@ -188,6 +188,7 @@ extern "C" float external_vel_solver_tr_f_ (const int* nsrc,
     // 1.5 and 6 for 1e-6 error (double-double, though)
     const float theta = 1.3;
     const int32_t order = 4;
+    const size_t blockSize = 128;
     const bool silent = true;
     const bool blockwise = true;
 
