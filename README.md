@@ -96,6 +96,8 @@ This shows that a generous box-opening criterion can be used to achieve RMS erro
 less than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 1e-4 to 1e-5.
 The error asymptotes at 6e-6 because all storage and accumulations are done using 
 32-bit `float` numbers.
+Note here that if 1e-3 error is acceptable, this setup can perform the treecode summation
+for 1 million particles in about 1 second using just the CPU.
 
 ![Performance vs. theta, 1M charges in a cube](doc/res1Mqd_trad.png)
 
@@ -195,4 +197,15 @@ And to use the barycentric Lagrange interpolation, include it:
 
 This program was written by Mark Stock; though thanks go to Prof. Krasny and collaborators for
 their documentation of the barycentric Lagrange interpolation method: [BaryTree on github](https://github.com/Treecodes/BaryTree).
+
+I don't get paid for writing or maintaining this, so if you find this tool useful or mention it in your writing, please please cite it by using the following BibTeX entry.
+
+```
+@Misc{onbody2022,
+  author =       {Mark J.~Stock},
+  title =        {onbody: A Multithreaded Kernel-Independent Treecode in C++},
+  howpublished = {\url{https://github.com/Applied-Scientific-Research/onbody}},
+  year =         {2022}
+}
+```
 

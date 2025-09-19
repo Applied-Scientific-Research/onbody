@@ -1,7 +1,7 @@
 /*
  * ongrav3d - testbed for an O(N) 3d gravitational/electrostatics solver
  *
- * Copyright (c) 2017-22, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-25, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
