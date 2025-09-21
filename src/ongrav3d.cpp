@@ -211,7 +211,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                                      Parts<S,A,PD,SD,OD>& eqtargs,
                                      const Tree<S,PD,SD>& ttree,
                                      const size_t ittn, std::vector<size_t> istv_in,
-                                     const S theta) {
+                                     const S theta, const int32_t order) {
 
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
@@ -226,30 +226,35 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
     if (targetIsLeaf) {
         stats.tlc++;
         // zero the velocities
-        std::fill_n(&(targs.u[0][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
-        std::fill_n(&(targs.u[1][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
-        std::fill_n(&(targs.u[2][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        const size_t destStart = ttree.ioffset[ittn];
+        const size_t destNum = ttree.num[ittn];
+        for (size_t d=0; d<OD; ++d) std::fill_n(&(targs.u[d][destStart]), destNum, (S)0.0);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our real points
-            const size_t destStart = ttree.ioffset[ittn];
-            const size_t destNum = ttree.num[ittn];
             const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
             //const size_t origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
             //       origStart, origStart+origNum, destStart, destStart+destNum);
-            for (size_t i=0; i<destNum; ++i) {
-                const size_t idest = destStart + i;
-                const size_t iorig = origStart + i/2;
-                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
-                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
-                //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
-                if (true) {
-                    // third try, using barycentric Lagrange iterpolation
-                    assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
-                } else if (false) {
-                    // second take, use linear least squares to approximate value
+
+            if (order < 0) {
+                // as a first take, simply copy the result to the children
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
+                    //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
+                    //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
+                    //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
+
+                    for (size_t d=0; d<OD; ++d) targs.u[d][idest] = eqtargs.u[d][iorig];
+                }
+
+            } else if (false) {
+                // second take, use linear least squares to approximate value
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
                     const size_t nearest = 16;
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
@@ -263,27 +268,26 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                     targs.u[2][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest], targs.x[2][idest],
                                                           eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
                                                           eqtargs.u[2], istart, iend);
-                } else {
-                    // as a first take, simply copy the result to the children
-                    targs.u[0][idest] = eqtargs.u[0][iorig];
-                    targs.u[1][idest] = eqtargs.u[1][iorig];
-                    targs.u[2][idest] = eqtargs.u[2][iorig];
                 }
+
+            } else {
+                // third try, using barycentric Lagrange iterpolation
+                //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
+                // ultimately, report the flops done in this routine
+                (void) calcBarycentricDownward(eqtargs, targs, order, destStart, destStart+destNum, origStart);
             }
             stats.lpc++;
         }
 
     } else {
         // zero the equivalent particle velocities
-        std::fill_n(&(eqtargs.u[0][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
-        std::fill_n(&(eqtargs.u[1][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
-        std::fill_n(&(eqtargs.u[2][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        const size_t destStart = ttree.epoffset[ittn];
+        const size_t destNum = ttree.epnum[ittn];
+        for (size_t d=0; d<OD; ++d) std::fill_n(&(eqtargs.u[d][destStart]), destNum, (S)0.0);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our equiv points
-            const size_t destStart = ttree.epoffset[ittn];
-            const size_t destNum = ttree.epnum[ittn];
             const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
             //const size_t origNum = (destNum+1)/2;
             //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
@@ -294,17 +298,22 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
             //    printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
             //}
 
-            for (size_t i=0; i<destNum; ++i) {
-                const size_t idest = destStart + i;
-                const size_t iorig = origStart + i/2;
-                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
-                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
-                //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
-                if (true) {
-                    // third try, using barycentric Lagrange iterpolation
-                    assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
-                } else if (false) {
-                    // second take, apply gradient of value to delta location
+            if (order < 0) {
+                // as a first take, simply copy the result to the children
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
+                    for (size_t d=0; d<OD; ++d) eqtargs.u[d][idest] = eqtargs.u[d][iorig];
+                }
+
+            } else if (false) {
+                // second take, apply gradient of value to delta location
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
+                    //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
+                    //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
+                    //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
                     const size_t nearest = 16;
                     const size_t istart = nearest*(iorig/nearest);
                     const size_t iend = istart+nearest;
@@ -318,12 +327,14 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                     eqtargs.u[2][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest], eqtargs.x[2][idest],
                                                             eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
                                                             eqtargs.u[2], istart, iend);
-                } else {
-                    // as a first take, simply copy the result to the children
-                    eqtargs.u[0][idest] = eqtargs.u[0][iorig];
-                    eqtargs.u[1][idest] = eqtargs.u[1][iorig];
-                    eqtargs.u[2][idest] = eqtargs.u[2][iorig];
                 }
+
+            } else {
+                // third try, using barycentric Lagrange iterpolation
+                //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
+                // ultimately, report the flops done in this routine
+                (void) calcBarycentricDownward(eqtargs, eqtargs, order, destStart, destStart+destNum, origStart);
+
             }
             stats.bpc++;
         }
@@ -458,10 +469,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         struct fastsumm_stats cstats1, cstats2;
 
         #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats1)
-        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
 
         #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats2)
-        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
         #pragma omp taskwait
@@ -503,7 +514,7 @@ int main(int argc, char *argv[]) {
     const bool random_radii = false;
     const bool use_charges = true;
     const bool random_cube = true;
-    static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
+    static std::vector<int> test_iterations = {1, 0, 1, 1, 1};
     const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
@@ -884,7 +895,7 @@ int main(int argc, char *argv[]) {
     if (test_iterations[4] > 0) {
     printf("\nRun the fast O(N) method\n");
     double minFast = 1e30;
-    for (int i = 0; i < test_iterations[3]; ++i) {
+    for (int i = 0; i < test_iterations[4]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
         std::vector<size_t> source_boxes = {1};
@@ -893,7 +904,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, theta);
+                              1, source_boxes, theta, order);
         #pragma omp taskwait
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
