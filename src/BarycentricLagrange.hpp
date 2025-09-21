@@ -11,6 +11,7 @@
 #include "Tree.hpp"
 
 #include <cassert>
+#include <cmath>		// for isnan
 
 #define CLOSE_THRESH 1.e-10
 
@@ -88,7 +89,7 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     }
 
     // precompute these useful indices - this should be a once-and-done thing, not every tree node
-    std::vector<std::array<S,PD>> kidx;
+    std::vector<std::array<size_t,PD>> kidx;
     kidx.resize(numEqps);
     for (size_t d=0; d<PD; ++d) {
         const size_t divisor = ipow<size_t>(ncp,d);
@@ -147,8 +148,16 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
                 //wgt *= amat[d][k];
                 wgt *= amat[d][kidx[i][d]];
                 //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
+                if (std::isnan(wgt)) {
+                    printf("NAN at ip=%ld, i=%ld, d=%ld, kidx=%ld\n", ip, i, d, kidx[i][d]);
+                    exit(1);
+                }
             }
             for (size_t d=0; d<OD; ++d) tp.u[d][ip] += wgt * sp.u[d][iep];
+            if (std::isnan(tp.u[0][ip])) {
+                printf("NAN at ip=%ld, i=%ld, wgt=%g\n", ip, i, wgt);
+                exit(1);
+            }
         }
     }
 }
@@ -164,7 +173,7 @@ template <class S, class A, int PD, int SD, int OD>
 void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
                            Parts<S,A,PD,SD,OD>& tp,
                            const std::vector<S>& lsk,
-                           const std::vector<std::array<S,PD>>& kidx,
+                           const std::vector<std::array<size_t,PD>>& kidx,
                            std::vector<S>& wgtsum,
                            const size_t ncp, const size_t numEqps,
                            const size_t istart, const size_t istop,
@@ -250,8 +259,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     const bool dbg = false;
     const bool interp_radii = false;
 
-    // this this a leaf node or are these not source particles?
-    if (not p.are_sources or not ep.are_sources) return;
+    // this this a leaf node?
     if (t.num[tnode] <= p.blockSize) return;
     if (dbg) printf("  node %ld has %ld particles\n", tnode, t.num[tnode]);
 
@@ -298,7 +306,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     }
 
     // precompute these useful indices - this should be a once-and-done thing, not every tree node
-    std::vector<std::array<S,PD>> kidx;
+    std::vector<std::array<size_t,PD>> kidx;
     kidx.resize(numEqps);
     for (size_t d=0; d<PD; ++d) {
         const size_t divisor = ipow<size_t>(ncp,d);
@@ -329,8 +337,10 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     //for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) printf("    eq part %ld is at %g %g %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i]);
 
     // set all equiv. particles weights
-    for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) {
-        for (size_t d=0; d<SD; ++d) ep.s[d][i] = 0.0;
+    if (ep.are_sources) {
+        for (size_t i=iepstart; i<iepstart+ep.blockSize; ++i) {
+            for (size_t d=0; d<SD; ++d) ep.s[d][i] = 0.0;
+        }
     }
 
     // initialize radii to zero, or just copy the first particle radius
@@ -362,7 +372,9 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             if (dbg) printf("    putting into %ld new equiv particles %ld to %ld\n", numEqps, iepstart, iepstop);
 
             // now do the work
-            calcBarycentricUpward<S,A,PD,SD,OD>(ep, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+            if (p.are_sources and ep.are_sources) {
+                calcBarycentricUpward<S,A,PD,SD,OD>(ep, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+            }
 
             // now adjust particle radii
             //for (size_t i=0; i<numEqps; ++i) ep.r[iepstart+i] /= wgtsum[i];
@@ -381,8 +393,10 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
             // and here is the range of equivalent particles
             if (dbg) printf("    putting into %ld equivalent particles %ld to %ld\n", numEqps, iepstart, iepstop);
 
-            // now do the work
-            calcBarycentricUpward<S,A,PD,SD,OD>(p, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+            // now do the work - but only if strengths exist
+            if (p.are_sources and ep.are_sources) {
+                calcBarycentricUpward<S,A,PD,SD,OD>(p, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+            }
 
             t.epnum[tnode] = numEqps;
         }
@@ -395,6 +409,6 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
     if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g rad %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i], ep.r[i]);
 
-    //printf("  node %d finally has %d equivalent particles, offset %d\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
+    printf("  node %ld finally has %ld equivalent particles, offset %ld\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
 
 }
