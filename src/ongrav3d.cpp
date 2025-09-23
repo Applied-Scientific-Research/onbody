@@ -193,6 +193,7 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 struct fastsumm_stats {
     size_t sltl, sbtl, sltb, sbtb, tlc, lpc, bpc;
+    float flops;
 };
 
 //
@@ -214,7 +215,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                                      const S theta, const int32_t order) {
 
     // start counters
-    struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
+    struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0, 0.f};
+    const bool dostats = false;
 
     // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
@@ -274,6 +276,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
                 // ultimately, report the flops done in this routine
                 (void) calcBarycentricDownward(eqtargs, targs, order, destStart, destStart+destNum, origStart);
+
+                // flops
+                // destNum*(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD))
+                stats.flops += destNum*(float)(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD));
             }
             stats.lpc++;
         }
@@ -333,6 +339,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 // ultimately, report the flops done in this routine
                 (void) calcBarycentricDownward(eqtargs, eqtargs, order, destStart, destStart+destNum, origStart);
 
+                // flops
+                // destNum*(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD))
+                stats.flops += destNum*(float)(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD));
+
             }
             stats.bpc++;
         }
@@ -361,13 +371,8 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
             //printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
 
             // compute all-on-all direct influence
-            for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-            for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
-                nbody_kernel(srcs.x[0][j],  srcs.x[1][j],  srcs.x[2][j], srcs.r[j], srcs.s[0][j],
-                             targs.x[0][i], targs.x[1][i], targs.x[2][i],
-                             targs.u[0][i], targs.u[1][i], targs.u[2][i]);
-            }
-            }
+            ppinter<S,A,PD,SD,OD>(srcs, stree.ioffset[sn], stree.ioffset[sn]+stree.num[sn],
+                                  targs, ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
             stats.sltl++;
             continue;
         }
@@ -386,39 +391,24 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 
             if (sourceIsLeaf) {
                 // compute real source particles on equivalent target points
-                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
-                    nbody_kernel(srcs.x[0][j],    srcs.x[1][j],    srcs.x[2][j], srcs.r[j], srcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.x[2][i],
-                                 eqtargs.u[0][i], eqtargs.u[1][i], eqtargs.u[2][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(srcs, stree.ioffset[sn], stree.ioffset[sn]+stree.num[sn],
+                                      eqtargs, ttree.epoffset[ittn], ttree.epoffset[ittn] + ttree.epnum[ittn]);
                 stats.sltb++;
 
             } else if (targetIsLeaf) {
                 // compute equivalent source particles on real target points
-                for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-                for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
-                    nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.x[2][j], eqsrcs.r[j], eqsrcs.s[0][j],
-                                 targs.x[0][i],  targs.x[1][i],  targs.x[2][i],
-                                 targs.u[0][i],  targs.u[1][i],  targs.u[2][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(eqsrcs, stree.epoffset[sn], stree.epoffset[sn]+stree.epnum[sn],
+                                      targs, ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
                 stats.sbtl++;
 
             } else {
                 // compute equivalent source particles on equivalent target points
-                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
-                    nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.x[2][j], eqsrcs.r[j], eqsrcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.x[2][i],
-                                 eqtargs.u[0][i], eqtargs.u[1][i], eqtargs.u[2][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(eqsrcs, stree.epoffset[sn], stree.epoffset[sn]+stree.epnum[sn],
+                                      eqtargs, ttree.epoffset[ittn], ttree.epoffset[ittn] + ttree.epnum[ittn]);
                 stats.sbtb++;
             }
 
-        } else if (ttree.nr[ittn] > stree.nr[sn]) {
+        } else if (ttree.nr[ittn] > (S)0.95*stree.nr[sn]) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 
@@ -477,23 +467,28 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
         // that slows things down, though, so dispense with it completely
-        //#pragma omp taskwait
-        //stats.sltl += cstats1.sltl + cstats2.sltl;
-        //stats.sbtl += cstats1.sbtl + cstats2.sbtl;
-        //stats.sltb += cstats1.sltb + cstats2.sltb;
-        //stats.sbtb += cstats1.sbtb + cstats2.sbtb;
-        //stats.tlc  += cstats1.tlc  + cstats2.tlc;
-        //stats.lpc  += cstats1.lpc  + cstats2.lpc;
-        //stats.bpc  += cstats1.bpc  + cstats2.bpc;
+        if (dostats) {
+            #pragma omp taskwait
+            stats.sltl += cstats1.sltl + cstats2.sltl;
+            stats.sbtl += cstats1.sbtl + cstats2.sbtl;
+            stats.sltb += cstats1.sltb + cstats2.sltb;
+            stats.sbtb += cstats1.sbtb + cstats2.sbtb;
+            stats.tlc  += cstats1.tlc  + cstats2.tlc;
+            stats.lpc  += cstats1.lpc  + cstats2.lpc;
+            stats.bpc  += cstats1.bpc  + cstats2.bpc;
+            stats.flops += cstats1.flops + cstats2.flops;
+        }
     }
 
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        //printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
-        //       stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
-        //printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
-        //printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
+        if (dostats) {
+            printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+                   stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
+            printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+            printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
+        }
     }
 
     //printf("  box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
@@ -516,7 +511,7 @@ int main(int argc, char *argv[]) {
     const bool random_radii = false;
     const bool use_charges = true;
     const bool random_cube = true;
-    static std::vector<int> test_iterations = {1, 0, 1, 1, 1};
+    static std::vector<int> test_iterations = {1, 1, 1, 1, 1};
     const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;

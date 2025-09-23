@@ -160,6 +160,9 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
             //}
         }
     }
+
+    // flops
+    // (istop-istart)*(1+PD*(1+ncp*5)+numEqps*(PD+2*OD))
 }
 
 
