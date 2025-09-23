@@ -219,7 +219,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
     // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
 
-    //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
+    //printf("Targ box %ld is affected by %lu source boxes at this level\n",ittn,istv_in.size());
     const bool targetIsLeaf = ttree.num[ittn] <= targs.blockSize;
 
     // prepare the target arrays for accumulations
@@ -233,10 +233,9 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our real points
-            const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
-            //const size_t origNum = (destNum+1)/2;
-            //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
-            //       origStart, origStart+origNum, destStart, destStart+destNum);
+            const size_t origStart = ttree.epoffset[ittn/2];
+            //printf("  interp parent equiv parts %ld to %ld to our own real parts %ld to %ld\n",
+            //       origStart, origStart+ttree.epnum[ittn/2], destStart, destStart+destNum);
 
             if (order < 0) {
                 // as a first take, simply copy the result to the children
@@ -288,10 +287,9 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our equiv points
-            const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
-            //const size_t origNum = (destNum+1)/2;
-            //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
-            //       origStart, origStart+origNum, destStart, destStart+destNum);
+            const size_t origStart = ttree.epoffset[ittn/2];
+            //printf("  interp parent equiv parts %ld to %ld to our own equiv parts %ld to %ld\n",
+            //       origStart, origStart+ttree.epnum[ittn/2], destStart, destStart+destNum);
 
             //for (size_t i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
             //    size_t ipe = ttree.epoffset[ittn]/2 + i;
@@ -355,7 +353,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         if (stree.num[sn] < 1) continue;
 
         const bool sourceIsLeaf = stree.num[sn] <= srcs.blockSize;
-        //printf("  source %d affects target %d\n",sn,ittn);
+        //printf("  source %ld (%g%s) affects target %ld (%g%s)\n", sn, stree.nr[sn], (sourceIsLeaf ? " leaf" : ""), ittn, ttree.nr[ittn], (targetIsLeaf ? " leaf" : ""));
 
         // if source box is a leaf node, just compute the influence and return?
         // this assumes target box is also a leaf node!
@@ -374,17 +372,17 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
             continue;
         }
 
-        // distance from box center of mass to target point
+        // distance from source box center to target box center
         S dist = 0.0;
         for (int d=0; d<PD; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
         dist = std::sqrt(dist);
         const S diag = stree.nr[sn] + ttree.nr[ittn];
-        //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
+        //printf("    src box %ld is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
         if (dist / diag > theta) {
             // it is far enough - we can approximate
-            //printf("    well-separated\n");
+            //printf("    IS well-separated\n");
 
             if (sourceIsLeaf) {
                 // compute real source particles on equivalent target points
@@ -420,8 +418,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 stats.sbtb++;
             }
 
-        } else if (ttree.nr[ittn] > 0.7*stree.nr[sn]) {
-        //} else if (true) {
+        } else if (ttree.nr[ittn] > stree.nr[sn]) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 
@@ -455,14 +452,18 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
             }
         }
-        //printf("    istv now has %lu entries\n",istv.size());
+        //printf("    istv has %lu and cstv has %lu entries\n", istv.size(), cstv.size());
     }
 
     if (targetIsLeaf) {
-        //printf("  leaf box %ld  sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
+        //printf("  leaf targ box %ld                         sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
+        //if (std::isnan(targs.u[0][ttree.ioffset[ittn]])) {
+        //    printf("NAN at ittn=%ld, ip=%ld\n", ittn, ttree.ioffset[ittn]);
+        //    exit(1);
+        //}
 
     } else {
-        //printf("  non-leaf box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
+        //printf("  non-leaf targ box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         // recurse onto the target box's children
@@ -475,23 +476,24 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
-        #pragma omp taskwait
-        stats.sltl += cstats1.sltl + cstats2.sltl;
-        stats.sbtl += cstats1.sbtl + cstats2.sbtl;
-        stats.sltb += cstats1.sltb + cstats2.sltb;
-        stats.sbtb += cstats1.sbtb + cstats2.sbtb;
-        stats.tlc  += cstats1.tlc  + cstats2.tlc;
-        stats.lpc  += cstats1.lpc  + cstats2.lpc;
-        stats.bpc  += cstats1.bpc  + cstats2.bpc;
+        // that slows things down, though, so dispense with it completely
+        //#pragma omp taskwait
+        //stats.sltl += cstats1.sltl + cstats2.sltl;
+        //stats.sbtl += cstats1.sbtl + cstats2.sbtl;
+        //stats.sltb += cstats1.sltb + cstats2.sltb;
+        //stats.sbtb += cstats1.sbtb + cstats2.sbtb;
+        //stats.tlc  += cstats1.tlc  + cstats2.tlc;
+        //stats.lpc  += cstats1.lpc  + cstats2.lpc;
+        //stats.bpc  += cstats1.bpc  + cstats2.bpc;
     }
 
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
-               stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
-        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
-        printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
+        //printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+        //       stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
+        //printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+        //printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
     }
 
     //printf("  box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
@@ -667,8 +669,8 @@ int main(int argc, char *argv[]) {
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::steady_clock::now();
     eqsrcs.resize((stree.numnodes/2) * eqsrcs.blockSize);
-    printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+    printf("  need %ld particles and block size of %ld\n", eqsrcs.n, eqsrcs.blockSize);
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
@@ -717,9 +719,9 @@ int main(int argc, char *argv[]) {
     if (arrange_target_parts) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::steady_clock::now();
-        eqtargs = Parts<STORE,ACCUM,3,1,3>((ttree.numnodes/2) * eqtargs.blockSize, false);
-        printf("  need %ld particles\n", eqtargs.n);
+        eqtargs.resize((ttree.numnodes/2) * eqtargs.blockSize);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+        printf("  need %ld particles and block size of %ld\n", eqtargs.n, eqtargs.blockSize);
         printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
 

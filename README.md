@@ -39,7 +39,7 @@ called [N-body problems](https://en.wikipedia.org/wiki/N-body_simulation),
 hence the name of this repository.
 
 Each of the codes in this package will set up a system of source and target points and
-perform the naive direct summation, three treecodes, and ultimately a "fast" (O(N)) 
+perform the naive direct summation, three treecodes, and a "fast" (O(N)) 
 summation of all particles for that particular problem.
 
 
@@ -181,7 +181,6 @@ And to use the barycentric Lagrange interpolation, include it:
 * Specialize the general Parts class inside of each program, like ongrav3d should have a MassParts : Parts
 * Allow the Parts constructor to take another Parts object and re-use its data? or otherwise have sources and targets be the same data (make it easier on the cache)
 * Create a standard Barnes-Hut NlogN method with boxwise interactions (to complete the set of 4 basic treecodes)
-* Implement the barycentric Lagrange interpolator into the fast (O(N)) method
 * Support different kernels more easily (like one which takes source and target radii)
 * Finish porting templated functions and casts to allow float/double/Vc classes in kernel functions
 * Would it be a benefit to adjust the proxy particles' radii in addition to strength?

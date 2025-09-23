@@ -81,7 +81,7 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
         size_t stride = 1;
         for (size_t d=0; d<PD; ++d) {
             for (size_t k=0; k<ncp; ++k) {
-                *lsk_iter = sp.x[d][stride*k];
+                *lsk_iter = sp.x[d][iepstart+stride*k];
                 ++lsk_iter;
             }
             stride *= ncp;
@@ -148,16 +148,16 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
                 //wgt *= amat[d][k];
                 wgt *= amat[d][kidx[i][d]];
                 //printf("      iep %ld d %ld k %ld wgt %g\n",i, d, k, wgt);
-                if (std::isnan(wgt)) {
-                    printf("NAN at ip=%ld, i=%ld, d=%ld, kidx=%ld\n", ip, i, d, kidx[i][d]);
-                    exit(1);
-                }
+                //if (std::isnan(wgt)) {
+                //    printf("NAN at ip=%ld, i=%ld, d=%ld, kidx=%ld\n", ip, i, d, kidx[i][d]);
+                //    exit(1);
+                //}
             }
             for (size_t d=0; d<OD; ++d) tp.u[d][ip] += wgt * sp.u[d][iep];
-            if (std::isnan(tp.u[0][ip])) {
-                printf("NAN at ip=%ld, i=%ld, wgt=%g\n", ip, i, wgt);
-                exit(1);
-            }
+            //if (std::isnan(tp.u[0][ip])) {
+            //    printf("NAN at ip=%ld, i=%ld, wgt=%g\n", ip, i, wgt);
+            //    exit(1);
+            //}
         }
     }
 }
@@ -409,6 +409,6 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
     if (dbg) for (size_t i=iepstart; i<iepstop; ++i) printf("    eq part %ld is at %g %g %g mass %g rad %g\n", i, ep.x[0][i], ep.x[1][i], ep.x[2][i], ep.s[0][i], ep.r[i]);
 
-    printf("  node %ld finally has %ld equivalent particles, offset %ld\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
+    //printf("  node %ld finally has %ld equivalent particles, offset %ld\n", tnode, t.epnum[tnode], t.epoffset[tnode]);
 
 }
