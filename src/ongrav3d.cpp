@@ -8,7 +8,6 @@
 #define ACCUM float
 
 #include "CoreFunc3d.hpp"
-#include "LeastSquares.hpp"
 #include "BarycentricLagrange.hpp"
 
 #ifdef USE_VC
@@ -216,7 +215,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0, 0.f};
-    const bool dostats = false;
+    const bool dostats = true;
 
     // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
@@ -249,26 +248,6 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                     //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
 
                     for (size_t d=0; d<OD; ++d) targs.u[d][idest] = eqtargs.u[d][iorig];
-                }
-
-            } else if (false) {
-                // second take, use linear least squares to approximate value
-                for (size_t i=0; i<destNum; ++i) {
-                    const size_t idest = destStart + i;
-                    const size_t iorig = origStart + i/2;
-                    const size_t nearest = 16;
-                    const size_t istart = nearest*(iorig/nearest);
-                    const size_t iend = istart+nearest;
-                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    targs.u[0][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest], targs.x[2][idest],
-                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.x[1],
-                                                          eqtargs.u[0], istart, iend);
-                    targs.u[1][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest], targs.x[2][idest],
-                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
-                                                          eqtargs.u[1], istart, iend);
-                    targs.u[2][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest], targs.x[2][idest],
-                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
-                                                          eqtargs.u[2], istart, iend);
                 }
 
             } else {
@@ -308,29 +287,6 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                     const size_t idest = destStart + i;
                     const size_t iorig = origStart + i/2;
                     for (size_t d=0; d<OD; ++d) eqtargs.u[d][idest] = eqtargs.u[d][iorig];
-                }
-
-            } else if (false) {
-                // second take, apply gradient of value to delta location
-                for (size_t i=0; i<destNum; ++i) {
-                    const size_t idest = destStart + i;
-                    const size_t iorig = origStart + i/2;
-                    //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
-                    //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
-                    //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
-                    const size_t nearest = 16;
-                    const size_t istart = nearest*(iorig/nearest);
-                    const size_t iend = istart+nearest;
-                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    eqtargs.u[0][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest], eqtargs.x[2][idest],
-                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
-                                                            eqtargs.u[0], istart, iend);
-                    eqtargs.u[1][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest], eqtargs.x[2][idest],
-                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
-                                                            eqtargs.u[1], istart, iend);
-                    eqtargs.u[2][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest], eqtargs.x[2][idest],
-                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.x[2],
-                                                            eqtargs.u[2], istart, iend);
                 }
 
             } else {
@@ -408,7 +364,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 stats.sbtb++;
             }
 
-        } else if (ttree.nr[ittn] > (S)0.95*stree.nr[sn]) {
+        } else if (ttree.nr[ittn] > stree.nr[sn]) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 

@@ -177,6 +177,8 @@ And to use the barycentric Lagrange interpolation, include it:
 
 ## To Do
 
+* The O(N) code is performant but buggy; there's a race condition without the taskwait in the stats section.
+* Consider allowing different orders for the source and target barycentric points - do we need more accuracy on the target side?
 * Add logic that compares the number of equivalent points to the number of actual particles in a box and uses the particles for summation if there are fewer
 * Specialize the general Parts class inside of each program, like ongrav3d should have a MassParts : Parts
 * Allow the Parts constructor to take another Parts object and re-use its data? or otherwise have sources and targets be the same data (make it easier on the cache)
