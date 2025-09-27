@@ -71,20 +71,23 @@ The tests below were run on an AMD Threadripper 3945WX 12-core processor using t
 version of this code compiled with GCC 14.3.1 with Vc and OpenMP and use a block size of 128 (`-b=128`).
 All reported times are in wall-clock seconds reported with the high resolution timer from `std::chrono`.
 Below is the performance of the `ongrav3d` program, coded to use charges instead of
-masses (it is much harder to get high accuracy with + and - charges than with
+masses (it is harder to get high accuracy with + and - charges than with
 always-positive masses), with `-t=1.11111` (MAC theta=0.9), 4th order interpolation
 (`-o=4` or 5^3 Chebyshev points per tree node) and single-precision numbers for
 storage and computation. RMS errors were around 1e-4.
+The "dual-tree" or "DTT" is the "dual tree traversal" code, a nominally O(N) method
+that uses a target tree to interpolate far-field velocities to local target boxes.
+That method requires `-t=1.4` (MAC theta 0.714) to achieve 1e-4 RMS error.
 
-N      | src tree | calc equivs |  direct  | pointwise | boxwise
--------|----------|-------------|----------|-----------|--------
-1000   |  0.0017  |    0.0004   |  0.00003 |   0.0024  | 0.0033
-10000  |  0.0023  |    0.0013   |  0.0033  |   0.0072  | 0.0149
-100000 |  0.0088  |    0.0072   |  0.3289  |   0.0947  | 0.1111
-1e+6   |  0.0879  |    0.0585   |  39.704  |   1.5827  | 1.5646
-1e+7   |  0.9067  |    0.4713   |  20020.  |   23.652  | 21.128
-1e+8   |  8.2903  |    4.6498   |  2.39e+6 |   303.74  | 256.06
-1e+9   |  85.149  |    46.754   |  2.11e+8 |   3979.8  | 3174.4
+N      | src tree | calc equivs |  direct  | pointwise | boxwise | dualtree
+-------|----------|-------------|----------|-----------|---------|----------
+1000   |  0.0017  |    0.0004   |  0.00003 |   0.0024  | 0.0033  | 0.0029
+10000  |  0.0023  |    0.0013   |  0.0033  |   0.0072  | 0.0149  | 0.0102
+100000 |  0.0088  |    0.0072   |  0.3289  |   0.0947  | 0.1111  | 0.1119
+1e+6   |  0.0879  |    0.0585   |  39.704  |   1.5827  | 1.5646  | 1.1449
+1e+7   |  0.9067  |    0.4713   |  20020.  |   23.652  | 21.128  | 12.1990
+1e+8   |  8.2903  |    4.6498   |  2.39e+6 |   303.74  | 256.06  | 114.011
+1e+9   |  85.149  |    46.754   |  2.11e+8 |   3979.8  | 3174.4  | 1160.13
 
 ![Performance vs. N, theta=0.9](doc/resNqd_t0p9_rip.png)
 
