@@ -93,7 +93,7 @@ The following two figures represent work performed on a 16-core AMD Ryzen 3950X 
 The first shows the effect of varying theta, the box-opening criterion, for 
 the same example. Note that the theta mentioned here is the inverse of the `-t` argument.
 This shows that a generous box-opening criterion can be used to achieve RMS errors
-less than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 1e-4 to 1e-5.
+greater than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 1e-4 to 1e-5.
 The error asymptotes at 6e-6 because all storage and accumulations are done using 
 32-bit `float` numbers.
 Note here that if 1e-3 error is acceptable, this setup can perform the treecode summation
