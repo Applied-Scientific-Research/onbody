@@ -182,7 +182,8 @@ And to use the barycentric Lagrange interpolation, include it:
 The standard Barnes-Hut treecode begins the summation for each target particle (or in the case 
 of our boxwise treecode each target leaf box) and achieves O(N log N). It is also very easily 
 parallelizable.
-The first N-body method to achieve O(N) - or a performance that scales simply the number of 
+
+The first N-body method to achieve O(N) - or a performance that scales simply as the number of 
 particles - was the Fast Multipole Method (FMM).
 The FMM does this by approximating the influence of far boxes at a given level onto a target box at that level,
 and then interpolating those values (velocities, potentials, etc.) down to its child boxes.
@@ -192,7 +193,6 @@ order to make the box-box interaction lists programmable.
 A dual-tree-traversal code is a generalization of this to trees without that symmetry property,
 and is what we use in our O(N) code. Instead of only boxes at the same tree level (and thus exact
 size), the box-opening criterion aims only to keep source and target box sizes similar.
-
 Currently only the `ongrav3d` code has this method.
 
 ## To Do
