@@ -106,7 +106,7 @@ for 1 million particles in about 1 second using just the CPU.
 
 Finally, we see the effect of changing the floating-point precision for data storage
 and arithmetic accumulation. 32-bit floats are fastest down to about 1e-5 RMS error, 
-then performing accumulations in fp64 allows the RMS error to drop to about 4e-6,
+then performing accumulations in fp64 allows the RMS error to drop to about 4e-7,
 finally to achieve the most accurate results, numbers should also be stored as fp64.
 
 ![Performance vs. precision, 1M charges in a cube](doc/res1Mqd_prec.png)
@@ -157,7 +157,7 @@ underlying particles and the outputs on the target points, and this is most typi
 done with multipole expansions. Thus, these codes have two code paths to compute the
 influence of a block of particles on a target: multipoles for faraway source blocks, 
 and direct summations for closer ones.
-What if a code could use same easy-to-program direct-summation-style for both?
+What if a code could use the same easy-to-program direct-summation-style for both?
 The origin of this software was an experiment in designing such a code.
 
 The "equivalent particle" technique is where, given a `blockSize` representing the number of particles in all but one leaf node, every other node in the tree contains `blockSize` "equivalent particles" which are used to compute the influence of that box on target points. A simple treecode requires only the source points to have equivalent particles; and in this sense, they act like the multipole approximation of that tree node. For an O(N) method, the target tree also uses this system, so that all but one node in every level of the tree contains exactly `blockSize` equivalent target points, onto which the sources' influences are calculated, and from which those influences are passed down to its child boxes' equivalent target points. This means that every box-box, box-particle, or particle-box interaction can use the exact same computation kernel: `blockSize` (equivalent) particles affecting `blockSize` (equivalent) target points. This should simplify the programming of an O(N) fast summation code considerably, as long as appropriate trees and equivalent particles can be created efficiently.
