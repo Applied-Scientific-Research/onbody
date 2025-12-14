@@ -108,7 +108,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 
 #else
     for (size_t j=jstart; j<jend; ++j) {
-        nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
+        nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
                      targs.x[0][i], targs.x[1][i], targs.x[2][i],
                      targs.u[0][i], targs.u[1][i], targs.u[2][i]);
     }
@@ -161,7 +161,7 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 #else
     for (size_t i=istart; i<iend; ++i) {
         for (size_t j=jstart; j<jend; ++j) {
-            nbody_kernel<S,A>(srcs.x[0][j],  srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
+            nbody_kernel<S,A>(srcs.x[0][j], srcs.x[1][j], srcs.x[2][j], srcs.r[j], srcs.s[0][j],
                          targs.x[0][i], targs.x[1][i], targs.x[2][i],
                          targs.u[0][i], targs.u[1][i], targs.u[2][i]);
         }
@@ -251,7 +251,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 }
 
             } else {
-                // third try, using barycentric Lagrange iterpolation
+                // for real now, using barycentric Lagrange iterpolation
                 //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
                 // ultimately, report the flops done in this routine
                 (void) calcBarycentricDownward(eqtargs, targs, order, destStart, destStart+destNum, origStart);
@@ -290,7 +290,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 }
 
             } else {
-                // third try, using barycentric Lagrange iterpolation
+                // for real now, using barycentric Lagrange iterpolation
                 //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
                 // ultimately, report the flops done in this routine
                 (void) calcBarycentricDownward(eqtargs, eqtargs, order, destStart, destStart+destNum, origStart);
