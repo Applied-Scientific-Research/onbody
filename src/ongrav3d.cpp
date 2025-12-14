@@ -474,7 +474,10 @@ int main(int argc, char *argv[]) {
     size_t blockSize = minBlkSz*((128+minBlkSz-1)/minBlkSz);
     size_t eqBlockSize = blockSize;
     size_t echonum = 1;
-    STORE theta = 1.0;
+    STORE theta1 = 2.0;		// treecode theta
+    STORE theta2 = 1.05;		// pointwise bary
+    STORE theta3 = 1.0;		// boxwise bary
+    STORE theta4 = 1.35;		// DTT bary
     int32_t order = -1;
     std::vector<double> treetime(test_iterations.size(), 0.0);
 
@@ -484,10 +487,30 @@ int main(int argc, char *argv[]) {
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
-        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+        } else if (strncmp(argv[i], "-t1=", 4) == 0) {
             STORE testtheta = atof(argv[i]+3);
             if (testtheta < 0.0001) usage();
-            theta = testtheta;
+            theta1 = testtheta;
+        } else if (strncmp(argv[i], "-t2=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta2 = testtheta;
+        } else if (strncmp(argv[i], "-t3=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta3 = testtheta;
+        } else if (strncmp(argv[i], "-t4=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta4 = testtheta;
+        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+            // set theta for all methods
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta1 = testtheta;
+            theta2 = testtheta;
+            theta3 = testtheta;
+            theta4 = testtheta;
         } else if (strncmp(argv[i], "-o=", 3) == 0) {
             int32_t testorder = atoi(argv[i]+3);
             if (testorder < 1) usage();
@@ -527,7 +550,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
-    printf("  source block sizes %ld and %ld, target block size %ld, and theta %g\n\n", blockSize, eqBlockSize, blockSize, theta);
+    printf("  source block sizes %ld and %ld, target block size %ld\n\n", blockSize, eqBlockSize, blockSize);
 
     // if problem is too big, skip some number of target particles
 #ifdef _OPENMP
@@ -735,12 +758,12 @@ int main(int argc, char *argv[]) {
     // Run a simple O(NlogN) treecode - boxes approximate as particles
     //
     if (test_iterations[1] > 0) {
-    printf("\nRun the treecode O(NlogN)\n");
+    printf("\nRun the treecode O(NlogN) with theta %g\n", theta1);
     double minTreecode = 1e30;
     for (int i = 0; i < test_iterations[1]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode1(srcs, stree, targs, theta);
+        flops = nbody_treecode1(srcs, stree, targs, theta1);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -772,12 +795,12 @@ int main(int argc, char *argv[]) {
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
     if (test_iterations[2] > 0) {
-    printf("\nRun the treecode O(NlogN) with %s\n", withwhat.c_str());
+    printf("\nRun the treecode O(NlogN) with %s and theta %g\n", withwhat.c_str(), theta2);
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
+        flops = nbody_treecode2(srcs, eqsrcs, stree, targs, theta2);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -809,12 +832,12 @@ int main(int argc, char *argv[]) {
     // Run a better O(NlogN) treecode - boxes use equivalent particles - lists are boxwise
     //
     if (test_iterations[3] > 0) {
-    printf("\nRun the treecode O(NlogN) with %s and boxwise interactions\n", withwhat.c_str());
+    printf("\nRun the treecode O(NlogN) with %s and boxwise interactions and theta %g\n", withwhat.c_str(), theta3);
     double minTreecode3 = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta);
+        flops = nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta3);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -846,7 +869,7 @@ int main(int argc, char *argv[]) {
     // Run the new O(N) equivalent particle method
     //
     if (test_iterations[4] > 0) {
-    printf("\nRun the fast O(N) method\n");
+    printf("\nRun the fast O(N) method with theta %g\n", theta4);
     double minFast = 1e30;
     for (int i = 0; i < test_iterations[4]; ++i) {
         targs.zero_vels();
@@ -857,7 +880,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, theta, order);
+                              1, source_boxes, theta4, order);
         #pragma omp taskwait
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
