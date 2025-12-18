@@ -8,7 +8,6 @@
 #define ACCUM float
 
 #include "CoreFunc2d.hpp"
-#include "LeastSquares.hpp"
 #include "BarycentricLagrange.hpp"
 
 #ifdef USE_VC
@@ -180,6 +179,7 @@ void tpinter(const Tree<S,PD,SD>& __restrict__ stree, const size_t j,
 //
 struct fastsumm_stats {
     size_t sltl, sbtl, sltb, sbtb, tlc, lpc, bpc;
+    float flops;
 };
 
 //
@@ -198,105 +198,94 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                                      Parts<S,A,PD,SD,OD>& eqtargs,
                                      const Tree<S,PD,SD>& ttree,
                                      const size_t ittn, std::vector<size_t> istv_in,
-                                     const S theta) {
+                                     const S theta, const int32_t order) {
 
     // start counters
-    struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0};
+    struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0, 0.f};
+    const bool dostats = true;
 
     // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
 
-    //printf("Targ box %d is affected by %lu source boxes at this level\n",ittn,istv.size());
+    //printf("Targ box %ld is affected by %lu source boxes at this level\n",ittn,istv_in.size());
     const bool targetIsLeaf = ttree.num[ittn] <= targs.blockSize;
 
     // prepare the target arrays for accumulations
     if (targetIsLeaf) {
         stats.tlc++;
         // zero the velocities
-        std::fill_n(&(targs.u[0][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
-        std::fill_n(&(targs.u[1][ttree.ioffset[ittn]]), ttree.num[ittn], 0.0f);
+        const size_t destStart = ttree.ioffset[ittn];
+        const size_t destNum = ttree.num[ittn];
+        for (size_t d=0; d<OD; ++d) std::fill_n(&(targs.u[d][destStart]), destNum, (S)0.0);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our real points
-            const size_t destStart = ttree.ioffset[ittn];
-            const size_t destNum = ttree.num[ittn];
-            const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
-            //const size_t origNum = (destNum+1)/2;
-            //printf("  copying parent equiv parts %d to %d to our own real parts %d to %d\n",
-            //       origStart, origStart+origNum, destStart, destStart+destNum);
-            for (size_t i=0; i<destNum; ++i) {
-                const size_t idest = destStart + i;
-                const size_t iorig = origStart + i/2;
-                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
-                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
-                //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
-                if (true) {
-                    // third try, using barycentric Lagrange iterpolation
-                    assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
-                } else if (false) {
-                    // second take, use linear least squares to approximate value
-                    const size_t nearest = 16;
-                    const size_t istart = nearest*(iorig/nearest);
-                    const size_t iend = istart+nearest;
-                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    targs.u[0][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest],
-                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.u[0], istart, iend);
-                    targs.u[1][idest] = least_squares_val(targs.x[0][idest], targs.x[1][idest],
-                                                          eqtargs.x[0], eqtargs.x[1], eqtargs.u[1], istart, iend);
-                } else {
-                    // as a first take, simply copy the result to the children
-                    targs.u[0][idest] = eqtargs.u[0][iorig];
-                    targs.u[1][idest] = eqtargs.u[1][iorig];
+            const size_t origStart = ttree.epoffset[ittn/2];
+            //printf("  interp parent equiv parts %ld to %ld to our own real parts %ld to %ld\n",
+            //       origStart, origStart+ttree.epnum[ittn/2], destStart, destStart+destNum);
+
+            if (order < 0) {
+                // as a first take, simply copy the result to the children
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
+                    //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
+                    //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
+                    //       idest,   targs.x[idest],   targs.y[idest],   targs.z[idest]);
+
+                    for (size_t d=0; d<OD; ++d) targs.u[d][idest] = eqtargs.u[d][iorig];
                 }
+
+            } else {
+                // for real now, using barycentric Lagrange iterpolation
+                //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
+                // ultimately, report the flops done in this routine
+                (void) calcBarycentricDownward(eqtargs, targs, order, destStart, destStart+destNum, origStart);
+
+                // flops
+                // destNum*(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD))
+                stats.flops += destNum*(float)(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD));
             }
             stats.lpc++;
         }
 
     } else {
         // zero the equivalent particle velocities
-        std::fill_n(&(eqtargs.u[0][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
-        std::fill_n(&(eqtargs.u[1][ttree.epoffset[ittn]]), ttree.epnum[ittn], 0.0f);
+        const size_t destStart = ttree.epoffset[ittn];
+        const size_t destNum = ttree.epnum[ittn];
+        for (size_t d=0; d<OD; ++d) std::fill_n(&(eqtargs.u[d][destStart]), destNum, (S)0.0);
 
         if (ittn > 1) {
             // prolongation operation: take the parent's equiv points and move any
             // velocity from those to our equiv points
-            const size_t destStart = ttree.epoffset[ittn];
-            const size_t destNum = ttree.epnum[ittn];
-            const size_t origStart = ttree.epoffset[ittn/2] + (eqtargs.blockSize/2) * (ittn%2);
-            //const size_t origNum = (destNum+1)/2;
-            //printf("  copying parent equiv parts %d to %d to our own equiv parts %d to %d\n",
-            //       origStart, origStart+origNum, destStart, destStart+destNum);
+            const size_t origStart = ttree.epoffset[ittn/2];
+            //printf("  interp parent equiv parts %ld to %ld to our own equiv parts %ld to %ld\n",
+            //       origStart, origStart+ttree.epnum[ittn/2], destStart, destStart+destNum);
 
             //for (size_t i=0; i<(ttree.epnum[ittn]+1)/2; ++i) {
             //    size_t ipe = ttree.epoffset[ittn]/2 + i;
             //    printf("    %d  %g %g %g\n", ipe, eqtargs.u[ipe], eqtargs.v[ipe], eqtargs.w[ipe]);
             //}
 
-            for (size_t i=0; i<destNum; ++i) {
-                const size_t idest = destStart + i;
-                const size_t iorig = origStart + i/2;
-                //printf("    %d at %g %g %g is parent of %d at %g %g %g\n",
-                //       iorig, eqtargs.x[iorig], eqtargs.y[iorig], eqtargs.z[iorig],
-                //       idest, eqtargs.x[idest], eqtargs.y[idest], eqtargs.z[idest]);
-                if (true) {
-                    // third try, using barycentric Lagrange iterpolation
-                    assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
-                } else if (false) {
-                    // second take, apply gradient of value to delta location
-                    const size_t nearest = 16;
-                    const size_t istart = nearest*(iorig/nearest);
-                    const size_t iend = istart+nearest;
-                    //printf("  approximating velocity at equiv pt %d from equiv pt %d\n", idest, iorig);
-                    eqtargs.u[0][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest],
-                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.u[0], istart, iend);
-                    eqtargs.u[1][idest] = least_squares_val(eqtargs.x[0][idest], eqtargs.x[1][idest],
-                                                            eqtargs.x[0], eqtargs.x[1], eqtargs.u[1], istart, iend);
-                } else {
-                    // as a first take, simply copy the result to the children
-                    eqtargs.u[0][idest] = eqtargs.u[0][iorig];
-                    eqtargs.u[1][idest] = eqtargs.u[1][iorig];
+            if (order < 0) {
+                // as a first take, simply copy the result to the children
+                for (size_t i=0; i<destNum; ++i) {
+                    const size_t idest = destStart + i;
+                    const size_t iorig = origStart + i/2;
+                    for (size_t d=0; d<OD; ++d) eqtargs.u[d][idest] = eqtargs.u[d][iorig];
                 }
+
+            } else {
+                // for real now, using barycentric Lagrange iterpolation
+                //assert(false && "ERROR: barycentric dual-tree-traversal code not complete");
+                // ultimately, report the flops done in this routine
+                (void) calcBarycentricDownward(eqtargs, eqtargs, order, destStart, destStart+destNum, origStart);
+
+                // flops
+                // destNum*(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD))
+                stats.flops += destNum*(float)(1+PD*(6+order*5)+ttree.epnum[ittn/2]*(PD+2*OD));
+
             }
             stats.bpc++;
         }
@@ -317,7 +306,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         if (stree.num[sn] < 1) continue;
 
         const bool sourceIsLeaf = stree.num[sn] <= srcs.blockSize;
-        //printf("  source %d affects target %d\n",sn,ittn);
+        //printf("  source %ld (%g%s) affects target %ld (%g%s)\n", sn, stree.nr[sn], (sourceIsLeaf ? " leaf" : ""), ittn, ttree.nr[ittn], (targetIsLeaf ? " leaf" : ""));
 
         // if source box is a leaf node, just compute the influence and return?
         // this assumes target box is also a leaf node!
@@ -325,65 +314,44 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
             //printf("    real on real, srcs %d to %d, targs %d to %d\n", stree.ioffset[sn], stree.ioffset[sn]   + stree.num[sn], ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
 
             // compute all-on-all direct influence
-            for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-            for (size_t j = stree.ioffset[sn];   j < stree.ioffset[sn]   + stree.num[sn];   j++) {
-                nbody_kernel(srcs.x[0][j],  srcs.x[1][j], srcs.r[j], srcs.s[0][j],
-                             targs.x[0][i], targs.x[1][i], targs.r[i],
-                             targs.u[0][i], targs.u[1][i]);
-            }
-            }
+            ppinter<S,A,PD,SD,OD>(srcs, stree.ioffset[sn], stree.ioffset[sn]+stree.num[sn],
+                                  targs, ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
             stats.sltl++;
             continue;
         }
 
-        // distance from box center of mass to target point
+        // distance from source box center to target box center
         S dist = 0.0;
         for (int d=0; d<PD; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
         dist = std::sqrt(dist);
         const S diag = stree.nr[sn] + ttree.nr[ittn];
-        //printf("  src box %d is %g away and diag %g\n",sn, dist, diag);
+        //printf("    src box %ld is %g away and diag %g\n",sn, dist, diag);
 
         // split on what to do with this pair
         if (dist / diag > theta) {
             // it is far enough - we can approximate
-            //printf("    well-separated\n");
+            //printf("    IS well-separated\n");
 
             if (sourceIsLeaf) {
                 // compute real source particles on equivalent target points
-                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (size_t j = stree.ioffset[sn];    j < stree.ioffset[sn]    + stree.num[sn];     j++) {
-                    nbody_kernel(srcs.x[0][j],    srcs.x[1][j],  srcs.r[j], srcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.r[i],
-                                 eqtargs.u[0][i], eqtargs.u[1][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(srcs, stree.ioffset[sn], stree.ioffset[sn]+stree.num[sn],
+                                      eqtargs, ttree.epoffset[ittn], ttree.epoffset[ittn] + ttree.epnum[ittn]);
                 stats.sltb++;
 
             } else if (targetIsLeaf) {
                 // compute equivalent source particles on real target points
-                for (size_t i = ttree.ioffset[ittn]; i < ttree.ioffset[ittn] + ttree.num[ittn]; i++) {
-                for (size_t j = stree.epoffset[sn];  j < stree.epoffset[sn]  + stree.epnum[sn]; j++) {
-                    nbody_kernel(eqsrcs.x[0][j], eqsrcs.x[1][j], eqsrcs.r[j], eqsrcs.s[0][j],
-                                 targs.x[0][i],  targs.x[1][i],  targs.r[i],
-                                 targs.u[0][i], targs.u[1][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(eqsrcs, stree.epoffset[sn], stree.epoffset[sn]+stree.epnum[sn],
+                                      targs, ttree.ioffset[ittn], ttree.ioffset[ittn] + ttree.num[ittn]);
                 stats.sbtl++;
 
             } else {
                 // compute equivalent source particles on equivalent target points
-                for (size_t i = ttree.epoffset[ittn]; i < ttree.epoffset[ittn] + ttree.epnum[ittn]; i++) {
-                for (size_t j = stree.epoffset[sn];   j < stree.epoffset[sn]   + stree.epnum[sn];   j++) {
-                    nbody_kernel(eqsrcs.x[0][j],  eqsrcs.x[1][j],  eqsrcs.r[j], eqsrcs.s[0][j],
-                                 eqtargs.x[0][i], eqtargs.x[1][i], eqtargs.r[i],
-                                 eqtargs.u[0][i], eqtargs.u[1][i]);
-                }
-                }
+                ppinter<S,A,PD,SD,OD>(eqsrcs, stree.epoffset[sn], stree.epoffset[sn]+stree.epnum[sn],
+                                      eqtargs, ttree.epoffset[ittn], ttree.epoffset[ittn] + ttree.epnum[ittn]);
                 stats.sbtb++;
             }
 
-        } else if (ttree.nr[ittn] > 0.7*stree.nr[sn]) {
-        //} else if (true) {
+        } else if (ttree.nr[ittn] > stree.nr[sn]) {
             // target box is larger than source box; try to refine targets first
             //printf("    not well-separated, target is larger\n");
 
@@ -417,43 +385,53 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
                 //printf("    pushing %d and %d to the end of this list\n", 2*sn, 2*sn+1);
             }
         }
-        //printf("    istv now has %lu entries\n",istv.size());
+        //printf("    istv has %lu and cstv has %lu entries\n", istv.size(), cstv.size());
     }
 
     if (targetIsLeaf) {
-        //printf("  leaf box %ld  sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
+        //printf("  leaf targ box %ld                         sltl %ld  sbtl %ld\n", ittn, stats.sltl, stats.sbtl);
+        //if (std::isnan(targs.u[0][ttree.ioffset[ittn]])) {
+        //    printf("NAN at ittn=%ld, ip=%ld\n", ittn, ttree.ioffset[ittn]);
+        //    exit(1);
+        //}
 
     } else {
-        //printf("  non-leaf box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
+        //printf("  non-leaf targ box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
         // recurse onto the target box's children
         struct fastsumm_stats cstats1, cstats2;
 
         #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats1)
-        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta);
+        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
 
         #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats2)
-        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta);
+        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
-        #pragma omp taskwait
-        stats.sltl += cstats1.sltl + cstats2.sltl;
-        stats.sbtl += cstats1.sbtl + cstats2.sbtl;
-        stats.sltb += cstats1.sltb + cstats2.sltb;
-        stats.sbtb += cstats1.sbtb + cstats2.sbtb;
-        stats.tlc  += cstats1.tlc  + cstats2.tlc;
-        stats.lpc  += cstats1.lpc  + cstats2.lpc;
-        stats.bpc  += cstats1.bpc  + cstats2.bpc;
+        // that slows things down, though, so dispense with it completely
+        if (dostats) {
+            #pragma omp taskwait
+            stats.sltl += cstats1.sltl + cstats2.sltl;
+            stats.sbtl += cstats1.sbtl + cstats2.sbtl;
+            stats.sltb += cstats1.sltb + cstats2.sltb;
+            stats.sbtb += cstats1.sbtb + cstats2.sbtb;
+            stats.tlc  += cstats1.tlc  + cstats2.tlc;
+            stats.lpc  += cstats1.lpc  + cstats2.lpc;
+            stats.bpc  += cstats1.bpc  + cstats2.bpc;
+            stats.flops += cstats1.flops + cstats2.flops;
+        }
     }
 
     // report counter results
     if (ittn == 1) {
         #pragma omp taskwait
-        printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
-               stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
-        printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
-        printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
+        if (dostats) {
+            printf("  %ld target leaf nodes averaged %g leaf-leaf and %g equiv-leaf interactions\n",
+                   stats.tlc, stats.sltl/(float)stats.tlc, stats.sbtl/(float)stats.tlc);
+            printf("  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
+            printf("  leaf prolongation count %ld  box pc %ld\n", stats.lpc, stats.bpc);
+        }
     }
 
     //printf("  box %ld  sltl %ld  sbtl %ld  sltb %ld  sbtb %ld\n", ittn, stats.sltl, stats.sbtl, stats.sltb, stats.sbtb);
@@ -474,14 +452,17 @@ static void usage() {
 int main(int argc, char *argv[]) {
 
     const bool random_radii = false;
-    static std::vector<int> test_iterations = {1, 1, 1, 1, 0};
+    static std::vector<int> test_iterations = {1, 0, 0, 0, 1};
     const bool just_build_trees = false;
     size_t numSrcs = 10000;
     size_t numTargs = 10000;
     size_t blockSize = minBlkSz*((128+minBlkSz-1)/minBlkSz);
     size_t eqBlockSize = blockSize;
     size_t echonum = 1;
-    STORE theta = 1.0;
+    STORE theta1 = 2.0;		// treecode theta
+    STORE theta2 = 1.05;		// pointwise bary
+    STORE theta3 = 1.0;		// boxwise bary
+    STORE theta4 = 1.35;		// DTT bary
     int32_t order = -1;
     std::vector<double> treetime(test_iterations.size(), 0.0);
 
@@ -491,10 +472,30 @@ int main(int argc, char *argv[]) {
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
-        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+        } else if (strncmp(argv[i], "-t1=", 4) == 0) {
             STORE testtheta = atof(argv[i]+3);
             if (testtheta < 0.0001) usage();
-            theta = testtheta;
+            theta1 = testtheta;
+        } else if (strncmp(argv[i], "-t2=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta2 = testtheta;
+        } else if (strncmp(argv[i], "-t3=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta3 = testtheta;
+        } else if (strncmp(argv[i], "-t4=", 4) == 0) {
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta4 = testtheta;
+        } else if (strncmp(argv[i], "-t=", 3) == 0) {
+            // set theta for all methods
+            STORE testtheta = atof(argv[i]+3);
+            if (testtheta < 0.0001) usage();
+            theta1 = testtheta;
+            theta2 = testtheta;
+            theta3 = testtheta;
+            theta4 = testtheta;
         } else if (strncmp(argv[i], "-o=", 3) == 0) {
             int32_t testorder = atoi(argv[i]+3);
             if (testorder < 1) usage();
@@ -534,7 +535,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
-    printf("  source block sizes %ld and %ld, target block size %ld, and theta %g\n\n", blockSize, eqBlockSize, blockSize, theta);
+    printf("  source block sizes %ld and %ld, target block size %ld\n\n", blockSize, eqBlockSize, blockSize);
 
     // if problem is too big, skip some number of target particles
 #ifdef _OPENMP
@@ -620,8 +621,8 @@ int main(int argc, char *argv[]) {
     printf("\nCalculating equivalent particles\n");
     start = std::chrono::steady_clock::now();
     eqsrcs.resize((stree.numnodes/2) * eqsrcs.blockSize);
-    printf("  need %ld particles\n", eqsrcs.n);
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+    printf("  need %ld particles and block size of %ld\n", eqsrcs.n, eqsrcs.blockSize);
     printf("  allocate eqsrcs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
     treetime[2] += elapsed_seconds.count();
     treetime[3] += elapsed_seconds.count();
@@ -637,7 +638,10 @@ int main(int argc, char *argv[]) {
     } else {
         // here they are barycentric lagrange points
         start = std::chrono::steady_clock::now();
+        #pragma omp parallel
+        #pragma omp single
         (void) calcBarycentricLagrange(srcs, eqsrcs, stree, order, 1);
+        #pragma omp taskwait
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
     }
@@ -652,7 +656,7 @@ int main(int argc, char *argv[]) {
     Tree<STORE,2,1> ttree(0);
     if (make_target_tree) {
         printf("\nBuilding the target tree\n");
-        printf("  with %ld particles and block size of %ld\n", numTargs, blockSize);
+        printf("  with %ld particles and block size of %ld\n", numTargs, targs.blockSize);
         start = std::chrono::steady_clock::now();
         // split this node and recurse
         (void) makeTree(targs, ttree);
@@ -667,9 +671,9 @@ int main(int argc, char *argv[]) {
     if (arrange_target_parts) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::steady_clock::now();
-        eqtargs = Parts<STORE,ACCUM,2,1,2>((ttree.numnodes/2) * eqtargs.blockSize, false);
-        printf("  need %ld particles\n", eqtargs.n);
+        eqtargs.resize((ttree.numnodes/2) * eqtargs.blockSize);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+        printf("  need %ld particles and block size of %ld\n", eqtargs.n, eqtargs.blockSize);
         printf("  allocate eqtargs structures:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
 
@@ -732,12 +736,12 @@ int main(int argc, char *argv[]) {
     // Run a simple O(NlogN) treecode - boxes approximate as particles
     //
     if (test_iterations[1] > 0) {
-    printf("\nRun the treecode O(NlogN)\n");
+    printf("\nRun the treecode O(NlogN) with theta %g\n", theta1);
     double minTreecode = 1e30;
     for (int i = 0; i < test_iterations[1]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode1(srcs, stree, targs, theta);
+        flops = nbody_treecode1(srcs, stree, targs, theta1);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -769,12 +773,12 @@ int main(int argc, char *argv[]) {
     // Run a better O(NlogN) treecode - boxes use equivalent particles
     //
     if (test_iterations[2] > 0) {
-    printf("\nRun the treecode O(NlogN) with %s\n", withwhat.c_str());
+    printf("\nRun the treecode O(NlogN) with %s and theta %g\n", withwhat.c_str(), theta2);
     double minTreecode2 = 1e30;
     for (int i = 0; i < test_iterations[2]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode2(srcs, eqsrcs, stree, targs, theta);
+        flops = nbody_treecode2(srcs, eqsrcs, stree, targs, theta2);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -806,12 +810,12 @@ int main(int argc, char *argv[]) {
     // Run a better O(NlogN) treecode - boxes use equivalent particles - lists are boxwise
     //
     if (test_iterations[3] > 0) {
-    printf("\nRun the treecode O(NlogN) with %s and boxwise interactions\n", withwhat.c_str());
+    printf("\nRun the treecode O(NlogN) with %s and boxwise interactions and theta %g\n", withwhat.c_str(), theta3);
     double minTreecode3 = 1e30;
     for (int i = 0; i < test_iterations[3]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
-        flops = nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta);
+        flops = nbody_treecode3(srcs, eqsrcs, stree, targs, ttree, theta3);
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
         printf("  this run time:\t\t[%.4f] seconds\n", dt);
@@ -843,9 +847,9 @@ int main(int argc, char *argv[]) {
     // Run the new O(N) equivalent particle method
     //
     if (test_iterations[4] > 0) {
-    printf("\nRun the fast O(N) method\n");
+    printf("\nRun the fast O(N) method with theta %g\n", theta4);
     double minFast = 1e30;
-    for (int i = 0; i < test_iterations[3]; ++i) {
+    for (int i = 0; i < test_iterations[4]; ++i) {
         targs.zero_vels();
         start = std::chrono::steady_clock::now();
         std::vector<size_t> source_boxes = {1};
@@ -854,7 +858,7 @@ int main(int argc, char *argv[]) {
         #pragma omp parallel
         #pragma omp single
         (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree,
-                              1, source_boxes, theta);
+                              1, source_boxes, theta4, order);
         #pragma omp taskwait
         end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
         double dt = elapsed_seconds.count();
