@@ -228,7 +228,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 
     // start counters
     struct fastsumm_stats stats = {0, 0, 0, 0, 0, 0, 0, 0.f};
-    const bool dostats = true;
+    const bool dostats = false;
 
     // quit out if there are no particles in this box
     if (ttree.num[ittn] < 1) return stats;
