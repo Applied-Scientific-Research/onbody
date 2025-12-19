@@ -1,38 +1,44 @@
 #!/usr/bin/perl
 #
 
+# which binary to run?
+#my $exe = "./onvortgrad3d";
+#my $exe = "./onvort2d";
+my $exe = "./onvort2d";
+
+# how many particles?
+my @nump = (100000);
+
+# desired mean velocity error
+my @errors = (1.e-2, 1.e-3, 1.e-4, 1.e-5, 1.e-6, 1.e-7);
+
+# bucket sizes
+#my @bucket = (32, 64, 128);
+my @bucket = (32, 64);
+#my @bucket = (32);
+#my @bucket = (128);
+
+# define the order range
+my @order = (1,2,3,4,5,6,7,8,9);
+#my @order = (1,2,3,4);
+
+# how many runs over which to average the error?
+my $runs = 5;
+
+# after 6 we really should have something close to the solution
+my $maxiters = 10;
+
 my $sep = " ";
 
 # put all results here
 open(OUT,">>new.dat") or die "Can't open $!";
 
-# which binary to run?
-my $exe = "./onvortgrad3d";
-#my $exe = "./onvort2d";
-
-# how many particles?
-my $nump = 100000;
-# desired mean velocity error
-my $desirederror = 1.e-3;
-my $logdesired = log($desirederror);
-
-# how many runs over which to average the error?
-my $runs = 5;
-
-# bucket sizes (this is compiled in)
-my @bucket = (128);
-
-# define the order range
-# 2D can go up to order 10
-#my @order = (1,2,3,4,5,6,7,8,9,10);
-# 3D can only do up to order 4
-my @order = (1,2,3,4);
-
 # for a given set of the above variables, find theta to minimize CPU time
-
-foreach $thisbucket (@bucket) {
-  if ($thisbucket < $nump) {
-  foreach $thisorder (@order) {
+foreach $thisnump (@nump) {
+ foreach $desirederror (@errors) {
+  my $logdesired = log($desirederror);
+  foreach $thisbucket (@bucket) {
+   foreach $thisorder (@order) {
 
     # find the rifa that returns the right error!
     my $rifa = -1.0;
@@ -40,11 +46,11 @@ foreach $thisbucket (@bucket) {
     my $nolowerbound = 1;
     my $errordiff = 1.0;
     my $numiters = 0;
-    my $maxiters = 20;	# after 6 we really should have something close to the solution
-    print "Trying $thisway $thisbucket $thisorder\n";
 
-    # run until we're within 2% of desired error
-    while ($errordiff > 0.02*$desirederror and $numiters < $maxiters) {
+    print "Finding theta for $thisnump $desirederror $thisbucket $thisorder\n";
+
+    # run until we're within 3% of desired error
+    while ($errordiff > 0.03*$desirederror and $numiters < $maxiters) {
 
       # pick a rifa to use this iteration
       if ($rifa < 0.0) {
@@ -58,8 +64,8 @@ foreach $thisbucket (@bucket) {
         $lrifa = $rifa;
         $lerror = $logthiserror;
         if ($noupperbound == 1) {
-          # if we don't have an upper bound, double rifa
-          $rifa = $rifa * 2.0;
+          # if we don't have an upper bound, increase rifa
+          $rifa = $rifa * 1.5;
           $urifa = $rifa;
         } else {
           # if we do, pick the halfway point
@@ -76,8 +82,8 @@ foreach $thisbucket (@bucket) {
         $urifa = $rifa;
         $uerror = $logthiserror;
         if ($nolowerbound == 1) {
-          # if we don't have an lower bound, halve rifa
-          $rifa = $rifa * 0.5;
+          # if we don't have an lower bound, decrease rifa
+          $rifa = $rifa / 1.5;
           $lrifa = $rifa;
         } else {
           # if we do, pick the halfway point
@@ -89,18 +95,19 @@ foreach $thisbucket (@bucket) {
         #exit(0);
       }
       #print "  is upper? $noupperbound   is lower? $nolowerbound\n";
-      print "  upper $urifa   lower $lrifa\n";
+      print "  lower $lrifa   trying $rifa   upper $urifa\n";
 
       # run the command a few times
       unlink "tempout";
-      $command = "${exe} -n=$nump -t=$rifa -o=$thisorder >> tempout";
+      $command = "${exe} -n=$thisnump -b=$thisbucket -t=$rifa -o=$thisorder >> tempout";
       #print $command."\n";
       for (my $irun=0; $irun<$runs; $irun=$irun+1) { system $command; }
 
       # parse tempout
 
       # look for velocity errors
-      @lines = `grep \"error in treecode3\" tempout`;
+      #@lines = `grep \"error in treecode3\" tempout`;
+      @lines = `grep \"error in fastsumm\" tempout`;
       # find the mean of the five errors
       $maxsum = 0.0;
       $meansum = 0.0;
@@ -113,6 +120,7 @@ foreach $thisbucket (@bucket) {
       $maxsum /= $runs;
       $meansum /= $runs;
       # rename it to something useful
+      $thismax = $maxsum;
       $thiserror = $meansum;
       # avoid problems taking log of zero
       if ($thiserror > 1.e-8) {
@@ -121,7 +129,7 @@ foreach $thisbucket (@bucket) {
         $logthiserror = log(1.e-8);
       }
       #print $maxsum." ".$thiserror."\n";
-      print "  theta ".$rifa." returned mean vel error ".$thiserror."\n";
+      print "    returned mean vel error ".$thiserror."\n";
 
       # how close is this error to the desired error?
       $errordiff = $desirederror - $thiserror;
@@ -134,7 +142,8 @@ foreach $thisbucket (@bucket) {
 
     # we like the error, so let's keep the settings
     # look for total time now
-    @lines = `grep \"treecode3 total\" tempout`;
+    #@lines = `grep \"treecode3 total\" tempout`;
+    @lines = `grep \"fast total\" tempout`;
     $treetime = 0.0;
     foreach (@lines) {
       $_ =~ s/\[//g;
@@ -157,13 +166,13 @@ foreach $thisbucket (@bucket) {
 
 
     # print the result
-    $res = $nump.$sep.$thisbucket.$sep.$thisorder.$sep.$rifa.$sep.$maxsum.$sep.$thiserror.$sep.$treetime.$sep.$dirtime."\n";
+    $res = $thisnump.$sep.$thisbucket.$sep.$thisorder.$sep.$rifa.$sep.$maxsum.$sep.$thiserror.$sep.$treetime.$sep.$dirtime."\n";
     #print $res;
-    print "  errors, times: $maxsum / $thiserror  $treetime / $dirtime\n";
+    print "  errors, times: $thismax / $thiserror  $treetime / $dirtime\n";
     print OUT $res;
 
-    #exit(0);
-  } # end foreach @order
-  } # end if thisbucket < nump
-} # end foreach @bucket
+   } # end foreach @order
+  } # end foreach @bucket
+ } # end foreach @errors
+} # end foreach @nump
 
