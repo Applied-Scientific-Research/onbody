@@ -193,7 +193,6 @@ order to make the box-box interaction lists deterministic.
 A dual-tree-traversal code is a generalization of this to trees without that symmetry property,
 and is what we use in our O(N) code. Instead of only boxes at the same tree level (and thus exact
 size), the box-opening criterion aims only to keep source and target box sizes similar.
-Currently only the `ongrav3d` code has this method.
 
 ## To Do
 
