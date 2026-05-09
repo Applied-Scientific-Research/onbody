@@ -163,10 +163,10 @@ The origin of this software was an experiment in designing such a code.
 The "equivalent particle" technique is where, given a `blockSize` representing the number of particles in all but one leaf node, every other node in the tree contains `blockSize` "equivalent particles" which are used to compute the influence of that box on target points. A simple treecode requires only the source points to have equivalent particles; and in this sense, they act like the multipole approximation of that tree node. For an O(N) method, the target tree also uses this system, so that all but one node in every level of the tree contains exactly `blockSize` equivalent target points, onto which the sources' influences are calculated, and from which those influences are passed down to its child boxes' equivalent target points. This means that every box-box, box-particle, or particle-box interaction can use the exact same computation kernel: `blockSize` (equivalent) particles affecting `blockSize` (equivalent) target points. This should simplify the programming of an O(N) fast summation code considerably, as long as appropriate trees and equivalent particles can be created efficiently.
 
 #### Barycentric Lagrange form
-Instead of generating N/2 equivalent particles from a tree node with N particles, we instead
+Instead of generating N/2 equivalent particles from a tree node with N particles, we will
 create K^D proxy particles at Chebyshev nodes of the 2nd kind and interpolate the tree nodes'
-particles onto those. Depending on K, this creates a higher-order distribution of charges/masses
-with which to perform long-range interactions.
+particles onto those proxy locations. Depending on K, this creates a higher-order distribution
+of charges/masses with which to perform long-range interactions.
 See [Wang-Tlupova-Krasny 2020](https://ieeexplore.ieee.org/abstract/document/9150146) for details.
 In essence, this dramatically improves accuracy with only a small cost to performance.
 
@@ -188,7 +188,7 @@ particles - was the Fast Multipole Method (FMM).
 The FMM does this by approximating the influence of far boxes at a given level onto a target box at that level,
 and then interpolating those values (velocities, potentials, etc.) down to its child boxes.
 That method requires a standard octree (in which all boxes at the same level are the same size) in
-order to make the box-box interaction lists programmable.
+order to make the box-box interaction lists deterministic.
 
 A dual-tree-traversal code is a generalization of this to trees without that symmetry property,
 and is what we use in our O(N) code. Instead of only boxes at the same tree level (and thus exact
@@ -213,6 +213,7 @@ Currently only the `ongrav3d` code has this method.
 * Use C++20 concepts to restrict typenames to std::floating_point and std::integral
 * Maybe also use std::span to pass non-owning array subsections to tree-builder routines?
 * Finally, consider C++26 std::simd instead of Vc, when it gets more widely supported
+* Profile with a line-level sampler - where are the true bottlenecks?
 
 ## Credits
 
