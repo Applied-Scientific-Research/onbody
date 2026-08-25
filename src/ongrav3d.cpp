@@ -50,8 +50,9 @@ static inline void nbody_kernel(const S sx, const S sy, const S sz,
     const S dx = sx - tx;
     const S dy = sy - ty;
     const S dz = sz - tz;
-    S r3 = dx*dx + dy*dy + dz*dz + sr*sr;
-    r3 = sm/(r3*std::sqrt(r3));
+    //S r3 = dx*dx + dy*dy + dz*dz + sr*sr;
+    //r3 = sm/(r3*std::sqrt(r3));
+    S r3 = sm * core_func(dx*dx + dy*dy + dz*dz, sr);
     tax += (A)(r3 * dx);
     tay += (A)(r3 * dy);
     taz += (A)(r3 * dz);
@@ -412,18 +413,20 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         //printf("  non-leaf targ box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
-        // recurse onto the target box's children
+        // cannot accumulate into just two (stack) structs, if you really want
+        // stats, allocate an array with one struct per node and write there
         struct fastsumm_stats cstats1, cstats2;
 
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats1)
-        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
+        // recurse onto the target box's children
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
 
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats2)
-        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
         // that slows things down, though, so dispense with it completely
-        if (dostats) {
+        if (false) {
             #pragma omp taskwait
             stats.sltl += cstats1.sltl + cstats2.sltl;
             stats.sbtl += cstats1.sbtl + cstats2.sbtl;
@@ -710,17 +713,20 @@ int main(int argc, char *argv[]) {
         treetime[4] += elapsed_seconds.count();
 
         // then, march through arrays merging pairs as you go up
-        start = std::chrono::steady_clock::now();
         if (order < 0) {
+            start = std::chrono::steady_clock::now();
             (void) calcEquivalents(targs, eqtargs, ttree, 1);
+            end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+            printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         } else {
+            start = std::chrono::steady_clock::now();
             #pragma omp parallel
             #pragma omp single
             (void) calcBarycentricLagrange(targs, eqtargs, ttree, order, 1);
             #pragma omp taskwait
+            end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
+            printf("  create barylagrange parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         }
-        end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
-        printf("  create equivalent parts:\t[%.4f] seconds\n", elapsed_seconds.count());
         treetime[4] += elapsed_seconds.count();
     }
 

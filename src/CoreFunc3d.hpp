@@ -1,7 +1,7 @@
 /*
  * CoreFunc3d.h - core functions useful for particle methods
  *
- * Copyright (c) 2017-20, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-20,6 Mark J Stock <markjstock@gmail.com>
  *
  * Look in ~/asr/version3/Omega3D/src/CoreFunc.h for more
  */
@@ -10,6 +10,7 @@
 
 #define USE_RM_KERNEL
 //#define USE_EXPONENTIAL_KERNEL
+//#define USE_V2_KERNEL
 
 #include "MathHelper.hpp"
 
@@ -195,5 +196,16 @@ static inline S core_func (const S distsq, const S sr) {
 }
 
 static inline int flops_tp_nograds () { return 7; }
+
+template <class S>
+static inline void core_func (const S distsq, const S sr,
+                              S* const __restrict__ r3, S* const __restrict__ bbb) {
+  const S s2 = sr*sr;
+  const S denom = distsq*distsq + s2*s2;
+  const S rsqd = my_rsqrt(denom);
+  *r3 = rsqd*my_sqrt(rsqd);
+  *bbb = S(-3.0) * (*r3) * distsq * my_recip(denom);
+}
+static inline int flops_tp_grads () { return 11; }
 #endif
 
