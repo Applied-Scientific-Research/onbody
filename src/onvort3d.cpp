@@ -1,7 +1,7 @@
 /*
  * onvort3d - testbed for an O(N) 3d vortex solver
  *
- * Copyright (c) 2017-25, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-26, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -425,18 +425,20 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
         //printf("  non-leaf targ box %ld                     sltb %ld  sbtb %ld\n", ittn, stats.sltb, stats.sbtb);
         // prolongation of equivalent particle velocities to children's equivalent particles
 
-        // recurse onto the target box's children
+        // cannot accumulate into just two (stack) structs, if you really want
+        // stats, allocate an array with one struct per node and write there
         struct fastsumm_stats cstats1, cstats2;
 
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats1)
-        cstats1 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
+        // recurse onto the target box's children
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn, cstv, theta, order);
 
-        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree,cstats2)
-        cstats2 = nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
+        #pragma omp task shared(srcs,eqsrcs,stree,targs,eqtargs,ttree)
+        (void) nbody_fastsumm(srcs, eqsrcs, stree, targs, eqtargs, ttree, 2*ittn+1, cstv, theta, order);
 
         // accumulate the child box's stats - but must wait until preceding tasks complete
         // that slows things down, though, so dispense with it completely
-        if (dostats) {
+        if (false) {
             #pragma omp taskwait
             stats.sltl += cstats1.sltl + cstats2.sltl;
             stats.sbtl += cstats1.sbtl + cstats2.sbtl;
