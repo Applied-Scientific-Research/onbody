@@ -44,7 +44,7 @@ template <class S> size_t VecSize = 1;
 // Caller for the O(N^2) kernel
 //
 template <class S, class A, int PD, int SD, int OD>
-float nbody_naive(const Parts<S,A,PD,SD,OD>& __restrict__ srcs, Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t tskip) {
+float nbody_naive(const Parts<S,A,PD,SD,OD>& srcs, Parts<S,A,PD,SD,OD>& targs, const size_t tskip) {
     #pragma omp parallel for
     for (size_t i=0; i<targs.n; i+=tskip) {
         (void) ppinter(srcs, 0, srcs.n, targs, i);

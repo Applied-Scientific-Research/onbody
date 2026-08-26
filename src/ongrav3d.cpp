@@ -1,7 +1,7 @@
 /*
  * ongrav3d - testbed for an O(N) 3d gravitational/electrostatics solver
  *
- * Copyright (c) 2017-25, Mark J Stock <markjstock@gmail.com>
+ * Copyright (c) 2017-26, Mark J Stock <markjstock@gmail.com>
  */
 
 #define STORE float
@@ -63,8 +63,8 @@ static inline int nbody_kernel_flops() { return 19; }
 template <class S, class A, int PD, int SD, int OD> class Parts;
 
 template <class S, class A, int PD, int SD, int OD>
-void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
-                   Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t i) {
+void ppinter(const Parts<S,A,PD,SD,OD>& srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,PD,SD,OD>& targs, const size_t i) {
     //printf("    compute srcs %ld-%ld on targ %ld\n", jstart, jend, i);
 
 #ifdef USE_VC
@@ -117,8 +117,8 @@ void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart,
 }
 
 template <class S, class A, int PD, int SD, int OD>
-void ppinter(const Parts<S,A,PD,SD,OD>& __restrict__ srcs,  const size_t jstart, const size_t jend,
-                   Parts<S,A,PD,SD,OD>& __restrict__ targs, const size_t istart, const size_t iend) {
+void ppinter(const Parts<S,A,PD,SD,OD>& srcs,  const size_t jstart, const size_t jend,
+                   Parts<S,A,PD,SD,OD>& targs, const size_t istart, const size_t iend) {
     //printf("    compute srcs %ld-%ld on targs %ld-%ld\n", jstart, jend, istart, iend);
 
 #ifdef USE_VC
@@ -470,10 +470,11 @@ int main(int argc, char *argv[]) {
     const bool random_radii = false;
     const bool use_charges = true;
     const bool random_cube = true;
-    static std::vector<int> test_iterations = {1, 1, 1, 1, 1};
+    static std::vector<int> test_iterations = {1, 0, 1, 1, 1};
     const bool just_build_trees = false;
+    bool disjoint_sets = false;
     size_t numSrcs = 10000;
-    size_t numTargs = 10000;
+    size_t numTargs = numSrcs;
     size_t blockSize = minBlkSz*((128+minBlkSz-1)/minBlkSz);
     size_t eqBlockSize = blockSize;
     size_t echonum = 1;
@@ -524,6 +525,8 @@ int main(int argc, char *argv[]) {
             // should always be even
             blockSize = minBlkSz*((num+minBlkSz-1)/minBlkSz);
             eqBlockSize = blockSize;
+        } else if (strncmp(argv[i], "-d", 2) == 0 or strncmp(argv[i], "--disjoint", 4) == 0) {
+            disjoint_sets = true;
         } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
             usage();
         }
@@ -552,8 +555,13 @@ int main(int argc, char *argv[]) {
         eqBlockSize = minBlkSz*((eqBlockSize+minBlkSz-1)/minBlkSz);
     }
 
-    printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
-    printf("  source block sizes %ld and %ld, target block size %ld\n\n", blockSize, eqBlockSize, blockSize);
+    if (disjoint_sets) {
+        printf("Running %s with %ld sources and %ld targets\n", progname, numSrcs, numTargs);
+        printf("  source block sizes %ld and %ld, target block size %ld\n\n", blockSize, eqBlockSize, blockSize);
+    } else {
+        printf("Running %s with %ld particles\n", progname, numSrcs);
+        printf("  block sizes %ld and %ld\n\n", blockSize, eqBlockSize);
+    }
 
     // if problem is too big, skip some number of target particles
 #ifdef _OPENMP
@@ -576,8 +584,8 @@ int main(int argc, char *argv[]) {
     // create the random engine with constant seed
     std::mt19937 mt_engine(12345);
 
-    // allocate space for sources and targets
-    Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true, blockSize);
+    // allocate space for sources
+    Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true, (not disjoint_sets), blockSize);
     // initialize particle data
     if (random_cube) {
         srcs.random_in_cube(mt_engine);
@@ -592,7 +600,12 @@ int main(int argc, char *argv[]) {
         printf("  gravitational simulation with random masses\n");
     }
 
-    Parts<STORE,ACCUM,3,1,3> targs(numTargs, false, blockSize);
+    // allocate space for targets if disjoint
+    //Parts<STORE,ACCUM,3,1,3> targs(numTargs, false, true, blockSize);
+    std::unique_ptr<Parts<STORE,ACCUM,3,1,3>> separate_targs;
+    if (disjoint_sets) separate_targs = std::make_unique<Parts<STORE,ACCUM,3,1,3>>(numTargs, false, true, blockSize);
+    Parts<STORE,ACCUM,3,1,3>& targs = disjoint_sets ? *separate_targs : srcs;
+
     // initialize particle data
     targs.random_in_cube(mt_engine);
     auto end = std::chrono::steady_clock::now();
@@ -602,7 +615,7 @@ int main(int argc, char *argv[]) {
 
     // initialize and generate tree
     Tree<STORE,3,1> stree(0);
-    Parts<STORE,ACCUM,3,1,3> eqsrcs(0, true, eqBlockSize);
+    Parts<STORE,ACCUM,3,1,3> eqsrcs(0, true, (not disjoint_sets), eqBlockSize);
     if (make_source_tree) {
     printf("\nBuilding the source tree\n");
     printf("  with %ld particles and block size of %ld\n", numSrcs, srcs.blockSize);
@@ -678,8 +691,12 @@ int main(int argc, char *argv[]) {
     } // end if make_source_tree
 
     // don't need the target tree for treecode, but will for boxwise and fast code
-    Tree<STORE,3,1> ttree(0);
-    if (make_target_tree) {
+    //Tree<STORE,3,1> ttree(0);
+    std::unique_ptr<Tree<STORE,3,1>> separate_ttree;
+    if (disjoint_sets) separate_ttree = std::make_unique<Tree<STORE,3,1>>(0);
+    Tree<STORE,3,1>& ttree = disjoint_sets ? *separate_ttree : stree;
+
+    if (make_target_tree and disjoint_sets) {
         printf("\nBuilding the target tree\n");
         printf("  with %ld particles and block size of %ld\n", numTargs, targs.blockSize);
         start = std::chrono::steady_clock::now();
@@ -692,8 +709,12 @@ int main(int argc, char *argv[]) {
     }
 
     // find equivalent points
-    Parts<STORE,ACCUM,3,1,3> eqtargs(0, false, eqBlockSize);
-    if (arrange_target_parts) {
+    //Parts<STORE,ACCUM,3,1,3> eqtargs(0, false, true, eqBlockSize);
+    std::unique_ptr<Parts<STORE,ACCUM,3,1,3>> separate_eqtargs;
+    if (disjoint_sets) separate_eqtargs = std::make_unique<Parts<STORE,ACCUM,3,1,3>>(0, false, true, eqBlockSize);
+    Parts<STORE,ACCUM,3,1,3>& eqtargs = disjoint_sets ? *separate_eqtargs : eqsrcs;
+
+    if (arrange_target_parts and disjoint_sets) {
         printf("\nCalculating equivalent targ points\n");
         start = std::chrono::steady_clock::now();
         eqtargs.resize((ttree.numnodes/2) * eqtargs.blockSize);

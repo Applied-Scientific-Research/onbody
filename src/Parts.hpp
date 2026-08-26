@@ -33,6 +33,7 @@ template <class S, class A, int PD, int SD, int OD>
 class Parts {
 public:
     Parts(const size_t _num, const bool _aresrcs, const size_t _blocksize=128);
+    Parts(const size_t _num, const bool _aresrcs, const bool _aretargs, const size_t _blocksize=128);
     void resize(const size_t);
     void random_in_cube();
     void random_in_cube(std::mt19937);
@@ -48,6 +49,7 @@ public:
 
     // state
     bool are_sources;
+    bool are_targets;
     size_t n;
     // the basic unit of direct sum work
     size_t blockSize;
@@ -73,9 +75,20 @@ public:
     //typename A::value_type accumulator_type;
 };
 
+// original ctor - accepts one bool
 template <class S, class A, int PD, int SD, int OD>
 Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs, const size_t _blocksize) {
     are_sources = _aresrcs;
+    are_targets = not are_sources;
+    blockSize = _blocksize;
+    resize(_num);
+}
+
+// new ctor for non-disjoint collections: takes two bools
+template <class S, class A, int PD, int SD, int OD>
+Parts<S,A,PD,SD,OD>::Parts(const size_t _num, const bool _aresrcs, const bool _aretargs, const size_t _blocksize) {
+    are_sources = _aresrcs;
+    are_targets = _aretargs;
     blockSize = _blocksize;
     resize(_num);
 }
@@ -86,7 +99,7 @@ void Parts<S,A,PD,SD,OD>::resize(const size_t _num) {
     for (int d=0; d<PD; ++d) x[d].resize(n);
     if (are_sources) for (int d=0; d<SD; ++d) s[d].resize(n);
     r.resize(n);
-    if (not are_sources) for (int d=0; d<OD; ++d) u[d].resize(n);
+    if (are_targets) for (int d=0; d<OD; ++d) u[d].resize(n);
 }
 
 template <class S, class A, int PD, int SD, int OD>
@@ -178,7 +191,7 @@ void Parts<S,A,PD,SD,OD>::wave_strengths() {
 
 template <class S, class A, int PD, int SD, int OD>
 void Parts<S,A,PD,SD,OD>::zero_vels() {
-    if (are_sources) return;
+    if (not are_targets) return;
     for (int d=0; d<OD; ++d) for (auto& _u : u[d]) { _u = (S)0.0; }
 }
 
@@ -212,7 +225,7 @@ void Parts<S,A,PD,SD,OD>::buffer_end(const size_t _veclen) {
     for (int d=0; d<PD; ++d) x[d].resize(bufferedSize, x[d][lastidx]);
     if (are_sources) for (int d=0; d<SD; ++d) s[d].resize(bufferedSize, 0.0);
     r.resize(bufferedSize, 1.0);
-    if (not are_sources) for (int d=0; d<OD; ++d) u[d].resize(bufferedSize, 0.0);
+    if (are_targets) for (int d=0; d<OD; ++d) u[d].resize(bufferedSize, 0.0);
 
     // and keep n as-is!
 }

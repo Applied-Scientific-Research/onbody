@@ -199,7 +199,6 @@ size), the box-opening criterion aims only to keep source and target box sizes s
 * Consider allowing different orders for the source and target barycentric points - do we need more accuracy on the target side?
 * Add logic that compares the number of equivalent points to the number of actual particles in a box and uses the particles for summation if there are fewer
 * Specialize the general Parts class inside of each program, like ongrav3d should have a MassParts : Parts
-* Allow the Parts constructor to take another Parts object and re-use its data? or otherwise have sources and targets be the same data (make it easier on the cache)
 * Create a standard Barnes-Hut NlogN method with boxwise interactions (to complete the set of 4 basic treecodes)
 * Would it be a benefit to adjust the proxy particles' radii in addition to strength?
 * Is it possible to use OpenGL to perform the tree walk and 64-on-64 evaluations? See [nvortexOpenGL](https://github.com/Applied-Scientific-Research/nvortexOpenGL) for sample code
