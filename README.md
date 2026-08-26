@@ -93,8 +93,11 @@ N      | src tree | calc equivs |  direct  | pointwise | boxwise | dualtree
 
 The following two figures represent work performed on a 16-core AMD Ryzen 3950X with
 `ongrav3d` compiled with GCC 13.2.0.
-The first shows the effect of varying theta, the box-opening criterion, for 
-the same example. Note that the theta mentioned here is the inverse of the `-t` argument.
+The first (below) shows the effect of varying theta (lines) and barycentric order
+(symbols) on a system of 1M charges and 1M disjoint targets (random in the unit cube).
+The symbol on the far right of each line is `-o=0` (monopole), giving the highest error but
+lowest runtime.
+Note that the theta mentioned in the graphic is the inverse of our `-t` argument.
 This shows that a generous box-opening criterion can be used to achieve RMS errors
 greater than about 1e-4, while a moderate theta (0.9, `-t=1.1111`) can be used for 1e-4 to 1e-5.
 The error asymptotes at 6e-6 because all storage and accumulations are done using 
@@ -104,8 +107,11 @@ for 1 million particles in about 1 second using just the CPU.
 
 ![Performance vs. theta, 1M charges in a cube](doc/res1Mqd_trad.png)
 
-Finally, we see the effect of changing the floating-point precision for data storage
-and arithmetic accumulation. 32-bit floats are fastest down to about 1e-5 RMS error, 
+And in the figure below, we see the effect of changing the floating-point precision
+for data storage and arithmetic accumulation.
+The right-most symbol in each line is for `-o=0` (monopole) and increasing as the
+line progresses toward lower error.
+Keeping all values as 32-Bit floats is the fastest down to about 1e-5 RMS error, 
 then performing accumulations in fp64 allows the RMS error to drop to about 4e-7,
 finally to achieve the most accurate results, numbers should also be stored as fp64.
 
