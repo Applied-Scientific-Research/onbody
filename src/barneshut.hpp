@@ -484,6 +484,37 @@ void reorder(Vector<S>& x, Vector<S>& t,
     for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
 }
 
+// serial but computes min/max for both child boxes on the fly
+template <class S>
+std::array<S,4> reorder(Vector<S>& x, Vector<S>& t,
+             const std::vector<size_t>& idx,
+             const size_t pfirst, const size_t pmiddle, const size_t plast) {
+
+    // copy the original input float vector x into a temporary vector
+    std::copy(x.begin()+pfirst, x.begin()+plast, t.begin()+pfirst);
+
+    // scatter values from the temp vector back into the original vector
+    for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
+
+    // gather/scatter and recalculate minmax values
+    S leftmin = std::numeric_limits<S>::max();
+    S leftmax = std::numeric_limits<S>::lowest();
+    S rghtmin = std::numeric_limits<S>::max();
+    S rghtmax = std::numeric_limits<S>::lowest();
+    for (size_t i=pfirst; i<plast; ++i) {
+        const S testval = t[idx[i]];
+        x[i] = testval;
+        if (i < pmiddle) {
+            leftmin = std::min(leftmin, testval);
+            leftmax = std::max(leftmax, testval);
+        } else {
+            rghtmin = std::min(rghtmin, testval);
+            rghtmax = std::max(rghtmax, testval);
+        }
+    }
+    return std::array<S,4>{leftmin,leftmax,rghtmin,rghtmax};
+}
+
 // only barely faster
 template <class S>
 void reorder(Vector<S>& x, Vector<S>& t,
@@ -503,7 +534,7 @@ void reorder(Vector<S>& x, Vector<S>& t,
 // Perform an experimental partial sort
 //
 template <class S>
-void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<S,S> in_minmax,
+std::array<S,4> partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<S,S> in_minmax,
                         const size_t istart, const size_t nless, const size_t istop) {
 
   assert(v.size() == idx.size() && "Array size mismatch in partialSortIndexes");
@@ -521,31 +552,47 @@ void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<
   int iters = 0;
   S cutoff_ideal = (S)(nless-istart) / (S)(istop-istart);
 
-  // use passed-in min/max as first range bounds
-  std::pair<S,S> minmax = in_minmax;
+  // active partition min/max (used to compute the pivot/testval)
+  S active_min = in_minmax.first;
+  S active_max = in_minmax.second;
+
+  // bounds for the two halves: [istart, nless) and [nless, istop)
+  const S low_min = in_minmax.first;
+  S low_max = std::numeric_limits<S>::lowest();
+  S high_min = std::numeric_limits<S>::max();
+  const S high_max = in_minmax.second;
 
   while (plast > pfirst and iters < 100) {
 
-    if (iters > 0) {
-      //auto start = std::chrono::steady_clock::now();
-      minmax = minMaxValue(v, pfirst, plast+1);
-      //auto end = std::chrono::steady_clock::now();
-      //std::chrono::duration<double> elapsed_seconds = end-start;
-      //if (plast-pfirst>10000000) printf("        sort minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
+    // if min and max have converged, all remaining elements are equal
+    if (active_min >= active_max) {
+      if (active_min > low_max)  low_max = active_min;
+      if (active_min < high_min) high_min = active_min;
+      break;
     }
 
     // estimate value at cutoff
     S frac = (S)(nless-0.5-pfirst) / (S)(plast-pfirst);
     frac = (9.0*frac + 1.0*cutoff_ideal) / 10.0;
-    S testval = minmax.first + (minmax.second-minmax.first) * frac;
+    S testval = active_min + (active_max - active_min) * frac;
+
+    // track the local max of the left side and min of the right side
+    S curr_left_max = std::numeric_limits<S>::lowest();
+    S curr_rght_min = std::numeric_limits<S>::max();
 
     // march from both ends looking for pairs to swap
     size_t tfirst = pfirst;
     size_t tlast = plast;
 
     while (true) {
-      while (v[tfirst] < testval) ++tfirst;
-      while (v[tlast] >= testval) --tlast;
+      while (v[tfirst] < testval) {
+        if (v[tfirst] > curr_left_max) curr_left_max = v[tfirst];
+        ++tfirst;
+      }
+      while (v[tlast] >= testval) {
+        if (v[tlast] < curr_rght_min) curr_rght_min = v[tlast];
+        --tlast;
+      }
       if (tlast > tfirst) {
         // why not use std::swap? try it. go ahead. i'll wait here.
         const S val = v[tfirst];
@@ -559,31 +606,42 @@ void partialSortIndexes(Vector<S>& v, std::vector<size_t>& idx, const std::pair<
       }
     }
 
-    // now all points from pfirst to tlast are below, 
-    // and all points from tfirst to plast are above
-
+    // points [pfirst, tlast] are < testval, and [tfirst, plast] are >= testval
     const size_t oldpfirst = pfirst;
     const size_t oldplast = plast;
 
-    // test for completion, or refine bounds for next step
     if (tfirst == nless) {
-      // sort complete!
+      // sort complete: finalize both inner bounds
+      if (curr_left_max > low_max)  low_max = curr_left_max;
+      if (curr_rght_min < high_min) high_min = curr_rght_min;
       break;
+
     } else if (tfirst < nless) {
-      // reset lower bound
+      // [pfirst, tfirst) belongs to the low partition
+      if (curr_left_max > low_max) low_max = curr_left_max;
+      // active range becomes the upper segment [tfirst, plast]
       pfirst = tfirst;
+      active_min = curr_rght_min;
+
     } else {
-      // rest upper bound
+      // [tfirst, plast] belongs to the high partition
+      if (curr_rght_min < high_min) high_min = curr_rght_min;
+      // active range becomes the lower segment [pfirst, tlast]
       plast = tlast;
+      active_max = curr_left_max;
     }
 
-    // if pfirst and plast didn't change, then the middle numbers are all the same
+    // if range didn't shrink, middle elements are identical
     if (pfirst == oldpfirst and plast == oldplast) {
+      if (active_min > low_max)  low_max = active_min;
+      if (active_min < high_min) high_min = active_min;
       break;
     }
 
     iters++;
   }
+
+  return {low_min, low_max, high_min, high_max};
 }
 
 
@@ -614,19 +672,21 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     //if (pfirst == 0) printf("  splitNode at level %d with 1 threads, %d recursions\n", thislev, sort_recursion);
     #endif
 
+    // need to seed the first node's min and max values
+    if (tnode==1) {
     auto start = std::chrono::steady_clock::now();
 
     // find the min/max of the three axes and save them
-    std::array<std::pair<S,S>,PD> boxbounds;
     for (int d=0; d<PD; ++d) {
-        boxbounds[d] = minMaxValue(p.x[d], pfirst, plast, threads_per_node);
-        t.ns[d][tnode] = boxbounds[d].second - boxbounds[d].first;
-        t.nc[d][tnode] = 0.5 * (boxbounds[d].second + boxbounds[d].first);
+        std::pair<S,S> boxbounds = minMaxValue(p.x[d], pfirst, plast, threads_per_node);
+        t.ns[d][tnode] = boxbounds.second - boxbounds.first;
+        t.nc[d][tnode] = 0.5 * (boxbounds.second + boxbounds.first);
     }
 
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    //if (tnode==1) printf("      1st minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("      1st minmax:\t[%.4f] seconds\n", elapsed_seconds.count());
+    }
 
     // write particle data to the tree node
     t.ioffset[tnode] = pfirst;
@@ -659,6 +719,9 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     }
     //printf("  longest axis is %ld, length %g\n", maxaxis, boxsizes[maxaxis]);
 
+    std::pair<S,S> axisbounds{t.nc[maxaxis][tnode] - S(0.5)*t.ns[maxaxis][tnode],
+                              t.nc[maxaxis][tnode] + S(0.5)*t.ns[maxaxis][tnode]};
+
     // determine where the split should be
     size_t pmiddle = pfirst + p.blockSize * (1 << log_2((t.num[tnode]-1)/p.blockSize));
     //printf("split at %ld %ld %ld into nodes %d %d\n", pfirst, pmiddle, plast, 2*tnode, 2*tnode+1);
@@ -666,21 +729,36 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     // temporary list of vectors to be sorted - oh, then we'll need many new temp vectors
     //std::vector<Vector<S>&> jumble;
 
-    start = std::chrono::steady_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     // sort this portion of the array along the big axis
 #ifdef PARTIAL_SORT
-    (void) partialSortIndexes(p.x[maxaxis], p.lidx, boxbounds[maxaxis], pfirst, pmiddle, plast);
+    std::array<S,4> childbounds = partialSortIndexes(p.x[maxaxis], p.lidx, axisbounds, pfirst, pmiddle, plast);
+    // set minmax on left child
+    t.ns[maxaxis][2*tnode] = childbounds[1] - childbounds[0];
+    t.nc[maxaxis][2*tnode] = S(0.5) * (childbounds[1] + childbounds[0]);
+    // set minmax on right child
+    t.ns[maxaxis][2*tnode+1] = childbounds[3] - childbounds[2];
+    t.nc[maxaxis][2*tnode+1] = S(0.5) * (childbounds[3] + childbounds[2]);
 
-    end = std::chrono::steady_clock::now();
-    elapsed_seconds = end-start;
-    //if (tnode==1) printf("      1st partial sort:\t[%.4f] seconds\n", elapsed_seconds.count());
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end-start;
+    if (tnode==1) printf("      1st partial sort:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     start = std::chrono::steady_clock::now();
-    // note, this also sorts the values - don't parallelize, we share ftemp!
+
     //#pragma omp taskloop if(threads_per_node>1) shared(p)
     for (int d=0; d<PD; ++d) {
-        if (d != maxaxis) reorder(p.x[d], p.ftemp, p.lidx, pfirst, plast, threads_per_node);
+        //if (d != maxaxis) reorder(p.x[d], p.ftemp, p.lidx, pfirst, pmiddle, plast);
+        if (d != maxaxis) {
+            childbounds = reorder(p.x[d], p.ftemp, p.lidx, pfirst, pmiddle, plast);
+            // set minmax on left child
+            t.ns[d][2*tnode] = childbounds[1] - childbounds[0];
+            t.nc[d][2*tnode] = S(0.5) * (childbounds[1] + childbounds[0]);
+            // set minmax on right child
+            t.ns[d][2*tnode+1] = childbounds[3] - childbounds[2];
+            t.nc[d][2*tnode+1] = S(0.5) * (childbounds[3] + childbounds[2]);
+        }
     }
 #else
     (void) sortIndexesSection(sort_recursion, p.x[maxaxis], p.lidx, pfirst, plast);
@@ -695,7 +773,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
 
     end = std::chrono::steady_clock::now();
     elapsed_seconds = end-start;
-    //if (tnode==1) printf("      1st reorder:\t[%.4f] seconds\n", elapsed_seconds.count());
+    if (tnode==1) printf("      1st reorder:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // recursively call this routine for this node's new children, but only spawn new tasks if we have some to spare
     #pragma omp task if(threads_per_node>1) shared(p,t)
@@ -723,11 +801,17 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, const size_t tnode) {
         const size_t child2 = 2*tnode+1;
 
         // recursively call this routine for this node's children
-        #pragma omp task shared(p,t)
-        (void) finishTree(p, t, child1);
-        #pragma omp task shared(p,t)
-        (void) finishTree(p, t, child2);
-        #pragma omp taskwait
+        if (tnode < 16) {
+            #pragma omp task shared(p,t)
+            (void) finishTree(p, t, child1);
+            #pragma omp task shared(p,t)
+            (void) finishTree(p, t, child2);
+            #pragma omp taskwait
+        } else {
+            // call sequentially
+            (void) finishTree(p, t, child1);
+            (void) finishTree(p, t, child2);
+        }
 
         // once both children are done, we can merge their data for the parent
         const S oonp = (S)1.0 / (t.num[child1] + t.num[child2]);
@@ -826,7 +910,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     t = Tree<S,PD,SD>(p.n, p.blockSize);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    //printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree allocation:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // upward pass, starting at node 1 (root) and recursing
     start = std::chrono::steady_clock::now();
@@ -835,7 +919,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) splitNode(p, 0, p.n, t, 1);
     #pragma omp taskwait
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
-    //printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree upward pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // downward pass, calculate masses, etc.
     start = std::chrono::steady_clock::now();
@@ -844,7 +928,7 @@ void makeTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t) {
     (void) finishTree(p, t, 1);
     #pragma omp taskwait
     end = std::chrono::steady_clock::now(); elapsed_seconds = end-start;
-    //printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
+    printf("    tree dwnwrd pass:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // de-allocate temporaries
     p.lidx.resize(0);
