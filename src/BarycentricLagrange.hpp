@@ -16,7 +16,11 @@
 
 #define CLOSE_THRESH 1.e-10
 
-const int32_t maxorder = 20;
+const int32_t maxorder = 15;
+
+// maxorder = 15 -> max ncp = 16, max ncpP = 16
+constexpr size_t MAX_NCPP = 16;
+constexpr size_t MAX_EQPS = 16 * 16 * 16; // PD=3 max
 
 // "global" variables, the locations of the Chebyshev nodes of the 2nd kind
 template <class S>
@@ -48,9 +52,29 @@ void set_wk(const int32_t _n) {
     wk<S>[_n] = 0.5*ipow(-1,_n);
 }
 
-// indexes to aid in calculation
-//template <class S, int PD>
-//std::vector<std::array<S,PD>> kidx;
+//
+// Helper: return a thread-local kidx table, rebuilt only when order changes.
+//
+template <int PD>
+static const std::vector<std::array<size_t,PD>>& getKidx(const int32_t order) {
+    thread_local int32_t cached_order = -1;
+    thread_local std::vector<std::array<size_t,PD>> kidx;
+
+    const size_t ncp = order + 1;
+    const size_t numEqps = ipow<size_t>(ncp, PD);
+
+    if (order != cached_order) {
+        kidx.resize(numEqps);
+        for (size_t d = 0; d < PD; ++d) {
+            const size_t divisor = ipow<size_t>(ncp, d);
+            for (size_t i = 0; i < numEqps; ++i) {
+                kidx[i][d] = (i / divisor) % ncp;
+            }
+        }
+        cached_order = order;
+    }
+    return kidx;
+}
 
 
 //
@@ -87,9 +111,9 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     // closeness test. NOTE: node locations are gathered strided (stride=ncp^d)
     // out of sp.x, exactly as in the scalar version.
     const S farAway = std::numeric_limits<S>::max();
-    std::vector<S> wkP(ncpP, (S)0);
-    std::vector<S> lskP(PD * ncpP);
-    for (size_t k=0; k<ncp; ++k) wkP[k] = wk<S>[k];
+    std::array<S, MAX_NCPP> wkP;
+    std::array<S, PD * MAX_NCPP> lskP;
+    std::copy_n(wk<S>.begin(), std::min(ncp, wk<S>.size()), wkP.begin());
     for (size_t d=0; d<PD; ++d) {
         const size_t stride = ipow<size_t>(ncp,d);
         for (size_t k=0; k<ncp; ++k) lskP[d*ncpP+k] = sp.x[d][iepstart+stride*k];
@@ -97,8 +121,7 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     }
 
     // per-dimension barycentric sub-weights, zero-padded (pads must stay 0!)
-    std::array<std::vector<S>,PD> amat;
-    for (size_t d=0; d<PD; ++d) amat[d].resize(ncpP, (S)0);
+    std::array<std::array<S, MAX_NCPP>, PD> amat{};
 
     // contiguous, zero-padded copy of the source outputs. Writing
     // i = j*ncp + k0, the innermost index k0 addresses consecutive source
@@ -108,23 +131,15 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     // block may have no slack past blockSize. The pads MUST be zero: they are
     // multiplied by zero weights, and 0*NaN would otherwise poison the
     // accumulators.
-    const size_t bufLen = numEqps - ncp + ncpP;
-    std::array<std::vector<S>,OD> ubuf;
+    constexpr size_t MAX_BUFLEN = ipow<size_t>(size_t(maxorder + 1), size_t(PD)) + MAX_NCPP;
+    std::array<std::array<S, MAX_BUFLEN>, OD> ubuf{};
     for (size_t d=0; d<OD; ++d) {
-        ubuf[d].resize(bufLen, (S)0);
+        //ubuf[d].resize(bufLen, (S)0);
         for (size_t i=0; i<numEqps; ++i) ubuf[d][i] = sp.u[d][iepstart+i];
     }
 
-    // precompute these useful indices - this should be a once-and-done thing,
-    // not every tree node (only entries j*ncp for j<outer, d>=1 are consulted)
-    std::vector<std::array<size_t,PD>> kidx;
-    kidx.resize(numEqps);
-    for (size_t d=0; d<PD; ++d) {
-        const size_t divisor = ipow<size_t>(ncp,d);
-        for (size_t i=0; i<numEqps; ++i) {
-            kidx[i][d] = (i/divisor) % ncp;
-        }
-    }
+    // precomputed useful indices (only entries j*ncp for j<outer, d>=1 are consulted)
+    const auto& kidx = getKidx<PD>(order);
 
     const Vec vclose((S)CLOSE_THRESH);
 
@@ -226,8 +241,8 @@ void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
     // in-bounds and unmasked. Padded lanes get weight 0 and a huge location, so they
     // contribute exactly zero and never trip the closeness test.
     const S farAway = std::numeric_limits<S>::max();
-    std::vector<S> wkP(ncpP, (S)0);
-    std::vector<S> lskP(PD * ncpP);
+    std::array<S, MAX_NCPP> wkP;
+    std::array<S, PD * MAX_NCPP> lskP;
     for (size_t k=0; k<ncp; ++k) wkP[k] = wk<S>[k];
     for (size_t d=0; d<PD; ++d) {
         for (size_t k=0; k<ncp; ++k) lskP[d*ncpP+k] = lsk[d*ncp+k];
@@ -235,15 +250,13 @@ void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
     }
 
     // per-dimension barycentric sub-weights, zero-padded (pads must stay 0!)
-    std::array<std::vector<S>,PD> amat;
-    for (size_t d=0; d<PD; ++d) amat[d].resize(ncpP, (S)0);
+    std::array<std::array<S, MAX_NCPP>, PD> amat{};
 
     // output accumulators, flushed into tp once at the end of this call.
     // i = j*ncp + k0: longest row touched is (outer-1)*ncp + ncpP entries.
     const size_t outer = numEqps / ncp;             // == ipow(ncp, PD-1)
     const size_t accLen = numEqps - ncp + ncpP;
-    std::array<std::vector<S>,SD> uacc;
-    for (size_t d=0; d<SD; ++d) uacc[d].resize(accLen, (S)0);
+    std::array<std::array<S, MAX_EQPS + MAX_NCPP>, SD> uacc{};
     std::vector<S> uaccR, uaccW;
     if (interp_radii) { uaccR.resize(accLen, (S)0); uaccW.resize(accLen, (S)0); }
 
@@ -396,16 +409,8 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
         }
     }
 
-    // precompute these useful indices - this should be a once-and-done thing, not every tree node
-    std::vector<std::array<size_t,PD>> kidx;
-    kidx.resize(numEqps);
-    for (size_t d=0; d<PD; ++d) {
-        const size_t divisor = ipow<size_t>(ncp,d);
-        for (size_t i=0; i<numEqps; ++i) {
-            kidx[i][d] = (i/divisor) % ncp;
-        }
-    }
-    // really, why can't we just keep track of (d*i) and increment from 0 to ncp-1 ?
+    // precomputed useful indices
+    const auto& kidx = getKidx<PD>(order);
 
     // note that t.x[d][tnode] is the center of mass - not the center of the cluster!!!
     // the cluster size is t.ns[d][tnode]

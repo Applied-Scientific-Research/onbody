@@ -33,7 +33,7 @@
 // integer power
 // from https://stackoverflow.com/questions/1505675/power-of-an-integer-in-c
 template <class INT>
-INT ipow(INT x, INT p)
+constexpr INT ipow(INT x, INT p)
 {
   if (p == 0) return 1;
   if (p == 1) return x;
