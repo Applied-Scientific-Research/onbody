@@ -223,9 +223,9 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
 template <class S, class A, int PD, int SD, int OD>
 void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
                            Parts<S,A,PD,SD,OD>& tp,
-                           const std::vector<S>& lsk,
+                           const S* lsk,
                            const std::vector<std::array<size_t,PD>>& kidx,
-                           std::vector<S>& wgtsum,
+                           std::array<S,MAX_EQPS>& wgtsum,
                            const size_t ncp, const size_t numEqps,
                            const size_t istart, const size_t istop,
                            const size_t iepstart, const bool interp_radii) {
@@ -397,7 +397,9 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
     // make a local copy of the sk coordinates
     //S lsk[PD][ncp];
-    std::vector<S> lsk(PD*ncp);
+    //std::vector<S> lsk(PD*ncp);
+    constexpr size_t MAX_LSK = PD * (maxorder + 1);
+    std::array<S,MAX_LSK> lsk;
     {
         auto lsk_iter = std::begin(lsk);
         for (size_t d=0; d<PD; ++d) {
@@ -447,7 +449,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     }
 
     // store a sum of weights to be used for particle radii
-    std::vector<S> wgtsum(ep.blockSize, 0.0);
+    std::array<S,MAX_EQPS> wgtsum{};
 
     // loop over children, adding equivalent particles to our list
     for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
@@ -469,7 +471,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
             // now do the work
             if (p.are_sources and ep.are_sources) {
-                calcBarycentricUpward<S,A,PD,SD,OD>(ep, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+                calcBarycentricUpward<S,A,PD,SD,OD>(ep, ep, lsk.data(), kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
             }
 
             // now adjust particle radii
@@ -491,7 +493,7 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
 
             // now do the work - but only if strengths exist
             if (p.are_sources and ep.are_sources) {
-                calcBarycentricUpward<S,A,PD,SD,OD>(p, ep, lsk, kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
+                calcBarycentricUpward<S,A,PD,SD,OD>(p, ep, lsk.data(), kidx, wgtsum, ncp, numEqps, istart, istop, iepstart, interp_radii);
             }
 
             t.epnum[tnode] = numEqps;
