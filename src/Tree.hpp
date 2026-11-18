@@ -40,6 +40,7 @@ static inline uint32_t log_2(const uint32_t x) {
 // this way, node i children are 2*i and 2*i+1
 //
 // templatized on (S)torage type, (P)osition (D)imensions, and (S)trength (D)ims
+// idea: add integer type for template argument, uint32_t or size_t, depending
 //
 template <class S, int PD, int SD>
 class Tree {
@@ -73,6 +74,8 @@ public:
     // equivalent point offset and count
     alignas(32) std::vector<size_t> epoffset;		// is this redundant?
     alignas(32) std::vector<size_t> epnum;
+    // idea: put these pairs in a struct, aliged to 64 (cache line) as they
+    // are often referenced together and with their twin
 };
 
 template <class S, int PD, int SD>
