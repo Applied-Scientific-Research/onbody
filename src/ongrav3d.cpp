@@ -9,6 +9,7 @@
 
 #include "CoreFunc3d.hpp"
 #include "BarycentricLagrange.hpp"
+#include "ParticleInput.hpp"
 
 #ifdef USE_VC
 #include <Vc/Vc>
@@ -458,7 +459,7 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 // basic usage
 //
 static void usage() {
-    fprintf(stderr, "Usage: %s [-h] [-n=<nparticles>] [-t=<theta>] [-o=<order>] [-b=<blocksize>]\n", progname);
+    fprintf(stderr, "Usage: %s [-h] [-n=<nparticles> | -input=<path>] [-d] [-t=<theta>] [-o=<order>] [-b=<blocksize>]\n", progname);
     exit(1);
 }
 
@@ -473,6 +474,8 @@ int main(int argc, char *argv[]) {
     static std::vector<int> test_iterations = {1, 0, 1, 1, 1};
     const bool just_build_trees = false;
     bool disjoint_sets = false;
+    const char* input_path = nullptr;
+    bool count_given = false;
     size_t numSrcs = 10000;
     size_t numTargs = numSrcs;
     size_t blockSize = minBlkSz*((128+minBlkSz-1)/minBlkSz);
@@ -487,10 +490,13 @@ int main(int argc, char *argv[]) {
 
     for (int i=1; i<argc; i++) {
         if (strncmp(argv[i], "-n=", 3) == 0) {
+            count_given = true;
             size_t num = atoi(argv[i]+3);
             if (num < 1) usage();
             numSrcs = num;
             numTargs = num;
+        } else if (strncmp(argv[i], "-input=", 7) == 0) {
+            input_path = argv[i]+7;
         } else if (strncmp(argv[i], "-t1=", 4) == 0) {
             STORE testtheta = atof(argv[i]+3);
             if (testtheta < 0.0001) usage();
@@ -530,6 +536,13 @@ int main(int argc, char *argv[]) {
         } else if (strncmp(argv[i], "-h", 2) == 0 or strncmp(argv[i], "--h", 3) == 0) {
             usage();
         }
+    }
+
+    ParticleInput<STORE,3,1> input;
+    if (input_path) {
+        if (count_given) usage();
+        if (!input.read(input_path, true)) return 1;
+        numSrcs = numTargs = input.radius.size();
     }
 
     // using test_iterations, toggle some parts of the build
@@ -585,19 +598,23 @@ int main(int argc, char *argv[]) {
     std::mt19937 mt_engine(12345);
 
     // allocate space for sources
-    Parts<STORE,ACCUM,3,1,3> srcs(numSrcs, true, (not disjoint_sets), blockSize);
+    Parts<STORE,ACCUM,3,1,3> srcs(input_path ? 0 : numSrcs, true, (not disjoint_sets), blockSize);
     // initialize particle data
-    if (random_cube) {
-        srcs.random_in_cube(mt_engine);
+    if (input_path) {
+        input.move_to_sources(srcs);
     } else {
-        srcs.random_in_disk(mt_engine);
-    }
-    if (random_radii) srcs.randomize_radii(mt_engine);
-    if (use_charges) {
-        printf("  electrostatics simulation with random charges\n");
-    } else {
-        for (auto& m : srcs.s[0]) { m = std::abs(m); }
-        printf("  gravitational simulation with random masses\n");
+        if (random_cube) {
+            srcs.random_in_cube(mt_engine);
+        } else {
+            srcs.random_in_disk(mt_engine);
+        }
+        if (random_radii) srcs.randomize_radii(mt_engine);
+        if (use_charges) {
+            printf("  electrostatics simulation with random charges\n");
+        } else {
+            for (auto& m : srcs.s[0]) { m = std::abs(m); }
+            printf("  gravitational simulation with random masses\n");
+        }
     }
 
     // allocate space for targets if disjoint
@@ -607,7 +624,7 @@ int main(int argc, char *argv[]) {
     Parts<STORE,ACCUM,3,1,3>& targs = disjoint_sets ? *separate_targs : srcs;
 
     // initialize particle data
-    targs.random_in_cube(mt_engine);
+    if (!input_path || disjoint_sets) targs.random_in_cube(mt_engine);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
     printf("  init parts time:\t\t[%.4f] seconds\n", elapsed_seconds.count());

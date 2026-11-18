@@ -65,6 +65,29 @@ A normal call to the gravitation solver would then look like this:
 
     ./ongrav3d -n=1000000 -t=2.0 -o=4
 
+### Particle input files
+
+Pass `-input=<path>` instead of `-n=<nparticles>` to read particles from a text file:
+
+    ./ongrav3d -input=particles.txt
+
+Use one particle per line, with whitespace-separated numbers and no header.
+Blank lines are allowed, and all particle rows must use the same layout.
+The number of rows sets the particle count.
+
+| Program | Columns |
+| --- | --- |
+| `ongrav3d` | `x y z mass radius` |
+| `ongrav3d` | `x y z vx vy vz mass radius` |
+| `ongrav3d` | `x y z vx vy vz ax ay az mass radius` |
+| `onvort2d` | `x y circulation radius` |
+| `onvort3d` | `x y z wx wy wz radius` |
+
+The solvers evaluate at the loaded positions. With `ongrav3d -d`, the file
+supplies sources only and the program generates the same number of targets.
+Gravity input velocities and accelerations are retained in file order but do
+not affect the force calculation.
+
 ## Performance
 
 The tests below were run on an AMD Threadripper 3945WX 12-core processor using the Sept 2025
