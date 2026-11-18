@@ -61,9 +61,9 @@ public:
     alignas(32) std::array<Vector<S>, PD> nc;
     // node size
     alignas(32) std::array<Vector<S>, PD> ns;
-    // node radius
+    // node geometric radius
     alignas(32) Vector<S> nr;
-    // node particle radius
+    // node average particle radius
     alignas(32) Vector<S> pr;
     // node strengths
     alignas(32) std::array<Vector<S>, SD> s;
