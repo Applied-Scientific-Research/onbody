@@ -17,6 +17,10 @@
 #include <array>
 #include <vector>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #define CLOSE_THRESH 1.e-10
 
 const int32_t maxorder = 15;
@@ -218,7 +222,7 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     // closeness test. NOTE: node locations are gathered strided (stride=ncp^d)
     // out of sp.x, exactly as in the scalar version.
     const S farAway = std::numeric_limits<S>::max();
-    std::array<S, MAX_NCPP> wkP;
+    std::array<S, MAX_NCPP> wkP{};
     std::array<S, PD * MAX_NCPP> lskP;
     std::copy_n(wk<S>.begin(), std::min(ncp, wk<S>.size()), wkP.begin());
     for (size_t d=0; d<PD; ++d) {
@@ -347,7 +351,7 @@ void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
     // in-bounds and unmasked. Padded lanes get weight 0 and a huge location, so they
     // contribute exactly zero and never trip the closeness test.
     const S farAway = std::numeric_limits<S>::max();
-    std::array<S, MAX_NCPP> wkP;
+    std::array<S, MAX_NCPP> wkP{};
     std::array<S, PD * MAX_NCPP> lskP;
     for (size_t k=0; k<ncp; ++k) wkP[k] = wk<S>[k];
     for (size_t d=0; d<PD; ++d) {
@@ -482,11 +486,23 @@ void calcBarycentricLagrange(Parts<S,A,PD,SD,OD>& p,
     }
 
     // make sure the children are done before proceeding
-    #pragma omp task shared(p,ep,t)
-    (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode);
-    #pragma omp task shared(p,ep,t)
-    (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode+1);
-    #pragma omp taskwait
+    #ifdef _OPENMP
+    const size_t taskCutoff = 4 * static_cast<size_t>(::omp_get_num_threads());
+    #else
+    const size_t taskCutoff = 1;
+    #endif
+    if (tnode < taskCutoff) {
+        for (size_t ichild = 2*tnode; ichild < 2*tnode+2; ++ichild) {
+            if (t.num[ichild] > p.blockSize) {
+                #pragma omp task shared(p,ep,t) firstprivate(ichild)
+                (void) calcBarycentricLagrange(p, ep, t, order, ichild);
+            }
+        }
+        #pragma omp taskwait
+    } else {
+        (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode);
+        (void) calcBarycentricLagrange(p, ep, t, order, 2*tnode+1);
+    }
 
     // set some constants
     const size_t ncp = order+1;		// number of Chebyshev points in each direction
