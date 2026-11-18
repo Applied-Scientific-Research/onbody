@@ -81,16 +81,24 @@ void treecode1_block(const Parts<S,A,PD,SD,OD>& sp,
 
     // distance from box center of mass to target point
     S dist = 0.0;
-    //for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
-    for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
+
+    const bool use_traditional_mac = true;
+
+    if (use_traditional_mac) {
+        // strictly the box cm to target distance
+        for (int d=0; d<PD; ++d) dist += std::pow(st.x[d][snode] - tp.x[d][ip], 2);
+    } else {
+        // distance to nearest corner of box
+        for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.nc[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
+    }
     dist = std::sqrt(dist);
-    // scale the distance in the box-opening criterion?
+
+    // test: scale the distance in the box-opening criterion?
     //if (PD == 2) dist = std::exp(0.75*std::log(dist));
     //else dist = std::exp(0.666667*std::log(dist));
 
     // is source tree node far enough away?
-    //if (dist / st.nr[snode] > theta) {
-    if (dist / (2.0*st.nr[snode]) > theta) {
+    if (dist / ((S)2.0*st.nr[snode]) > theta) {
         // box is far enough removed, approximate its influence
         (void) tpinter(st, snode, tp, ip);
         stats.sbtp++;
@@ -132,7 +140,7 @@ float nbody_treecode1(const Parts<S,A,PD,SD,OD>& srcs,
 }
 
 //
-// Recursive kernel for the treecode using equivalent particles
+// Recursive kernel for the treecode using higher-order box approximation (equiv particles)
 //
 template <class S, class A, int PD, int SD, int OD>
 void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
@@ -162,17 +170,18 @@ void treecode2_block(const Parts<S,A,PD,SD,OD>& sp,
         dist = std::sqrt(dist);
 
     } else {
+        // minimum distance between box corners - THIS IS WRONG!!! st.x is not the center but the cm!
         for (int d=0; d<PD; ++d) dist += std::pow(std::max((S)0.0, std::abs(st.x[d][snode] - tp.x[d][ip]) - (S)0.5*st.ns[d][snode]), 2);
         //dist = std::sqrt(dist) - 2.0*st.pr[snode];
         dist = std::sqrt(dist);
-        // scale the distance in the box-opening criterion?
+        // scale the distance in the box-opening criterion? why?
         if (PD == 2) dist = std::exp(0.75*std::log(dist));
         else dist = std::exp(0.666667*std::log(dist));
     }
 
     // is source tree node far enough away?
     //if (dist / st.nr[snode] > theta) {
-    if (dist / (2.0*st.nr[snode]) > theta) {
+    if (dist / ((S)2.0*st.nr[snode]) > theta) {
         // this version uses equivalent points instead!
         (void) ppinter(ep, st.epoffset[snode], st.epoffset[snode]+st.epnum[snode], tp, ip);
         stats.sbtp++;
@@ -277,7 +286,8 @@ void treecode3_block(const Parts<S,A,PD,SD,OD>& sp,
     // note that we MUST use the sizes of both source and target boxes
     //const S testrad = st.nr[snode]+tt.nr[tnode];
     //const S testrad = std::max(st.nr[snode],tt.nr[tnode]);
-    const S testrad = std::max(st.nr[snode],tt.nr[tnode]) + (S)0.25*std::min(st.nr[snode],tt.nr[tnode]);
+    //const S testrad = std::max(st.nr[snode],st.nr[snode]) + (S)0.25*std::min(st.nr[snode],tt.nr[tnode]);
+    const S testrad = std::sqrt(st.nr[snode]*st.nr[snode] + tt.nr[tnode]*tt.nr[tnode]);
 
     // is source tree node far enough away?
     if (dist / ((S)2.0*testrad) > theta) {
@@ -685,7 +695,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     for (int d=0; d<PD; ++d) {
         std::pair<S,S> boxbounds = minMaxValue(p.x[d], pfirst, plast, threads_per_node);
         t.ns[d][tnode] = boxbounds.second - boxbounds.first;
-        t.nc[d][tnode] = 0.5 * (boxbounds.second + boxbounds.first);
+        t.nc[d][tnode] = (S)0.5 * (boxbounds.second + boxbounds.first);
     }
 
     auto end = std::chrono::steady_clock::now();
@@ -701,7 +711,7 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     // find box/node radius
     S bsss = 0.0;
     for (int d=0; d<PD; ++d) bsss += std::pow(t.ns[d][tnode],2);
-    t.nr[tnode] = 0.5 * std::sqrt(bsss);
+    t.nr[tnode] = (S)0.5 * std::sqrt(bsss);
     //printf("  tree node time:\t[%.3f] million cycles\n", get_elapsed_mcycles());
     //printf("  box %ld size %g and rad %g\n", tnode, t.s[tnode], t.r[tnode]);
 
