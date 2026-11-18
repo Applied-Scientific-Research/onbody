@@ -522,11 +522,16 @@ void reorder(Vector<S>& x, Vector<S>& t,
              const size_t pfirst, const size_t plast,
              const int nthreads) {
 
+    if (nthreads <= 1) {
+        reorder(x, t, idx, pfirst, plast);
+        return;
+    }
+
     // copy the original input float vector x into a temporary vector
     std::copy(x.begin()+pfirst, x.begin()+plast, t.begin()+pfirst);
 
     // scatter values from the temp vector back into the original vector
-    #pragma omp taskloop if(nthreads>1) num_tasks(nthreads) shared(x,t,idx)
+    #pragma omp taskloop num_tasks(nthreads) shared(x,t,idx)
     for (size_t i=pfirst; i<plast; ++i) x[i] = t[idx[i]];
 }
 
@@ -776,10 +781,15 @@ void splitNode(Parts<S,A,PD,SD,OD>& p, const size_t pfirst, const size_t plast, 
     if (tnode==1) printf("      1st reorder:\t[%.4f] seconds\n", elapsed_seconds.count());
 
     // recursively call this routine for this node's new children, but only spawn new tasks if we have some to spare
-    #pragma omp task if(threads_per_node>1) shared(p,t)
-    (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
-    #pragma omp task if(threads_per_node>1) shared(p,t)
-    (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
+    if (threads_per_node > 1) {
+        #pragma omp task shared(p,t)
+        (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
+        #pragma omp task shared(p,t)
+        (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
+    } else {
+        (void) splitNode(p, pfirst,  pmiddle, t, 2*tnode);
+        (void) splitNode(p, pmiddle, plast,   t, 2*tnode+1);
+    }
 
     // we don't need a taskwait directive here, because we don't use an upward pass, though it may
     //   seem like that would be a better way to compute the tree node's mass and cm, it's slower
@@ -801,7 +811,12 @@ void finishTree(Parts<S,A,PD,SD,OD>& p, Tree<S,PD,SD>& t, const size_t tnode) {
         const size_t child2 = 2*tnode+1;
 
         // recursively call this routine for this node's children
-        if (tnode < 16) {
+        #ifdef _OPENMP
+        const size_t taskCutoff = 4 * static_cast<size_t>(::omp_get_num_threads());
+        #else
+        const size_t taskCutoff = 1;
+        #endif
+        if (tnode < taskCutoff) {
             #pragma omp task shared(p,t)
             (void) finishTree(p, t, child1);
             #pragma omp task shared(p,t)
