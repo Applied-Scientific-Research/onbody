@@ -323,7 +323,10 @@ struct fastsumm_stats nbody_fastsumm(const Parts<S,A,PD,SD,OD>& srcs,
 
         // distance from source box center to target box center
         S dist = 0.0;
-        for (int d=0; d<PD; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
+        // this is cm-to-cm distance
+        //for (int d=0; d<PD; ++d) dist += std::pow(stree.x[d][sn] - ttree.x[d][ittn], 2);
+        // this is geometric center-center distance (faster and more accurate!)
+        for (int d=0; d<PD; ++d) dist += std::pow(stree.nc[d][sn] - ttree.nc[d][ittn], 2);
         dist = std::sqrt(dist);
         const S diag = stree.nr[sn] + ttree.nr[ittn];
         //printf("    src box %ld is %g away and diag %g\n",sn, dist, diag);
@@ -481,19 +484,19 @@ int main(int argc, char *argv[]) {
         } else if (strncmp(argv[i], "-input=", 7) == 0) {
             input_path = argv[i]+7;
         } else if (strncmp(argv[i], "-t1=", 4) == 0) {
-            STORE testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+4);
             if (testtheta < 0.0001) usage();
             theta1 = testtheta;
         } else if (strncmp(argv[i], "-t2=", 4) == 0) {
-            STORE testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+4);
             if (testtheta < 0.0001) usage();
             theta2 = testtheta;
         } else if (strncmp(argv[i], "-t3=", 4) == 0) {
-            STORE testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+4);
             if (testtheta < 0.0001) usage();
             theta3 = testtheta;
         } else if (strncmp(argv[i], "-t4=", 4) == 0) {
-            STORE testtheta = atof(argv[i]+3);
+            STORE testtheta = atof(argv[i]+4);
             if (testtheta < 0.0001) usage();
             theta4 = testtheta;
         } else if (strncmp(argv[i], "-t=", 3) == 0) {
