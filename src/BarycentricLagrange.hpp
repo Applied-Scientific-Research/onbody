@@ -13,6 +13,9 @@
 #include <cassert>
 #include <cmath>		// for isnan
 #include <limits>		// for numeric_limits
+#include <algorithm>	// for copy_n
+#include <array>
+#include <vector>
 
 #define CLOSE_THRESH 1.e-10
 
@@ -76,6 +79,110 @@ static const std::vector<std::array<size_t,PD>>& getKidx(const int32_t order) {
     return kidx;
 }
 
+/*======================================================================
+ * USE_VC preprocessor configuration
+ *
+ * Define USE_VC=1 (e.g., -DUSE_VC=1) to enable Vc explicit vectorization.
+ * Define USE_VC=0 or leave undefined for a pure scalar fallback.
+ *====================================================================*/
+//#ifndef USE_VC
+//#  define USE_VC 0
+//#endif
+
+//
+// When USE_VC=0 we *become* the Vc namespace.  This lets the rest of the
+// file stay completely unchanged (Vc::Vector, Vc::Mask, Vc::Unaligned, ...)
+//
+#if USE_VC
+#  include <Vc/Vc>
+#else
+namespace Vc {
+
+// -------------------------------------------------------------------
+// Minimal scalar drop-in for the subset of Vc used in this file.
+// -------------------------------------------------------------------
+struct UnalignedTag { explicit UnalignedTag() = default; };
+constexpr UnalignedTag Unaligned{};
+
+template <class T>
+class Vector {
+public:
+    using value_type = T;
+
+    // ---- Mask type -------------------------------------------------
+    class Mask {
+        bool m_;                       // scalar: only one "lane"
+    public:
+        Mask() : m_(false) {}
+        Mask(bool b) : m_(b) {}
+
+        // Vc compatibility
+        bool isNotEmpty() const { return m_; }
+        bool operator[](size_t) const { return m_; }   // lane access (only lane 0)
+
+        // allow implicit conversion to bool in conditions
+        explicit operator bool() const { return m_; }
+    };
+
+    static constexpr size_t size() { return 1; }
+
+    T val;
+
+    // construction
+    Vector() : val(T(0)) {}
+    Vector(T v) : val(v) {}
+    // unaligned load
+    Vector(const T* ptr, UnalignedTag) : val(*ptr) {}
+
+    // arithmetic -----------------------------------------------------
+    Vector& operator+=(const Vector& o) { val += o.val; return *this; }
+    Vector& operator-=(const Vector& o) { val -= o.val; return *this; }
+    Vector& operator*=(const Vector& o) { val *= o.val; return *this; }
+    Vector& operator/=(const Vector& o) { val /= o.val; return *this; }
+
+    friend Vector operator+(Vector a, const Vector& b) { a += b; return a; }
+    friend Vector operator-(Vector a, const Vector& b) { a -= b; return a; }
+    friend Vector operator*(Vector a, const Vector& b) { a *= b; return a; }
+    friend Vector operator/(Vector a, const Vector& b) { a /= b; return a; }
+
+    // scalar multiplication
+    friend Vector operator*(Vector a, T s) { a.val *= s; return a; }
+    friend Vector operator*(T s, Vector a) { a.val *= s; return a; }
+    friend Vector operator/(Vector a, T s) { a.val /= s; return a; }
+
+    // masked assignment: a(mask) = value
+    struct MaskProxy {
+        Vector& ref;
+        Mask    m;
+        MaskProxy& operator=(T v) { if (m.isNotEmpty()) ref.val = v; return *this; }
+        MaskProxy& operator=(const Vector& v) { if (m.isNotEmpty()) ref.val = v.val; return *this; }
+    };
+    MaskProxy operator()(Mask m) { return MaskProxy{*this, m}; }
+
+    // horizontal sum (scalar: identity)
+    T sum() const { return val; }
+
+    // store
+    void store(T* ptr, UnalignedTag) const { *ptr = val; }
+
+    // ----- friend comparison so ADL finds it and return type is exact -----
+    friend Mask operator<(const Vector& a, const Vector& b) {
+        return Mask(std::abs(a.val) < b.val);
+    }
+};
+
+// free-function abs (returns Vector so abs(v) < w works)
+template <class T>
+Vector<T> abs(const Vector<T>& v) { return Vector<T>(std::abs(v.val)); }
+
+// comparison: abs(v) < w  ->  bool
+template <class T>
+bool operator<(const Vector<T>& a, const Vector<T>& b) {
+    return std::abs(a.val) < b.val;
+}
+
+} // namespace Vc
+#endif // USE_VC
 
 //
 // Downward pass: use outputs on source barycentric points to find outputs on arbitrary points in subset target box
@@ -134,7 +241,6 @@ void calcBarycentricDownward(const Parts<S,A,PD,SD,OD>& sp,
     constexpr size_t MAX_BUFLEN = ipow<size_t>(size_t(maxorder + 1), size_t(PD)) + MAX_NCPP;
     std::array<std::array<S, MAX_BUFLEN>, OD> ubuf{};
     for (size_t d=0; d<OD; ++d) {
-        //ubuf[d].resize(bufLen, (S)0);
         for (size_t i=0; i<numEqps; ++i) ubuf[d][i] = sp.u[d][iepstart+i];
     }
 
@@ -318,6 +424,8 @@ void calcBarycentricUpward(const Parts<S,A,PD,SD,OD>& sp,
                     r.store(&uaccR[jb+k], Vc::Unaligned);
                     Vec w = Vec(&uaccW[jb+k], Vc::Unaligned) + aw;
                     w.store(&uaccW[jb+k], Vc::Unaligned);
+                    // AI thought this should be:
+                    //w.store(&wgtsum[jb+k], Vc::Unaligned);
                 }
             }
         }
